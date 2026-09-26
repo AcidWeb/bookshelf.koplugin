@@ -218,4 +218,20 @@ t.test("every colour read consults the borrowed theme; the menu reads the reader
     assert(pg and pg:find("colourOverride(", 1, true), "page ground ignores the theme")
 end)
 
+t.test("plankEntry: a browser item for the pack's plank design", function()
+    local TP, d = setup()
+    eq(TP.plankEntry("None"), nil)
+    local png = "\137PNG\r\n\026\n" .. string.char(0,0,0,13) .. "IHDR"
+                .. string.char(0,0,1,0) .. string.char(0,0,0,96) .. string.char(8,6,0,0,0)
+    touch(d .. "/Xmas/theme/plank.middle.png", png)
+    package.loaded["lib/bookshelf_ornaments"] = { parsePngHeader = function(b)
+        local w = b:byte(17) * 16777216 + b:byte(18) * 65536 + b:byte(19) * 256 + b:byte(20)
+        local h = b:byte(21) * 16777216 + b:byte(22) * 65536 + b:byte(23) * 256 + b:byte(24)
+        return w / h end }
+    local e = TP.plankEntry("Xmas")
+    eq(e.name, "Xmas/theme/plank"); eq(e.file, "Plank"); eq(e.is_plank, true)
+    eq(e.aspect, 256 / 96)
+    package.loaded["lib/bookshelf_ornaments"] = nil
+end)
+
 t.done()

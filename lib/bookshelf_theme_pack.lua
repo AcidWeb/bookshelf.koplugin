@@ -272,4 +272,18 @@ function M.isDarkName(name)
     return stem == "wallpaper.dark" or stem == "wallpaper.full.dark"
 end
 
+-- plankEntry(pack) -> an ornament-shaped entry for the pack's plank design, so
+-- the browser can show and switch it like an ornament. Previewed from the
+-- middle image; never placed on a shelf by the ornament picker (is_plank).
+function M.plankEntry(pack)
+    local p = M.theme(pack).plank
+    if not p then return nil end
+    local f = io.open(p.middle, "rb"); if not f then return nil end
+    local head = f:read(64); f:close()
+    local aspect = require("lib/bookshelf_ornaments").parsePngHeader(head)
+    if not aspect then return nil end
+    return { path = p.middle, name = M.plankItemName(pack), file = "Plank", pack = pack,
+             aspect = aspect, overhang = 0, is_plank = true }
+end
+
 return M

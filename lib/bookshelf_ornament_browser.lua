@@ -134,12 +134,40 @@ function Browser:_items()
                               pack_off = Orn.isPackOff(e.pack) }
         end
     end
+    -- A pack's plank design (theme/plank.*.png) as one more item, so it is
+    -- seen and switched like an ornament. One shows at a time: the item is
+    -- "on" only for the pack whose plank is on the shelf.
+    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if ok_t and TP then
+        local _all, packs = Orn.listAll()
+        local shown = TP.activePlankPack()
+        for _i, pack in ipairs(packs or {}) do
+            if self.chip == ALL or self.chip == pack then
+                local e = TP.plankEntry(pack)
+                if e then
+                    out[#out + 1] = { entry = e, off = shown ~= pack,
+                                      pack_off = Orn.isPackOff(pack) }
+                end
+            end
+        end
+    end
     return out
+end
+
+-- _toggle(item): switch an ornament, or a pack's plank design, on or off.
+function Browser:_toggle(item)
+    if item.entry.is_plank then
+        require("lib/bookshelf_theme_pack").setPlankOn(item.entry.pack, item.off)
+    else
+        O().setOff(item.entry.name, not item.off)
+    end
+    self:_changed()
 end
 
 function Browser:_changed()
     O().invalidate()
     self.items = self:_items()
+    if self._config then self._config.footer_rows = self:_footerRows() end
     if self.modal then self.modal:refresh() end
     if self.on_change then pcall(self.on_change) end
 end
@@ -180,27 +208,100 @@ end
 
 function Browser:_longTap(item)
     local d
-    d = ButtonDialog:new{
-        title = item.entry.name,
-        buttons = {
-            {{
-                text = item.off and _("Switch on") or _("Switch off"),
-                callback = function()
-                    UIManager:close(d)
-                    O().setOff(item.entry.name, not item.off)
-                    self:_changed()
-                end,
-            }},
-            {{
-                text = _("Delete\xe2\x80\xa6"),
-                callback = function()
-                    UIManager:close(d)
-                    self:_confirmDelete(item)
-                end,
-            }},
-        },
+    local buttons = {
+        {{
+            text = item.off and _("Switch on") or _("Switch off"),
+            callback = function()
+                UIManager:close(d)
+                self:_toggle(item)
+            end,
+        }},
     }
+    -- The plank design is part of the pack's theme folder, not a loose file.
+    if not item.entry.is_plank then
+        buttons[#buttons + 1] = {{
+            text = _("Delete\xe2\x80\xa6"),
+            callback = function()
+                UIManager:close(d)
+                self:_confirmDelete(item)
+            end,
+        }}
+    end
+    d = ButtonDialog:new{ title = item.entry.name, buttons = buttons }
     UIManager:show(d)
+end
+
+-- _packAction() -> the footer's pack button: on a pack's chip it switches the
+-- whole pack; anywhere else it says how to add ornaments and make packs.
+function Browser:_packAction()
+    return {
+        -- On a pack's chip: switch the whole pack. Anywhere else it
+        -- says how to add ornaments and make packs. It was a greyed
+        -- "Pack" there, which said nothing about what it was for, and
+        -- with no packs yet could never be used (maintainer).
+        key = "pack",
+        label_func = function()
+            if not self:_isPack(self.chip) then return _("Add ornaments\xe2\x80\xa6") end
+            return O().isPackOff(self.chip) and _("Switch pack on") or _("Switch pack off")
+        end,
+        on_tap = function()
+            if not self:_isPack(self.chip) then
+                UIManager:show(InfoMessage:new{
+                    -- The shop URL is a parameter, not part of the
+                    -- msgid, so a translation cannot break it.
+                    text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack: it gets its own tab here, and can be switched on or off as a whole.\n\nReady-made packs:\n%2"),
+                        (function()
+                            -- A findable path: the settings dir can be relative.
+                            local d = O().dir() or "?"
+                            local ok, util = pcall(require, "ffi/util")
+                            local real = ok and util.realpath and util.realpath(d)
+                            return real or d
+                        end)(),
+                        "ko-fi.com/andyhazz/shop"),
+                })
+                return
+            end
+            O().setPackOff(self.chip, not O().isPackOff(self.chip))
+            self:_changed()
+        end,
+    }
+end
+
+-- _footerRows() -> the footer: the pack's theme switches in their own row, only
+-- for the parts this pack actually has (theme/ wallpaper, colours.json), above
+-- the pack button and Close. A wallpaper or colours switch changes the whole
+-- screen, so it asks for a full repaint.
+function Browser:_footerRows()
+    local rows = {}
+    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if ok_t and TP and self:_isPack(self.chip) then
+        local th, pack, row = TP.theme(self.chip), self.chip, {}
+        if th.wallpaper then
+            row[#row + 1] = { key = "wallpaper",
+                label_func = function()
+                    return TP.activeWallpaperPack() == pack and _("Wallpaper: on") or _("Wallpaper: off")
+                end,
+                on_tap = function()
+                    TP.setWallpaperPack(TP.activeWallpaperPack() ~= pack and pack or nil)
+                    self:_changed()
+                    UIManager:setDirty("all", "full")
+                end }
+        end
+        if th.colours then
+            row[#row + 1] = { key = "colours",
+                label_func = function()
+                    return TP.activeColoursPack() == pack and _("Colors: on") or _("Colors: off")
+                end,
+                on_tap = function()
+                    TP.setColoursPack(TP.activeColoursPack() ~= pack and pack or nil)
+                    self:_changed()
+                    UIManager:setDirty("all", "full")
+                end }
+        end
+        if #row > 0 then rows[#rows + 1] = row end
+    end
+    rows[#rows + 1] = { self:_packAction(), { key = "close", label = _("Close"), on_tap = self._close } }
+    return rows
 end
 
 -- show(on_change): on_change() runs after anything changed, so the caller can
@@ -222,12 +323,10 @@ function Browser.show(on_change)
         on_chip_tap = function(key)
             self.chip = key
             self.items = self:_items()
+            if self._config then self._config.footer_rows = self:_footerRows() end
         end,
         cell_renderer = Browser._renderCell,
-        on_cell_tap = function(item)
-            O().setOff(item.entry.name, not item.off)
-            self:_changed()
-        end,
+        on_cell_tap = function(item) self:_toggle(item) end,
         cell_long_tap = function(item) self:_longTap(item) end,
         item_count = function() return #self.items end,
         item_at = function(idx) return self.items[idx] end,
@@ -243,41 +342,10 @@ function Browser.show(on_change)
                 },
             }
         end,
-        footer_actions = {
-            {
-                -- On a pack's chip: switch the whole pack. Anywhere else it
-                -- says how to add ornaments and make packs. It was a greyed
-                -- "Pack" there, which said nothing about what it was for, and
-                -- with no packs yet could never be used (maintainer).
-                key = "pack",
-                label_func = function()
-                    if not self:_isPack(self.chip) then return _("Add ornaments\xe2\x80\xa6") end
-                    return O().isPackOff(self.chip) and _("Switch pack on") or _("Switch pack off")
-                end,
-                on_tap = function()
-                    if not self:_isPack(self.chip) then
-                        UIManager:show(InfoMessage:new{
-                            -- The shop URL is a parameter, not part of the
-                            -- msgid, so a translation cannot break it.
-                            text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack: it gets its own tab here, and can be switched on or off as a whole.\n\nReady-made packs:\n%2"),
-                                (function()
-                                    -- A findable path: the settings dir can be relative.
-                                    local d = O().dir() or "?"
-                                    local ok, util = pcall(require, "ffi/util")
-                                    local real = ok and util.realpath and util.realpath(d)
-                                    return real or d
-                                end)(),
-                                "ko-fi.com/andyhazz/shop"),
-                        })
-                        return
-                    end
-                    O().setPackOff(self.chip, not O().isPackOff(self.chip))
-                    self:_changed()
-                end,
-            },
-            { key = "close", label = _("Close"), on_tap = close },
-        },
+        footer_rows = {},
     }
+    self._close, self._config = close, config
+    config.footer_rows = self:_footerRows()
     self.modal = LibraryModal:new{ config = config }
     UIManager:show(self.modal)
     return self
