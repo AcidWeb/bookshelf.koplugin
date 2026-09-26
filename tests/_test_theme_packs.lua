@@ -177,8 +177,8 @@ t.test("plank: on by default when one pack has it, one at a time, follows the pa
     touch(d .. "/A/theme/plank.middle.png"); touch(d .. "/B/theme/plank.middle.png")
     eq(TP.activePlankPack(), "A", "unset: the first pack with a plank")
     TP.setPlankOn("B", true); eq(TP.activePlankPack(), "B")
-    TP.setPlankOn("B", false); eq(TP.activePlankPack(), "A", "B off: A is next")
-    TP.setPlankOn("A", false); eq(TP.activePlankPack(), nil)
+    TP.setPlankOn("B", false); eq(TP.activePlankPack(), nil,
+        "switching the shown plank off shows none, not the next pack's")
     TP.setPlankOn("A", true); packs_off["A"] = true
     eq(TP.activePlankPack(), nil, "a switched-off pack shows no plank")
 end)
@@ -257,6 +257,51 @@ t.test("withOverride leaves a row marked _theme_keep live (another part's own li
                                 "X colors active - tap to deactivate", function() end)
     eq(out[2].enabled_func(), false)
     eq(out[3].enabled_func == nil or out[3].enabled_func(), true)
+end)
+
+
+t.test("activePlankPack is cached for the scan TTL; setPlankOn and invalidate() drop it", function()
+    local TP, d = setup()
+    touch(d .. "/A/theme/plank.middle.png")
+    TP.SCAN_TTL = 15
+    local now = 1000; TP._clock = function() return now end
+    local calls = 0
+    local real = TP._orn.listAll
+    TP._orn.listAll = function(...) calls = calls + 1; return real(...) end
+    eq(TP.activePlankPack(), "A"); eq(TP.activePlankPack(), "A")
+    eq(calls, 1, "a page turn must not re-list the ornaments folder")
+    TP.setPlankOn("A", false); eq(TP.activePlankPack(), nil, "a switch is seen at once")
+    TP.setPlankOn("A", true); TP.invalidate(); eq(TP.activePlankPack(), "A")
+    now = now + 16; TP.activePlankPack(); eq(calls >= 3, true, "and it expires")
+end)
+
+t.test("borrowed colours cost no file checks per read within the scan TTL", function()
+    local TP, d = setup()
+    touch(d .. "/A/theme/colours.json", '{"day": {"text": "#101010"}}')
+    TP.setColoursPack("A")
+    TP.SCAN_TTL = 15; TP._clock = function() return 5 end
+    TP.colourOverride("ink_color", false)
+    local stats = 0
+    local real = TP._lfs.attributes
+    TP._lfs.attributes = function(...) stats = stats + 1; return real(...) end
+    for _i = 1, 20 do TP.colourOverride("ink_color", false) end
+    TP._lfs.attributes = real
+    eq(stats, 0, "twenty colour reads, no stat calls")
+end)
+
+
+t.test("the browser drops the cached plank choice on any change, and a plank switch repaints fully", function()
+    local b = io.open("lib/bookshelf_ornament_browser.lua"):read("*a")
+    local changed = b:match("function Browser:_changed%(%).-\nend")
+    assert(changed and changed:find("invalidate()", 1, true) and changed:find("theme_pack", 1, true),
+        "a pack switch must drop the cached plank choice")
+    local toggle = b:match("function Browser:_toggle%(item%).-\nend")
+    assert(toggle and toggle:find('setDirty("all", "full")', 1, true),
+        "a plank switch changes the band under the last row: needs a full repaint")
+    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
+    local row = st:match("TP%.setPlankOn%(p, false%).-return")
+    assert(row and row:find('setDirty("all", "full")', 1, true),
+        "the plank row's deactivate must repaint fully too")
 end)
 
 t.done()

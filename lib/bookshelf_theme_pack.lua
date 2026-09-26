@@ -68,7 +68,11 @@ local function store()
     local ok, S = pcall(require, "lib/bookshelf_settings_store")
     return ok and S or nil
 end
-local function read(k) local s = store(); return s and s.read(k) or nil end
+local function read(k)
+    local s = store()
+    if not s then return nil end
+    return s.read(k)            -- false survives: theme_plank_pack = false is "none"
+end
 local function save(k, v)
     local s = store(); if not s then return end
     s.save(k, v); if s.flush then pcall(s.flush) end
@@ -127,7 +131,10 @@ function M.theme(pack)
     if hit and M.SCAN_TTL > 0 and (now - hit.at) < M.SCAN_TTL then return hit.v end
     local d = orn().dir()
     local tdir = d and (d .. "/" .. pack .. "/" .. M.SUBDIR) or nil
-    local v = { dir = tdir }
+    -- exists: the pack folder is there, checked once per scan rather than on
+    -- every colour read (a stat is dear on a Kindle's FUSE storage).
+    local v = { dir = tdir,
+                exists = d and fs().attributes(d .. "/" .. pack, "mode") == "directory" or false }
     if tdir and fs().attributes(tdir, "mode") == "directory" then
         local names = listDir(tdir)
         local w = {}
@@ -150,7 +157,7 @@ function M.theme(pack)
     return v
 end
 
-function M.invalidate() M._cache = {} end
+function M.invalidate() M._cache = {}; M._plank_memo = nil end
 
 -- wallpaperFile(w, is_full, is_dark) -> file name, and whether it is a dark
 -- variant (shown as drawn: the reader's invert-at-night does not apply).
@@ -167,16 +174,12 @@ function M.wallpaperFile(w, is_full, is_dark)
     return nil
 end
 
-local function packExists(pack)
-    local d = orn().dir()
-    return d and fs().attributes(d .. "/" .. pack, "mode") == "directory"
-end
-
 -- A borrowed part whose pack or file has gone: clear the key, fall back.
 local function activeFor(key, part)
     local pack = read(key)
     if type(pack) ~= "string" or pack == "" then return nil end
-    if packExists(pack) and M.theme(pack)[part] then return pack end
+    local th = M.theme(pack)
+    if th.exists and th[part] then return pack end
     save(key, nil)
     return nil
 end
@@ -191,7 +194,24 @@ function M.plankItemName(pack) return pack .. "/" .. M.SUBDIR .. "/plank" end
 -- activePlankPack() -> the one pack whose plank design shows, or nil. The
 -- chosen one if it still qualifies, else the first (by name) that does: a
 -- plank shows by default, like ornaments do, when its pack is on.
+--
+-- Cached for the scan TTL: it is asked on every shelf build, a page turn bumps
+-- the settings generation, and answering means listing the ornaments folder.
+-- A switch (setPlankOn, invalidate) drops the answer at once.
+--
+-- theme_plank_pack = false means "none": switching the SHOWN plank off must
+-- not hand the shelf to the next pack whose plank happens to be on too.
+M._plank_memo = nil
 function M.activePlankPack()
+    local now = M._clock()
+    local memo = M._plank_memo
+    if memo and M.SCAN_TTL > 0 and (now - memo.at) < M.SCAN_TTL then return memo.v end
+    local v = M._activePlank()
+    M._plank_memo = { at = now, v = v }
+    return v
+end
+
+function M._activePlank()
     local O = orn()
     local _all, packs = O.listAll()
     local ok_list = {}
@@ -201,15 +221,21 @@ function M.activePlankPack()
         end
     end
     local chosen = read(M.PLANK_SETTING)
+    if chosen == false then return nil end
     for _i, p in ipairs(ok_list) do if p == chosen then return p end end
     return ok_list[1]
 end
 
 function M.setPlankOn(pack, on)
     local O = orn()
+    local shown = M.activePlankPack() == pack
     O.setOff(M.plankItemName(pack), not on)
-    if on then save(M.PLANK_SETTING, pack)
-    elseif read(M.PLANK_SETTING) == pack then save(M.PLANK_SETTING, nil) end
+    if on then
+        save(M.PLANK_SETTING, pack)
+    elseif shown then
+        save(M.PLANK_SETTING, false)        -- none, not the next in line
+    end
+    M._plank_memo = nil
 end
 
 -- invertHex("#RRGGBB") -> its negative, same shape. What

@@ -158,6 +158,9 @@ end
 function Browser:_toggle(item)
     if item.entry.is_plank then
         require("lib/bookshelf_theme_pack").setPlankOn(item.entry.pack, item.off)
+        -- The design's lower band hangs below the last row, into the strip a
+        -- page-turn refresh stops short of: repaint the whole panel.
+        UIManager:setDirty("all", "full")
     else
         O().setOff(item.entry.name, not item.off)
     end
@@ -166,6 +169,9 @@ end
 
 function Browser:_changed()
     O().invalidate()
+    -- The theme module caches which pack's plank shows; a pack switch or a
+    -- plank switch must be seen at once, not after the scan interval.
+    pcall(function() require("lib/bookshelf_theme_pack").invalidate() end)
     self.items = self:_items()
     if self._config then self._config.footer_rows = self:_footerRows() end
     if self.modal then self.modal:refresh() end

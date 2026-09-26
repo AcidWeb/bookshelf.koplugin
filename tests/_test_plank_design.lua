@@ -46,4 +46,13 @@ t.test("slots render see-through over a plank design, and repainters redraw it",
     end
 end)
 
+
+t.test("redrawDesign never blits a strip the cache has freed", function()
+    local rd = src:match("function SpineShelf%.redrawDesign%(.-\nend")
+    assert(rd and rd:find("_strip_cache[r.key]", 1, true),
+        "regions must look their strip up by key at redraw time")
+    local pd = src:match("function PlankDesign:paintTo%(.-\nend")
+    assert(pd and pd:find("key = ", 1, true), "a region must record its strip's cache key")
+end)
+
 t.done()

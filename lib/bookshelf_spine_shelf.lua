@@ -2829,23 +2829,29 @@ end
 -- reproduce the plank in computed colours (lift shadows, face-out strips,
 -- corner nicks) can put the design back over what they paint.
 local _design_regions = {}
+-- Declared here, above redrawDesign, which looks strips up in it: a local
+-- declared below its user reads as an undefined global.
+local _strip_cache, _strip_order = {}, {}
 function SpineShelf.resetDesignRegions() _design_regions = {} end
 function SpineShelf.redrawDesign(bb, x, y, w, h)
     for _k, r in pairs(_design_regions) do
+        -- By key, not by a kept reference: the strip cache frees old strips,
+        -- and a region from another view (expanded, rotated, the other look)
+        -- can outlive its strip until the next rebuild.
+        local strip = _strip_cache[r.key]
         local ix0, iy0 = math.max(x, r.x), math.max(y, r.y)
         local ix1, iy1 = math.min(x + w, r.x + r.w), math.min(y + h, r.y + r.h)
-        if ix1 > ix0 and iy1 > iy0 then
-            bb:alphablitFrom(r.bb, ix0, iy0, ix0 - r.x, iy0 - r.y, ix1 - ix0, iy1 - iy0)
+        if strip and ix1 > ix0 and iy1 > iy0 then
+            bb:alphablitFrom(strip, ix0, iy0, ix0 - r.x, iy0 - r.y, ix1 - ix0, iy1 - iy0)
         end
     end
 end
 
-local _strip_cache, _strip_order = {}, {}
 local function _designStrip(design, row_w, plank_h, inverting)
     local key = table.concat({ design.middle, design.left or "-", design.right or "-",
                                row_w, plank_h, inverting and "n" or "d" }, "|")
     local hit = _strip_cache[key]
-    if hit then return hit end
+    if hit then return hit, key end
     local Orn = require("lib/bookshelf_ornaments")
     local function size(path)
         if not path then return nil end
@@ -2883,7 +2889,7 @@ local function _designStrip(design, row_w, plank_h, inverting)
         local old = table.remove(_strip_order, 1)
         if _strip_cache[old] then _strip_cache[old]:free(); _strip_cache[old] = nil end
     end
-    return strip
+    return strip, key
 end
 
 local PlankDesign = Widget:extend{}
@@ -2891,11 +2897,11 @@ function PlankDesign:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local w, h = self.dimen.w, self.dimen.h
     local plank_h = SpineShelf.plankSurface(h) + SpineShelf.plankFace(h)
-    local strip = _designStrip(self.design, w, plank_h, _nightMode())
+    local strip, key = _designStrip(self.design, w, plank_h, _nightMode())
     if not strip then return end
     local top = y + h - 2 * plank_h          -- the upper band's top
     bb:alphablitFrom(strip, x, top, 0, 0, w, strip:getHeight())
-    _design_regions[x .. ":" .. top] = { x = x, y = top, w = w, h = strip:getHeight(), bb = strip }
+    _design_regions[x .. ":" .. top] = { x = x, y = top, w = w, h = strip:getHeight(), key = key }
 end
 function SpineShelf.plankDesignWidget(w, h)
     local design = SpineShelf.activePlankDesign()

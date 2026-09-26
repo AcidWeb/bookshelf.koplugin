@@ -2518,6 +2518,7 @@ function Settings:_colorsSubItems()
                 if ok_p and p then
                     TP.setPlankOn(p, false)
                     markDirty()
+                    UIManager:setDirty("all", "full")   -- the band under the last row
                     if touchmenu_instance then touchmenu_instance:updateItems() end
                     return
                 end
