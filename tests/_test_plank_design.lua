@@ -94,4 +94,13 @@ t.test("the middle's above/below bands fade out at the plank ends (no hard shado
     assert(ds and ds:find("_taperBands(", 1, true), "the middle's outer bands are cut square at the plank ends")
 end)
 
+
+t.test("footer page buttons drop their white fill over a plank design, not only over a wallpaper", function()
+    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
+    local i = w:find('require("lib/bookshelf_wallpaper").unfill(', 1, true)
+    local before = i and w:sub(math.max(1, i - 700), i) or ""
+    assert(before:find("activePlankDesign", 1, true),
+        "unfill is gated on the painted ground alone: white boxes show over a design's lower band")
+end)
+
 t.done()

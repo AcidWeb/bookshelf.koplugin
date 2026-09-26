@@ -6845,7 +6845,18 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     -- card, a tag is a pill. A footer chevron is an icon sitting on the page,
     -- and its white frame is not an affordance, it is just a white box over
     -- the picture. There is nothing to opt into here.
-    require("lib/bookshelf_wallpaper").unfill(self:groundIsPainted(),
+    --
+    -- A pack's plank design counts too: its lower band hangs under the last
+    -- row, into the footer, and on a plain page the fills showed as white
+    -- boxes over it (maintainer, on device).
+    local under = self:groundIsPainted()
+    if not under then
+        local ok_d, d = pcall(function()
+            return require("lib/bookshelf_spine_shelf").activePlankDesign()
+        end)
+        under = ok_d and d ~= nil
+    end
+    require("lib/bookshelf_wallpaper").unfill(under and true or false,
         first, prev, page_text, next_btn, last)
     -- AFTER unfill, which is what turns the icons into alpha bitmaps and
     -- wraps the disabled ones. This recolours the enabled ones for a manually
