@@ -2895,10 +2895,18 @@ function PlankDesign:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local w, h = self.dimen.w, self.dimen.h
     local plank_h = SpineShelf.plankSurface(h) + SpineShelf.plankFace(h)
-    local strip = _designStrip(self.design, w, plank_h, _nightMode())
+    -- Edge to edge of the SCREEN, not the row: the row sits inside the page
+    -- margins, and a shelf design (drifts, icicles, its end pieces) stopping
+    -- short of the edges showed the wallpaper down both sides. A pack's ends
+    -- are drawn for the screen's edges. Drawn onto the screen buffer only
+    -- (an offscreen target is the row's own width, so it keeps that).
+    local sw = Screen:getWidth()
+    local x0, width = x, w
+    if bb == Screen.bb and sw > w then x0, width = 0, sw end
+    local strip = _designStrip(self.design, width, plank_h, _nightMode())
     if not strip then return end
     local top = y + h - 2 * plank_h          -- the upper band's top
-    bb:alphablitFrom(strip, x, top, 0, 0, w, strip:getHeight())
+    bb:alphablitFrom(strip, x0, top, 0, 0, width, strip:getHeight())
 end
 function SpineShelf.plankDesignWidget(w, h)
     local design = SpineShelf.activePlankDesign()

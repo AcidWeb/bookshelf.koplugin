@@ -59,4 +59,10 @@ t.test("the plank design goes UNDER the recess, so the books' shadows fall on it
     assert(d and r and g and d < r and r < g, "order must be plank, design, recess, books")
 end)
 
+
+t.test("the plank design runs edge to edge of the screen, not just the row", function()
+    local pd = src:match("function PlankDesign:paintTo%(.-\nend")
+    assert(pd and pd:find("Screen:getWidth()", 1, true), "design is clipped to the row's margins")
+end)
+
 t.done()
