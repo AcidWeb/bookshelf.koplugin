@@ -191,6 +191,7 @@ t.test("plank: on by default when one pack has it, one at a time, follows the pa
     local TP, d, settings, packs_off = setup()
     touch(d .. "/A/theme/plank.middle.png"); touch(d .. "/B/theme/plank.middle.png")
     touch(d .. "/B/theme/plank.oak.middle.png")
+    TP.setWood(false)                -- pack planks alone; the built-in oak has its own test
     local function shown() local p = TP.activePlank(); return p and p.id end
     eq(shown(), "A/theme/plank", "unset: the first plank there is")
     TP.setPlankOn("B/theme/plank.oak", true); eq(shown(), "B/theme/plank.oak")
@@ -283,6 +284,7 @@ end)
 t.test("activePlank is cached for the scan TTL; setPlankOn and invalidate() drop it", function()
     local TP, d = setup()
     touch(d .. "/A/theme/plank.middle.png")
+    TP.setWood(false)                -- pack planks alone
     TP.SCAN_TTL = 15
     local now = 1000; TP._clock = function() return now end
     local calls = 0
@@ -328,6 +330,7 @@ end)
 t.test("built-in Oak: shows when switched on, under any pack plank, and comes back when a pack plank goes", function()
     local TP, d, settings = setup()
     TP._plugin_root = "."            -- the repo's own assets/planks/oak
+    TP.setWood(false)
     eq(TP.activePlank(), nil, "wood off, no packs: the coloured plank")
     TP.setWood(true)
     local p = TP.activePlank()
@@ -345,10 +348,17 @@ t.test("built-in Oak: shows when switched on, under any pack plank, and comes ba
     eq(settings[TP.WOOD_SETTING], false)
 end)
 
-t.test("new installs get the Oak plank; existing ones keep their coloured plank", function()
-    local f = io.open("lib/bookshelf_fonts.lua"):read("*a")
-    local seed = f:match("function M%.maybeSeedFreshInstall%(%).-\nend")
-    assert(seed and seed:find('"plank_wood", "oak"', 1, true), "fresh installs are not seeded with the Oak plank")
+t.test("unset, the Oak is on unless the reader picked a plank colour of their own", function()
+    local TP, _d, settings = setup()
+    TP._plugin_root = "."
+    eq(TP.woodOn(), true, "never touched: the new default oak, on upgrade as on a new install")
+    settings["spine_plank_color"] = { hex = "#806040" }
+    eq(TP.woodOn(), false, "a day plank colour they picked stays")
+    settings["spine_plank_color"] = nil; settings["spine_plank_color_night"] = { grey = 90 }
+    eq(TP.woodOn(), false, "so does a night one")
+    TP.setWood(true); eq(TP.woodOn(), true, "an explicit choice wins either way")
+    TP.setWood(false); settings["spine_plank_color_night"] = nil
+    eq(TP.woodOn(), false)
 end)
 
 t.test("the plank colour dialogs carry the Oak switch (palette tile and greyscale button)", function()

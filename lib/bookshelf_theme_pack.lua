@@ -31,11 +31,13 @@ M.SUBDIR            = "theme"
 M.WALLPAPER_SETTING = "theme_wallpaper_pack"
 M.COLOURS_SETTING   = "theme_colours_pack"
 M.PLANK_SETTING     = "theme_plank_pack"
--- The BUILT-IN wood plank (v5.3): "oak" or false/nil. Shipped in the plugin
--- (assets/planks/oak), toggled from the plank colour dialog, seeded on for
--- new installs (Fonts.maybeSeedFreshInstall). A pack's plank overrides it;
--- switching pack planks off falls back to it, and with it off the shelf has
--- its coloured plank as before.
+-- The BUILT-IN wood plank (v5.3): "oak" (on), false (off), or unset. Shipped
+-- in the plugin (assets/planks/oak), toggled from the plank colour dialog.
+-- UNSET means the default: on, unless the reader has picked a plank colour of
+-- their own (day or night), which they keep -- so an upgrade gives the oak to
+-- everyone who never touched the plank, as a new install does (maintainer).
+-- A pack's plank overrides it; switching pack planks off falls back to it,
+-- and with it off the shelf has its coloured plank.
 M.WOOD_SETTING      = "plank_wood"
 M.SCAN_TTL          = 15
 M._clock            = os.time
@@ -248,7 +250,12 @@ function M.builtinPlank()
              middle = middle, left = f("left"), right = f("right") }
 end
 
-function M.woodOn() return read(M.WOOD_SETTING) == "oak" end
+function M.woodOn()
+    local v = read(M.WOOD_SETTING)
+    if v == "oak" then return true end
+    if v ~= nil then return false end
+    return read("spine_plank_color") == nil and read("spine_plank_color_night") == nil
+end
 function M.setWood(on)
     save(M.WOOD_SETTING, on and "oak" or false)
     M._plank_memo = nil
