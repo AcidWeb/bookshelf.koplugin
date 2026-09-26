@@ -1235,4 +1235,33 @@ t.test("the page plan tells plan() which page it is", function()
     assert(src:find("opts.page_index = self.page", 1, true), "the page plan does not pass page_index")
 end)
 
+
+-- A bitmap stand-in with the one accessor unpremultiply uses.
+local function fake_bb(pixels)
+    local rows = {}
+    for y, row in ipairs(pixels) do
+        rows[y - 1] = {}
+        for x, px in ipairs(row) do rows[y - 1][x - 1] = { r = px[1], g = px[2], b = px[3], alpha = px[4] } end
+    end
+    return { getWidth = function() return #pixels[1] end, getHeight = function() return #pixels end,
+             getPixelP = function(_, x, y) return rows[y][x] end, rows = rows }
+end
+
+t.test("unpremultiply: straight alpha from MuPDF's premultiplied decode", function()
+    local O = fresh()
+    local bb = fake_bb({ { { 128, 64, 0, 128 }, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, { 5, 5, 5, 5 } } })
+    O.unpremultiply(bb)
+    local p = bb.rows[0]
+    eq(p[0].r, 255); eq(p[0].g, 128); eq(p[0].b, 0); eq(p[0].alpha, 128, "half white at half alpha is white")
+    eq(p[1].r, 255, "opaque pixels untouched"); eq(p[2].r, 0, "clear pixels untouched")
+    eq(p[3].r, 255, "a faint white edge is still white, not grey")
+end)
+
+t.test("PNG ornaments are unpremultiplied after decoding (not SVGs NanoSVG already gives straight)", function()
+    local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
+    local dr = src:match("local function defaultRender%(.-\nend\n")
+    assert(dr and dr:find("unpremultiply(", 1, true), "decoded PNGs are blended premultiplied as straight alpha")
+    assert(dr:find("is_straight", 1, true), "an SVG MuPDF rendered is premultiplied too")
+end)
+
 t.done()

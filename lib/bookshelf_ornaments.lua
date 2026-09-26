@@ -1157,17 +1157,80 @@ end
 -- frees for real.
 M._cache = {}
 M._cache_order = {}
+-- unpremultiply(bb) -- straight alpha from premultiplied, in place.
+--
+-- MuPDF decodes a PNG with every pixel's colour already multiplied by its
+-- alpha; KOReader's own ImageWidget knows and blits those with
+-- pmulalphablitFrom. Everything here blends as STRAIGHT alpha (alphablitFrom,
+-- and the night pre-invert), so a premultiplied bitmap darkened each
+-- half-transparent pixel twice: soft edges and baked shadows came out darker
+-- than drawn (measured: a white ramp at 50% alpha on grey rendered 127, not
+-- 192). Converting once, at render, fixes every blit of the cached bitmap.
+--
+-- Fast path: walk the bytes of an unrotated RGB32 or grey+alpha (BB8A)
+-- bitmap directly, which is what a PNG decodes to. Per-pixel getPixelP calls
+-- measured 29 ms for a 250x460 ornament on a PW5, paid on every first render.
+function M.unpremultiply(bb)
+    local done = pcall(function()
+        local ffi = require("ffi")
+        local t = bb.getType and bb:getType()
+        if not (bb.data and bb.stride and bb.getRotation and bb:getRotation() == 0
+                and not (bb.getInverse and bb:getInverse() == 1)) then
+            error("slow path")
+        end
+        local bpp = (t == 5) and 4 or ((t == 2) and 2 or nil)   -- RGB32, BB8A
+        if not bpp then error("slow path") end
+        local p = ffi.cast("uint8_t*", bb.data)
+        local w, h, stride = bb:getWidth(), bb:getHeight(), tonumber(bb.stride)
+        local floor = math.floor
+        for y = 0, h - 1 do
+            local row = p + y * stride
+            for x = 0, w - 1 do
+                local o = x * bpp
+                local a = row[o + bpp - 1]
+                if a > 0 and a < 255 then
+                    local k = 255 / a
+                    for c = 0, bpp - 2 do
+                        local v = floor(row[o + c] * k + 0.5)
+                        row[o + c] = v > 255 and 255 or v
+                    end
+                end
+            end
+        end
+    end)
+    if done then return end
+    pcall(function()
+        for yy = 0, bb:getHeight() - 1 do
+            for xx = 0, bb:getWidth() - 1 do
+                local p = bb:getPixelP(xx, yy)
+                local a = p.alpha
+                if a and a > 0 and a < 255 then
+                    p.r = math.min(255, math.floor(p.r * 255 / a + 0.5))
+                    p.g = math.min(255, math.floor(p.g * 255 / a + 0.5))
+                    p.b = math.min(255, math.floor(p.b * 255 / a + 0.5))
+                end
+            end
+        end
+    end)
+end
+
 local function defaultRender(path, w, h)
     local RenderImage = require("ui/renderimage")
     if path:lower():match("%.svg$") then
-        return RenderImage:renderSVGImageFile(path, w, h)
+        -- NanoSVG hands back straight alpha (is_straight true); MuPDF, when it
+        -- renders the SVG instead, premultiplied.
+        local bb, is_straight = RenderImage:renderSVGImageFile(path, w, h)
+        if bb and not is_straight then M.unpremultiply(bb) end
+        return bb
     end
     -- A raster. want_frames FALSE: asking for frames hands back a list of
     -- functions instead of a blitbuffer, which is an animation's shape, not an
     -- ornament's. The renderer scales to the size we ask for, so a small PNG
     -- is upscaled to the shelf's standard ornament height exactly as an SVG
     -- would be (maintainer's call: every file a reader drops in shows up).
-    return RenderImage:renderImageFile(path, false, w, h)
+    local bb = RenderImage:renderImageFile(path, false, w, h)
+    if bb then M.unpremultiply(bb) end
+    return bb
 end
 -- render(entry, w, h, inverting) -> a bitmap ready to blit, or nil.
 --

@@ -2898,26 +2898,12 @@ local function _pngInfo(path)
     return info
 end
 
--- _unpremultiply(bb) -- straight alpha from premultiplied, in place. MuPDF
--- decodes a PNG with colour already multiplied by alpha, and everything here
--- (the ends over the middle, the strip onto the page, the night pre-invert)
--- blends as STRAIGHT alpha, the way ornaments are drawn. Used premultiplied,
--- every half-transparent pixel darkened twice: a dark band where each end
--- fades into the middle, the width of the fade.
+-- _unpremultiply(bb): MuPDF decodes plank PNGs premultiplied and everything
+-- here blends straight alpha; see bookshelf_ornaments.unpremultiply. Used
+-- premultiplied, each end's fade into the middle came out as a dark band.
 local function _unpremultiply(bb)
-    pcall(function()
-        for yy = 0, bb:getHeight() - 1 do
-            for xx = 0, bb:getWidth() - 1 do
-                local p = bb:getPixelP(xx, yy)
-                local a = p.alpha
-                if a > 0 and a < 255 then
-                    p.r = math.min(255, math.floor(p.r * 255 / a + 0.5))
-                    p.g = math.min(255, math.floor(p.g * 255 / a + 0.5))
-                    p.b = math.min(255, math.floor(p.b * 255 / a + 0.5))
-                end
-            end
-        end
-    end)
+    local ok, Orn = pcall(require, "lib/bookshelf_ornaments")
+    if ok and Orn and Orn.unpremultiply then Orn.unpremultiply(bb) end
 end
 
 -- _bandImage(path, W, l) -> the image at width W with its four bands fitted
