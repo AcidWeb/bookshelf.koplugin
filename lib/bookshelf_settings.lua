@@ -1939,8 +1939,44 @@ function Settings:_colorValueLabel(raw_key, _default_pct)
     return p and (p .. "%") or _("default")
 end
 
+-- _pickPlank(touchmenu_instance, refresh) -- the plank's colour dialog with the
+-- built-in Oak wood switch in it: an "Oak" tile in the colour palette, an
+-- "Oak wood" button in the greyscale % dialog. Picking a colour switches the
+-- wood off; Revert puts it back as it was (bookshelf_theme_pack).
+function Settings:_pickPlank(touchmenu_instance, refresh)
+    local TP = require("lib/bookshelf_theme_pack")
+    refresh = refresh or function() self:_markDirty() end
+    local was_on = TP.woodOn()
+    local wood
+    wood = {
+        special_tile = { label = _("Oak"), selected = was_on,
+                         on_tap = function() TP.setWood(true); refresh() end },
+        extra_button = {
+            text_func = function()
+                return TP.woodOn() and _("Oak wood: on") or _("Oak wood: off")
+            end,
+            callback = function()
+                wood.toggling = true
+                TP.setWood(not TP.woodOn())
+                refresh()
+                -- the dialog re-applies the current grey after this; let it
+                -- through without switching the wood back off
+                UIManager:nextTick(function() wood.toggling = false end)
+            end,
+        },
+        on_colour = function() if TP.woodOn() then TP.setWood(false) end end,
+        revert = function() TP.setWood(was_on) end,
+    }
+    return self:_pickColor("spine_plank_color", "plank", 45,
+        _("Shelf plank color (% black)"), touchmenu_instance, refresh, nil, wood)
+end
+
+-- wood (optional, the plank only): { special_tile = {label, selected, on_tap},
+-- extra_button = {text_func, callback}, on_colour = fn, revert = fn } -- the
+-- built-in wood plank's switch in both dialogs; picking a colour switches it
+-- off (on_colour), Revert restores it.
 function Settings:_pickColor(raw_key, field, default_pct, title,
-                             touchmenu_instance, refresh, anchor)
+                             touchmenu_instance, refresh, anchor, wood)
     local CoverProgress = require("lib/bookshelf_cover_progress")
     local Color         = require("lib/bookshelf_color")
     local Screen        = require("device").screen
@@ -1970,12 +2006,15 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                 local g = string.format("%02X", shown.grey)
                 current_hex = "#" .. g .. g .. g
             end
+            -- With the wood on, no colour swatch is the current choice.
+            if wood and wood.special_tile and wood.special_tile.selected then current_hex = nil end
             self._plugin:showColorPicker(
                 title, current_hex, Color.defaultHexFor(field),
                 function(new_hex)
                     local stored = Color.toStorageShape(new_hex)
                     if night then stored = Color.invertValue(stored) end
                     BookshelfSettings.save(key, stored)
+                    if wood and wood.on_colour then wood.on_colour() end
                     refresh()
                 end,
                 function()
@@ -1988,9 +2027,10 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                     else
                         BookshelfSettings.save(key, original)
                     end
+                    if wood and wood.revert then wood.revert() end
                     refresh()
                 end,
-                touchmenu_instance)
+                touchmenu_instance, nil, nil, wood and wood.special_tile or nil)
             return
         end
 
@@ -2006,6 +2046,9 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
         self:showNudgeDialog(title, current, 0, 100, default_pct, "%",
             function(val)
                 BookshelfSettings.save(key, { grey = _screenPctToByte(val) })
+                -- A nudge picks a grey, so the wood goes off -- except when the
+                -- nudge is the wood button's own re-apply (wood.toggling).
+                if wood and wood.on_colour and not wood.toggling then wood.on_colour() end
                 refresh()
             end,
             nil, nil, nil, touchmenu_instance,
@@ -2013,7 +2056,7 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                 BookshelfSettings.delete(key)
                 refresh()
             end,
-            _("Default"), nil, anchor)
+            _("Default"), wood and wood.extra_button or nil, anchor)
     end
 
 -- Ornaments: where the pieces come from, and how many are installed. There is
@@ -2502,29 +2545,34 @@ function Settings:_colorsSubItems()
             -- so and a tap switches the design off (bookshelf_theme_pack).
             _theme_keep = true,
             text_func = function()
-                local ok_p, label = pcall(function()
-                    local TP = require("lib/bookshelf_theme_pack")
-                    return TP.plankLabel(TP.activePlank())
+                local ok_p, p = pcall(function()
+                    return require("lib/bookshelf_theme_pack").activePlank()
                 end)
-                if ok_p and label then return T(_("%1 plank active - tap to deactivate"), label) end
+                p = ok_p and p or nil
+                if p and not p.builtin then
+                    local TP = require("lib/bookshelf_theme_pack")
+                    return T(_("%1 plank active - tap to deactivate"), TP.plankLabel(p))
+                end
+                if p and p.builtin then return _("Shelf plank: Oak wood") end
                 return _("Shelf plank color") .. ": " .. valueLabel("plank")
             end,
-            help_text = _("Color of the shelf plank the Spines style stands"
-                .. " its books on. The lit top surface and shaded front edge"
-                .. " are both tinted from this one color. Default light oak."),
+            help_text = _("The shelf plank the Spines style stands its books"
+                .. " on: the built-in oak wood, or a color of your choice. The"
+                .. " lit top surface and shaded front edge are both tinted from"
+                .. " that one color. A plank design from an ornament pack, when"
+                .. " switched on, takes its place."),
             keep_menu_open = true,
             callback = function(touchmenu_instance)
                 local TP = require("lib/bookshelf_theme_pack")
                 local ok_p, p = pcall(TP.activePlank)
-                if ok_p and p then
+                if ok_p and p and not p.builtin then
                     TP.setPlankOn(p.id, false)
                     markDirty()
                     UIManager:setDirty("all", "full")   -- the band under the last row
                     if touchmenu_instance then touchmenu_instance:updateItems() end
                     return
                 end
-                pickColor("spine_plank_color", "plank", 45,
-                    _("Shelf plank color (% black)"), touchmenu_instance)
+                self:_pickPlank(touchmenu_instance, markDirty)
             end,
             hold_callback = function(touchmenu_instance)
                 deleteModeKey("spine_plank_color")

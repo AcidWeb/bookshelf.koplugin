@@ -31,6 +31,12 @@ M.SUBDIR            = "theme"
 M.WALLPAPER_SETTING = "theme_wallpaper_pack"
 M.COLOURS_SETTING   = "theme_colours_pack"
 M.PLANK_SETTING     = "theme_plank_pack"
+-- The BUILT-IN wood plank (v5.3): "oak" or false/nil. Shipped in the plugin
+-- (assets/planks/oak), toggled from the plank colour dialog, seeded on for
+-- new installs (Fonts.maybeSeedFreshInstall). A pack's plank overrides it;
+-- switching pack planks off falls back to it, and with it off the shelf has
+-- its coloured plank as before.
+M.WOOD_SETTING      = "plank_wood"
 M.SCAN_TTL          = 15
 M._clock            = os.time
 
@@ -218,11 +224,42 @@ function M.setWallpaperPack(pack) save(M.WALLPAPER_SETTING, pack) end
 function M.activeColoursPack() return activeFor(M.COLOURS_SETTING, "colours") end
 function M.setColoursPack(pack) save(M.COLOURS_SETTING, pack) end
 
+-- The plugin's root (one level up from lib/), for the built-in plank's files;
+-- the idiom Wallpaper.seedSource uses. A seam for the tests.
+M._plugin_root = nil
+local function pluginRoot()
+    if M._plugin_root then return M._plugin_root end
+    local src = debug.getinfo(1, "S").source or ""
+    local dir = src:match("^@(.*)/lib/[^/]*$")
+    return dir or "."
+end
+
+-- builtinPlank() -> the shipped Oak plank's record, or nil if its files are
+-- missing (a source checkout that lost them).
+function M.builtinPlank()
+    local d = pluginRoot() .. "/assets/planks/oak"
+    local function f(part)
+        local path = d .. "/plank." .. part .. ".png"
+        return fs().attributes(path, "mode") == "file" and path or nil
+    end
+    local middle = f("middle")
+    if not middle then return nil end
+    return { id = "builtin:oak", name = "Oak", builtin = true,
+             middle = middle, left = f("left"), right = f("right") }
+end
+
+function M.woodOn() return read(M.WOOD_SETTING) == "oak" end
+function M.setWood(on)
+    save(M.WOOD_SETTING, on and "oak" or false)
+    M._plank_memo = nil
+end
+
 -- plankLabel(p) -> what menus call a plank: its name, or its pack's.
 function M.plankLabel(p) return p and (p.name or p.pack) or nil end
 
 -- activePlank() -> the plank design on show ({id, pack, name, middle, left,
--- right}), or nil. The chosen one if it still qualifies, else the first there
+-- right}; the built-in Oak has builtin = true and no pack), or nil for the
+-- coloured plank. A pack's plank first, then the built-in wood if it is on. The chosen one if it still qualifies, else the first there
 -- is: a plank shows by default, like ornaments do, when its pack is on.
 --
 -- Cached for the scan TTL: it is asked on every shelf build, a page turn bumps
@@ -237,7 +274,7 @@ function M.activePlank()
     local now = M._clock()
     local memo = M._plank_memo
     if memo and M.SCAN_TTL > 0 and (now - memo.at) < M.SCAN_TTL then return memo.v end
-    local v = M._activePlank()
+    local v = M._activePlank() or (M.woodOn() and M.builtinPlank()) or nil
     M._plank_memo = { at = now, v = v }
     return v
 end
@@ -263,7 +300,7 @@ end
 -- one shown.
 function M.setPlankOn(id, on)
     local O = orn()
-    local cur = M.activePlank()
+    local cur = M._activePlank()
     O.setOff(id, not on)
     if on then
         save(M.PLANK_SETTING, id)

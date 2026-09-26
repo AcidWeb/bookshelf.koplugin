@@ -263,7 +263,8 @@ function ColorPaletteWidget:update()
         local hgroup = HorizontalGroup:new{ align = "center" }
         -- Prepend the null tile at grid position [0,0] of the first row only.
         if row_idx == 1 and self.null_tile then
-            local sel = (self.selected_hex == nil)
+            local sel = self.null_tile.selected
+            if sel == nil then sel = (self.selected_hex == nil) end
             hgroup[#hgroup + 1] = nullTile(self.null_tile.label, sel, side, function()
                 self.null_tile.on_tap()
             end)
@@ -488,7 +489,10 @@ function ColorPaletteWidget:onShow()
 end
 
 -- Public entry point.
-local function showColorPicker(bookshelf, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
+-- special_tile (optional): { label, selected, on_tap } -- a labelled tile at
+-- the grid's top-left that is not a colour: the plank's built-in wood. Tapping
+-- it runs on_tap and closes; it shows selected while `selected` is true.
+local function showColorPicker(bookshelf, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
     local restoreMenu = bookshelf:hideMenu(touchmenu_instance)
 
     local closed = false
@@ -517,14 +521,22 @@ local function showColorPicker(bookshelf, title, current_hex, default_hex, on_ap
             UIManager:close(widget, "ui")
             finish()
         end,
-        null_tile        = null_tile_label and {
+        null_tile        = special_tile and {
+            label    = special_tile.label,
+            selected = special_tile.selected and true or false,
+            on_tap   = function()
+                UIManager:close(widget, "ui")
+                special_tile.on_tap()
+                finish()
+            end,
+        } or (null_tile_label and {
             label  = null_tile_label,
             on_tap = function()
                 UIManager:close(widget, "ui")
                 if on_default then on_default() end
                 finish()
             end,
-        } or nil,
+        }) or nil,
         white_callback   = white_hex and function()
             if on_apply then on_apply(white_hex) end
             UIManager:close(widget, "ui")
@@ -536,8 +548,8 @@ end
 
 local M = {}
 function M.attach(Bookshelf)
-    function Bookshelf:showColorPicker(title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
-        showColorPicker(self, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
+    function Bookshelf:showColorPicker(title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
+        showColorPicker(self, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
     end
 end
 return M

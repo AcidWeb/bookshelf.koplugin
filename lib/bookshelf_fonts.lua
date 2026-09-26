@@ -436,6 +436,9 @@ function M.maybeSeedFreshInstall()
         -- installs only -- existing users keep their placement (unset -> "hero"
         -- via Store.microPlacement, the prior behaviour).
         Settings.save("micro_modules_placement", "fullscreen")
+        -- The built-in Oak plank (v5.3) for new installs; existing readers keep
+        -- the coloured plank they have (plank_wood unset = off).
+        Settings.save("plank_wood", "oak")
         local ok, Regions = pcall(require, "lib/bookshelf_hero_regions")
         if ok and Regions and Regions.applyFreshInstallDefaults then
             Regions.applyFreshInstallDefaults()
