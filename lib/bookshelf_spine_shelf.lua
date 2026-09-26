@@ -2806,23 +2806,59 @@ end
 -- bottom third BELOW it (icicles). Drawn over Bookshelf's own plank, so
 -- transparent parts show the reader's plank colour. See bookshelf_theme_pack.
 --
--- plankDesignLayout(row_w, plank_h, img_h, left_w, mid_w, right_w) -> the
--- scaled sizes and where the middle tiles go. Ends are shrunk to half the row
--- each at most, so on a narrow row they meet rather than cross.
-function SpineShelf.plankDesignLayout(row_w, plank_h, img_h, left_w, mid_w, right_w)
-    local s = (3 * plank_h) / math.max(1, img_h)
-    local function sc(v) return v and math.max(1, math.floor(v * s + 0.5)) or 0 end
-    local L, M, R = sc(left_w), sc(mid_w), sc(right_w)
-    local half = math.floor(row_w / 2)
-    if L > half then L = half end
-    if R > half then R = half end
+-- THE TEMPLATE RULES (maintainer's spec, 2026-09-26):
+--   plank.middle.png covers the ORIGINAL plank exactly: tiled from its left
+--   end, clipped at its right end, Bookshelf's own corner bevels cut into it,
+--   so switching a design on changes the material and never the outline.
+--   Its middle third splits 80/20: the top 80% is the plank's top surface,
+--   the bottom 20% its front face. Each part is fitted to Bookshelf's own
+--   surface and face height, because their ratio changes with the row height
+--   (measured 2.7:1 to 5.3:1 on a PW5), and a uniform scale would put the
+--   art's front edge somewhere other than where the books stand.
+--   plank.left/right.png are drawn over it, flush with the screen edges --
+--   or, when the file says bookshelf:plank_end=N (px in from its outer edge
+--   where the art's plank ends), placed so that point is the real plank end,
+--   which is the only way one image lines up on every screen: the margin
+--   between screen edge and plank does not grow with the plank.
+--
+-- The share of a plank design's middle band that is the top surface; the
+-- rest is the front face. Part of the template: pack art is drawn to it.
+SpineShelf.PLANK_SURFACE_SHARE = 0.8
+
+-- plankDesignLayout(a) -> sizes and positions, screen coordinates.
+--   a = { screen_w, row_x, row_w, surf_h, face_h, mid = {w, h},
+--         left = {w, h, edge?} | nil, right = {w, h, edge?} | nil }
+function SpineShelf.plankDesignLayout(a)
+    local B0    = math.floor(a.mid.h / 3)
+    local surf0 = math.floor(B0 * SpineShelf.PLANK_SURFACE_SHARE + 0.5)
+    local face0 = B0 - surf0
+    local plank = a.surf_h + a.face_h
+    local s     = plank / math.max(1, B0)
+    local band  = math.max(1, math.floor(B0 * s + 0.5))
+    local mid_w = math.max(1, math.floor(a.mid.w * s + 0.5))
+    local x0, x1 = a.row_x, a.row_x + a.row_w
     local tiles = {}
-    if M > 0 then
-        local x = 0
-        while x < row_w do tiles[#tiles + 1] = x; x = x + M end
+    local x = x0
+    while x < x1 do tiles[#tiles + 1] = x; x = x + mid_w end
+    local half = math.floor(a.screen_w / 2)
+    local function sized(e)
+        if not e then return 0, 0 end
+        local es = plank / math.max(1, math.floor(e.h / 3))
+        return math.min(half, math.max(1, math.floor(e.w * es + 0.5))), es
     end
-    return { h = 3 * plank_h, left_w = L, mid_w = M, right_w = R,
-             tiles = tiles, right_x = row_w - R }
+    local left_w, ls  = sized(a.left)
+    local right_w, rs = sized(a.right)
+    local left_x, right_x = 0, a.screen_w - right_w
+    if a.left and a.left.edge then
+        left_x = x0 - math.floor(a.left.edge * ls + 0.5)
+    end
+    if a.right and a.right.edge then
+        right_x = x1 + math.floor(a.right.edge * rs + 0.5) - right_w
+    end
+    return { s = s, top_h = band, bot_h = band, surf_h = a.surf_h, face_h = a.face_h,
+             surf0 = surf0, face0 = face0, mid_w = mid_w, tiles = tiles,
+             clip_x0 = x0, clip_x1 = x1,
+             left_x = left_x, left_w = left_w, right_x = right_x, right_w = right_w }
 end
 
 local _design_memo, _design_gen = nil, nil
@@ -2845,68 +2881,161 @@ end
 -- Rendered design strips, per (files, row width, plank height, frame).
 local _strip_cache, _strip_order = {}, {}
 
-local function _designStrip(design, row_w, plank_h, inverting)
+-- _pngInfo(path) -> { w, h, edge } from the header: size from IHDR, the
+-- bookshelf:plank_end marker from a tEXt chunk, or nil.
+local function _pngInfo(path)
+    if not path then return nil end
+    local f = io.open(path, "rb"); if not f then return nil end
+    local head = f:read(8192); f:close()
+    if not head or #head < 24 or head:sub(13, 16) ~= "IHDR" then return nil end
+    local function be32(i)
+        local a1, b1, c1, d1 = head:byte(i, i + 3)
+        return ((a1 * 256 + b1) * 256 + c1) * 256 + d1
+    end
+    local info = { w = be32(17), h = be32(21) }
+    local ok, Orn = pcall(require, "lib/bookshelf_ornaments")
+    local text = ok and Orn.pngDirectives and Orn.pngDirectives(head) or ""
+    info.edge = tonumber(text:match("bookshelf:plank_end%s*=%s*([%d%.]+)"))
+    return info
+end
+
+-- _bandImage(path, W, l) -> the image at width W with its four bands fitted
+-- to (top_h, surf_h, face_h, bot_h): top third, the middle third split 80/20
+-- into surface and face, bottom third. Rendered at native size and each
+-- slice scaled on its own.
+local function _bandImage(path, W, l)
+    local RenderImage = require("ui/renderimage")
+    local ok, src = pcall(RenderImage.renderImageFile, RenderImage, path, false)
+    if not ok or not src then return nil end
+    local w0, h0 = src:getWidth(), src:getHeight()
+    local band0 = math.floor(h0 / 3)
+    local surf0 = math.floor(band0 * SpineShelf.PLANK_SURFACE_SHARE + 0.5)
+    local slices = {
+        { 0,             band0,          l.top_h },
+        { band0,         surf0,          l.surf_h },
+        { band0 + surf0, band0 - surf0,  l.face_h },
+        { 2 * band0,     h0 - 2 * band0, l.bot_h },
+    }
+    local total = l.top_h + l.surf_h + l.face_h + l.bot_h
+    local out = Blitbuffer.new(W, total, Blitbuffer.TYPE_BBRGB32)
+    local ty = 0
+    for _i, sl in ipairs(slices) do
+        local y0, sh, th = sl[1], sl[2], sl[3]
+        if sh > 0 and th > 0 then
+            local piece = Blitbuffer.new(w0, sh, Blitbuffer.TYPE_BBRGB32)
+            piece:blitFrom(src, 0, 0, 0, y0, w0, sh)
+            local scaled = RenderImage:scaleBlitBuffer(piece, W, th)
+            out:blitFrom(scaled, 0, ty, 0, 0, W, th)
+            scaled:free()
+        end
+        ty = ty + th
+    end
+    src:free()
+    return out
+end
+
+-- _taperBands(strip, l, surf_h, face_h) -- fade the middle's ABOVE and BELOW
+-- bands to nothing over one band's width at each plank end. The plank band
+-- keeps its hard outline (the original plank's), but a cast shadow or a drift
+-- stopping square at the plank end read as cut off, and an end image can only
+-- paint over the middle, not erase it.
+local function _taperBands(strip, l, surf_h, face_h)
+    local T = math.max(1, l.bot_h)
+    local total = l.top_h + surf_h + face_h + l.bot_h
+    local ranges = { { 0, l.top_h }, { l.top_h + surf_h + face_h, total } }
+    pcall(function()
+        for k = 0, T - 1 do
+            local f = (k + 0.5) / T
+            f = f * f * (3 - 2 * f)
+            for _i, xx in ipairs({ l.clip_x0 + k, l.clip_x1 - 1 - k }) do
+                if xx >= 0 and xx < strip:getWidth() then
+                    for _j, r in ipairs(ranges) do
+                        for yy = r[1], r[2] - 1 do
+                            local p = strip:getPixelP(xx, yy)
+                            p.alpha = math.floor(p.alpha * f)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- _designStrip(design, width, row_x, row_w, surf_h, face_h, inverting)
+-- -> strip, top_h: the whole design composed across `width` (the screen, or
+-- the row alone offscreen), middle clipped to the plank with its bevels cut,
+-- ends over it. Pre-inverted for an inverting frame, like the ornaments.
+local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverting)
     local key = table.concat({ design.middle, design.left or "-", design.right or "-",
-                               row_w, plank_h, inverting and "n" or "d" }, "|")
+                               width, row_x, row_w, surf_h, face_h,
+                               inverting and "n" or "d" }, "|")
     local hit = _strip_cache[key]
-    if hit then return hit end
-    local Orn = require("lib/bookshelf_ornaments")
-    local function size(path)
-        if not path then return nil end
-        local f = io.open(path, "rb"); if not f then return nil end
-        local head = f:read(64); f:close()
-        local aspect = Orn.parsePngHeader(head)
-        local h = head and #head >= 24 and (((head:byte(21) * 256 + head:byte(22)) * 256 + head:byte(23)) * 256 + head:byte(24))
-        return aspect and h and { w = math.floor(aspect * h + 0.5), h = h } or nil
-    end
-    local mid = size(design.middle); if not mid then return nil end
-    local lft, rgt = size(design.left), size(design.right)
-    local l = SpineShelf.plankDesignLayout(row_w, plank_h, mid.h,
-                                           lft and lft.w, mid.w, rgt and rgt.w)
-    local strip = Blitbuffer.new(row_w, l.h, Blitbuffer.TYPE_BBRGB32)
-    local function part(path, w)
-        return Orn.render({ path = path, name = "plank:" .. path }, w, l.h, inverting)
-    end
-    local m = part(design.middle, l.mid_w)
+    if hit then return hit.bb, hit.top_h end
+    local mid = _pngInfo(design.middle); if not mid then return nil end
+    local l = SpineShelf.plankDesignLayout{
+        screen_w = width, row_x = row_x, row_w = row_w, surf_h = surf_h, face_h = face_h,
+        mid = mid, left = _pngInfo(design.left), right = _pngInfo(design.right) }
+    local total = l.top_h + surf_h + face_h + l.bot_h
+    local strip = Blitbuffer.new(width, total, Blitbuffer.TYPE_BBRGB32)
+    local m = _bandImage(design.middle, l.mid_w, l)
     if m then
         for _i, x in ipairs(l.tiles) do
-            strip:alphablitFrom(m, x, 0, 0, 0, math.min(l.mid_w, row_w - x), l.h)
+            strip:blitFrom(m, x, 0, 0, 0, math.min(l.mid_w, l.clip_x1 - x), total)
         end
+        m:free()
+        -- The original plank's outline: its front bevel and back nick (see
+        -- ShelfPlank:paintTo), cut back to transparent at both ends.
+        local blank = Blitbuffer.new(math.max(2, face_h) + 2, 1, Blitbuffer.TYPE_BBRGB32)
+        local function clear(cx, cy, cw) strip:blitFrom(blank, cx, cy, 0, 0, cw, 1) end
+        local c  = math.max(2, face_h)
+        local cb = math.max(1, math.min(SpineShelf.PLANK_BACK_CHAMFER_MAX, Screen:scaleBySize(1)))
+        local bottom = l.top_h + surf_h + face_h - 1
+        for i = 0, c - 1 do
+            clear(l.clip_x0, bottom - i, c - i); clear(l.clip_x1 - (c - i), bottom - i, c - i)
+        end
+        for j = 0, cb - 1 do
+            clear(l.clip_x0, l.top_h + j, cb - j); clear(l.clip_x1 - (cb - j), l.top_h + j, cb - j)
+        end
+        blank:free()
+        _taperBands(strip, l, surf_h, face_h)
     end
-    if design.left and l.left_w > 0 then
-        local p = part(design.left, l.left_w)
-        if p then strip:alphablitFrom(p, 0, 0, 0, 0, l.left_w, l.h) end
+    local function place(path, ex, ew)
+        if not path or ew <= 0 then return end
+        local e = _bandImage(path, ew, l); if not e then return end
+        local sx, dx, cw = 0, ex, ew
+        if dx < 0 then sx = -dx; cw = cw + dx; dx = 0 end
+        if dx + cw > width then cw = width - dx end
+        if cw > 0 then strip:alphablitFrom(e, dx, 0, sx, 0, cw, total) end
+        e:free()
     end
-    if design.right and l.right_w > 0 then
-        local p = part(design.right, l.right_w)
-        if p then strip:alphablitFrom(p, l.right_x, 0, 0, 0, l.right_w, l.h) end
-    end
-    _strip_cache[key] = strip
+    place(design.left, l.left_x, l.left_w)
+    place(design.right, l.right_x, l.right_w)
+    if inverting then strip:invertRect(0, 0, width, total) end
+    _strip_cache[key] = { bb = strip, top_h = l.top_h }
     _strip_order[#_strip_order + 1] = key
     if #_strip_order > 6 then
         local old = table.remove(_strip_order, 1)
-        if _strip_cache[old] then _strip_cache[old]:free(); _strip_cache[old] = nil end
+        if _strip_cache[old] then _strip_cache[old].bb:free(); _strip_cache[old] = nil end
     end
-    return strip
+    return strip, l.top_h
 end
 
 local PlankDesign = Widget:extend{}
 function PlankDesign:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local w, h = self.dimen.w, self.dimen.h
-    local plank_h = SpineShelf.plankSurface(h) + SpineShelf.plankFace(h)
-    -- Edge to edge of the SCREEN, not the row: the row sits inside the page
-    -- margins, and a shelf design (drifts, icicles, its end pieces) stopping
-    -- short of the edges showed the wallpaper down both sides. A pack's ends
-    -- are drawn for the screen's edges. Drawn onto the screen buffer only
-    -- (an offscreen target is the row's own width, so it keeps that).
+    local surf_h, face_h = SpineShelf.plankSurface(h), SpineShelf.plankFace(h)
+    -- Across the SCREEN when painting to it, so the ends can reach its edges;
+    -- an offscreen target is the row's own width.
     local sw = Screen:getWidth()
-    local x0, width = x, w
-    if bb == Screen.bb and sw > w then x0, width = 0, sw end
-    local strip = _designStrip(self.design, width, plank_h, _nightMode())
+    local on_screen = (bb == Screen.bb) and sw > w
+    local width, row_x = w, 0
+    if on_screen then width, row_x = sw, x end
+    local strip, top_h = _designStrip(self.design, width, row_x, w, surf_h, face_h, _nightMode())
     if not strip then return end
-    local top = y + h - 2 * plank_h          -- the upper band's top
-    bb:alphablitFrom(strip, x0, top, 0, 0, width, strip:getHeight())
+    -- The middle band's surface lands on the plank's own surface top.
+    local top = y + h - face_h - surf_h - top_h
+    bb:alphablitFrom(strip, on_screen and 0 or x, top, 0, 0, width, strip:getHeight())
 end
 function SpineShelf.plankDesignWidget(w, h)
     local design = SpineShelf.activePlankDesign()
