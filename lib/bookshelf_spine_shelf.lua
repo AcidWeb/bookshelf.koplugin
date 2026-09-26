@@ -1898,6 +1898,14 @@ SpineShelf.has_wallpaper = false
 function SpineShelf.shadowsEnabled()
     return BookshelfSettings.read("spine_no_shadows", false) ~= true
 end
+-- shadeDesign(bb, x, y, w, h, by) -- darken (lighten, in a night frame) a
+-- patch of a pack's plank design by `by`: how a shadow falls on a design,
+-- where on Bookshelf's own plank it would be a computed plank colour.
+function SpineShelf.shadeDesign(bb, x, y, w, h, by)
+    local ok, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
+    if ok and Wallpaper then Wallpaper.shadeRect(bb, x, y, w, h, by, _nightMode()) end
+end
+
 -- seeThrough() -> is there something behind the books that a slot must
 -- not paint over: a wallpaper, or a pack's plank design (whose top band
 -- stands behind them and whose middle is under their feet).
@@ -2362,10 +2370,14 @@ function LiftShadow:paintTo(bb, x, y)
     local air = math.max(2, Screen:scaleBySize(1))
     local sh = math.min(self.shadow_h or 0, h - air)
     if sh < 1 then return end
+    if SpineShelf.activePlankDesign() then
+        -- Over a pack's plank design: darken it by what the computed shade
+        -- takes off the plank (x0.35), so the shadow falls on the design.
+        SpineShelf.shadeDesign(bb, x + ins, y + air, math.max(1, w - 2 * ins), sh, 0.65)
+        return
+    end
     bb:paintRectRGB32(x + ins, y + air, math.max(1, w - 2 * ins), sh,
                       _plankShade(0.35))
-    -- A pack's plank design goes back over the computed shade.
-    SpineShelf.redrawDesign(bb, x + ins, y + air, math.max(1, w - 2 * ins), sh)
 end
 
 -- ── Face-out page block ─────────────────────────────────────────────────────
@@ -2462,18 +2474,23 @@ function FaceOutFeet:paintTo(bb, x, y)
             -- board it was supposed to be shading.
             local surf_top = y + h + lip - surf_h
             local base     = SpineShelf.PLANK_CONTACT_SHADE
+            -- Over a pack's plank design the strip DARKENS it by the same
+            -- amount instead of repainting plank colour, so the cover keeps
+            -- its contact shadow and the design shows through it.
+            local design   = SpineShelf.activePlankDesign()
             for i = 0, rows - 1 do
                 local yy  = y + h + i
                 -- i+1 over rows, so the last row is already back at the
                 -- board's own tone and there is no step where it ends.
                 local t   = (i + 1) / rows
                 local mul = base + (1 - base) * t
-                bb:paintRectRGB32(x, yy, w, 1,
-                                  _plankRowAt(yy - surf_top, surf_h, mul))
+                if design then
+                    SpineShelf.shadeDesign(bb, x, yy, w, 1, 1 - mul)
+                else
+                    bb:paintRectRGB32(x, yy, w, 1,
+                                      _plankRowAt(yy - surf_top, surf_h, mul))
+                end
             end
-            -- The strip is computed plank colour: put a pack's plank design
-            -- back over it (a no-op without one).
-            SpineShelf.redrawDesign(bb, x, y + h, w, rows)
         end
     end
     if self.lifted then
@@ -2825,33 +2842,14 @@ function SpineShelf.activePlankDesign()
     return _design_memo or nil
 end
 
--- Screen regions the design was last painted into, so the painters that
--- reproduce the plank in computed colours (lift shadows, face-out strips,
--- corner nicks) can put the design back over what they paint.
-local _design_regions = {}
--- Declared here, above redrawDesign, which looks strips up in it: a local
--- declared below its user reads as an undefined global.
+-- Rendered design strips, per (files, row width, plank height, frame).
 local _strip_cache, _strip_order = {}, {}
-function SpineShelf.resetDesignRegions() _design_regions = {} end
-function SpineShelf.redrawDesign(bb, x, y, w, h)
-    for _k, r in pairs(_design_regions) do
-        -- By key, not by a kept reference: the strip cache frees old strips,
-        -- and a region from another view (expanded, rotated, the other look)
-        -- can outlive its strip until the next rebuild.
-        local strip = _strip_cache[r.key]
-        local ix0, iy0 = math.max(x, r.x), math.max(y, r.y)
-        local ix1, iy1 = math.min(x + w, r.x + r.w), math.min(y + h, r.y + r.h)
-        if strip and ix1 > ix0 and iy1 > iy0 then
-            bb:alphablitFrom(strip, ix0, iy0, ix0 - r.x, iy0 - r.y, ix1 - ix0, iy1 - iy0)
-        end
-    end
-end
 
 local function _designStrip(design, row_w, plank_h, inverting)
     local key = table.concat({ design.middle, design.left or "-", design.right or "-",
                                row_w, plank_h, inverting and "n" or "d" }, "|")
     local hit = _strip_cache[key]
-    if hit then return hit, key end
+    if hit then return hit end
     local Orn = require("lib/bookshelf_ornaments")
     local function size(path)
         if not path then return nil end
@@ -2889,7 +2887,7 @@ local function _designStrip(design, row_w, plank_h, inverting)
         local old = table.remove(_strip_order, 1)
         if _strip_cache[old] then _strip_cache[old]:free(); _strip_cache[old] = nil end
     end
-    return strip, key
+    return strip
 end
 
 local PlankDesign = Widget:extend{}
@@ -2897,11 +2895,10 @@ function PlankDesign:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local w, h = self.dimen.w, self.dimen.h
     local plank_h = SpineShelf.plankSurface(h) + SpineShelf.plankFace(h)
-    local strip, key = _designStrip(self.design, w, plank_h, _nightMode())
+    local strip = _designStrip(self.design, w, plank_h, _nightMode())
     if not strip then return end
     local top = y + h - 2 * plank_h          -- the upper band's top
     bb:alphablitFrom(strip, x, top, 0, 0, w, strip:getHeight())
-    _design_regions[x .. ":" .. top] = { x = x, y = top, w = w, h = strip:getHeight(), key = key }
 end
 function SpineShelf.plankDesignWidget(w, h)
     local design = SpineShelf.activePlankDesign()
@@ -4926,12 +4923,15 @@ function SpineShelf.rowWidget(opts)
             recess = recess:new{ dimen = Geom:new{ w = opts.width, h = opts.height } }
         end
     end
-    local children = { dimen = dimen, plank, group }
-    if recess then table.insert(children, 2, recess) end
-    -- The plank design goes over the plank and the recess and UNDER the
-    -- books: its top band (drifts up the back) stands behind them.
+    -- Plank, a pack's plank design, the recess, the books. The recess DARKENS
+    -- what is under it (Wallpaper.shadeRect), so a design painted before it
+    -- keeps the books' shadows; the design's top band (drifts up the back)
+    -- still stands behind the books.
+    local children = { dimen = dimen, plank }
     local design = SpineShelf.plankDesignWidget(opts.width, opts.height)
-    if design then table.insert(children, recess and 3 or 2, design) end
+    if design then children[#children + 1] = design end
+    if recess then children[#children + 1] = recess end
+    children[#children + 1] = group
     for _i = 1, #gap_ornaments do
         children[#children + 1] = gap_ornaments[_i]
     end

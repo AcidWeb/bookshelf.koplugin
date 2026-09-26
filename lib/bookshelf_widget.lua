@@ -6091,8 +6091,6 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     local layout_pad = select(1, self:_layoutPrimitives())
     local lift_head = math.max(0, self:_rowGap(layout_pad) - Screen:scaleBySize(2))
     self._spine_lift_headroom = lift_head
-    -- Plank-design regions are recorded as rows paint; start each build clean.
-    if SpineShelf.resetDesignRegions then SpineShelf.resetDesignRegions() end
     local rows = {}
     for r = 1, n_rows do
         rows[r] = SpineShelf.rowWidget{

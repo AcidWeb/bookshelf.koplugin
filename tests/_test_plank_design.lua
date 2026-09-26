@@ -38,21 +38,25 @@ t.test("slots render see-through over a plank design, and repainters redraw it",
     local key = src:match("function SpineBookSlot:_renderKey%(.-\nend")
     assert(key and key:find("seeThrough()", 1, true), "render key ignores the design")
     -- fillLiftGap and nickFromBelow copy neighbouring SCREEN pixels, which
-    -- already carry the design; only the two that paint computed plank
-    -- colour need to put it back.
+    -- already carry the design. The two that paint computed plank colour
+    -- must, over a design, DARKEN it instead: the shadow is kept, and the
+    -- design is not painted out.
     for _i, fn in ipairs({ "LiftShadow:paintTo", "FaceOutFeet:paintTo" }) do
         local b = src:match("function " .. fn:gsub("%.", "%%."):gsub(":", "%%:") .. "%(.-\nend")
-        assert(b and b:find("redrawDesign(", 1, true), fn .. " paints plank colour over the design")
+        assert(b and b:find("activePlankDesign()", 1, true) and b:find("shadeDesign(", 1, true),
+            fn .. " must shade a plank design, not paint over it")
+        assert(not b:find("redrawDesign(", 1, true), fn .. " still paints the shadow out")
     end
 end)
 
 
-t.test("redrawDesign never blits a strip the cache has freed", function()
-    local rd = src:match("function SpineShelf%.redrawDesign%(.-\nend")
-    assert(rd and rd:find("_strip_cache[r.key]", 1, true),
-        "regions must look their strip up by key at redraw time")
-    local pd = src:match("function PlankDesign:paintTo%(.-\nend")
-    assert(pd and pd:find("key = ", 1, true), "a region must record its strip's cache key")
+
+t.test("the plank design goes UNDER the recess, so the books' shadows fall on it", function()
+    local rw = src:match("function SpineShelf%.rowWidget%(.-\nend\n")
+    local d  = rw:find("children[#children + 1] = design", 1, true)
+    local r  = rw:find("children[#children + 1] = recess", 1, true)
+    local g  = rw:find("children[#children + 1] = group", 1, true)
+    assert(d and r and g and d < r and r < g, "order must be plank, design, recess, books")
 end)
 
 t.done()
