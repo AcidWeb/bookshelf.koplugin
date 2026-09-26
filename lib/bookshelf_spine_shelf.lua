@@ -953,7 +953,7 @@ local function _behindAt(plank, slot_bottom, lifted)
         -- Transparent over a wallpaper, for the same reason as the head's
         -- notch: a lifted book's foot corners should show the picture behind
         -- it, and white there is a speck rather than a chamfer.
-        if SpineShelf.has_wallpaper then
+        if SpineShelf.seeThrough() then
             -- NIL, not a transparent colour. The slot buffer is BB8A on a
             -- greyscale device and an RGB32 alpha does not survive the
             -- conversion -- so "transparent" painted as solid BLACK, which is
@@ -1898,6 +1898,13 @@ SpineShelf.has_wallpaper = false
 function SpineShelf.shadowsEnabled()
     return BookshelfSettings.read("spine_no_shadows", false) ~= true
 end
+-- seeThrough() -> is there something behind the books that a slot must
+-- not paint over: a wallpaper, or a pack's plank design (whose top band
+-- stands behind them and whose middle is under their feet).
+function SpineShelf.seeThrough()
+    return SpineShelf.has_wallpaper or SpineShelf.activePlankDesign() ~= nil
+end
+
 function SpineShelf.setHasWallpaper(v)
     -- No cache flush needed: the ground is part of the render key, so a
     -- render made on the other ground simply misses and ages out of the LRU
@@ -1942,7 +1949,7 @@ function SpineBookSlot:_renderKey(night)
         self.show_author == false and "A" or "a",
         -- The ground is part of the picture: a render made over page white
         -- has the page baked into every pixel the book does not cover.
-        SpineShelf.has_wallpaper and "W" or "-",
+        SpineShelf.seeThrough() and "W" or "-",
         -- The title run's direction is baked in too: without this the shelf
         -- keeps painting the old rotation until something else evicts it.
         SpineShelf.titleRotation(),
@@ -1962,7 +1969,7 @@ function SpineBookSlot:paintTo(bb, x, y)
             -- keep RGB32.
             local btype = (Screen.bb and Screen.bb.getType and Screen.bb:getType())
                           or Blitbuffer.TYPE_BBRGB32
-            if SpineShelf.has_wallpaper then
+            if SpineShelf.seeThrough() then
                 -- An alpha-capable buffer, and NO ground painted into it.
                 -- Blitbuffer.new callocs, so a fresh one is already fully
                 -- transparent; the book then draws itself opaquely on top and
@@ -1983,7 +1990,7 @@ function SpineBookSlot:paintTo(bb, x, y)
                         or Blitbuffer.TYPE_BB8A
             end
             local c = Blitbuffer.new(self.width, self.height, btype)
-            if not SpineShelf.has_wallpaper then
+            if not SpineShelf.seeThrough() then
                 -- Page ground, pre-invert space (white displays black in night
                 -- via the frame invert, same as the shelf's own background).
                 c:paintRectRGB32(0, 0, self.width, self.height,
@@ -2008,7 +2015,7 @@ function SpineBookSlot:paintTo(bb, x, y)
     -- alphablit only when there is something to blend with: it is markedly
     -- dearer than a straight copy, and on a plain page the slot is opaque
     -- anyway so the two would give the same pixels.
-    if SpineShelf.has_wallpaper then
+    if SpineShelf.seeThrough() then
         bb:alphablitFrom(cached, x, y, 0, 0, self.width, self.height)
     else
         bb:blitFrom(cached, x, y, 0, 0, self.width, self.height)
@@ -2357,6 +2364,8 @@ function LiftShadow:paintTo(bb, x, y)
     if sh < 1 then return end
     bb:paintRectRGB32(x + ins, y + air, math.max(1, w - 2 * ins), sh,
                       _plankShade(0.35))
+    -- A pack's plank design goes back over the computed shade.
+    SpineShelf.redrawDesign(bb, x + ins, y + air, math.max(1, w - 2 * ins), sh)
 end
 
 -- ── Face-out page block ─────────────────────────────────────────────────────
@@ -2462,6 +2471,9 @@ function FaceOutFeet:paintTo(bb, x, y)
                 bb:paintRectRGB32(x, yy, w, 1,
                                   _plankRowAt(yy - surf_top, surf_h, mul))
             end
+            -- The strip is computed plank colour: put a pack's plank design
+            -- back over it (a no-op without one).
+            SpineShelf.redrawDesign(bb, x, y + h, w, rows)
         end
     end
     if self.lifted then

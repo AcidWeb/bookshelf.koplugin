@@ -30,4 +30,20 @@ t.test("narrow row: ends never overlap past each other", function()
     eq(l.left_w, 50); eq(l.right_w, 50); eq(l.right_x, 50)
 end)
 
+t.test("slots render see-through over a plank design, and repainters redraw it", function()
+    assert(src:find("function SpineShelf.seeThrough()", 1, true), "no seeThrough")
+    local slot = src:match("function SpineBookSlot:paintTo%(.-\nend")
+    assert(slot and not slot:find("SpineShelf.has_wallpaper", 1, true),
+        "slot paint still keys transparency on the wallpaper alone")
+    local key = src:match("function SpineBookSlot:_renderKey%(.-\nend")
+    assert(key and key:find("seeThrough()", 1, true), "render key ignores the design")
+    -- fillLiftGap and nickFromBelow copy neighbouring SCREEN pixels, which
+    -- already carry the design; only the two that paint computed plank
+    -- colour need to put it back.
+    for _i, fn in ipairs({ "LiftShadow:paintTo", "FaceOutFeet:paintTo" }) do
+        local b = src:match("function " .. fn:gsub("%.", "%%."):gsub(":", "%%:") .. "%(.-\nend")
+        assert(b and b:find("redrawDesign(", 1, true), fn .. " paints plank colour over the design")
+    end
+end)
+
 t.done()
