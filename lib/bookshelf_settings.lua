@@ -1497,7 +1497,7 @@ function Settings:_wallpaperMenu()
         return name:match("^(.+)%.[^%.]+$") or name
     end
 
-    return {
+    local items = {
         -- The page ground. Useful on its own, with no wallpaper at all -- and
         -- it is what shows through any region the picture is kept out of.
         -- Shares the colours menu's picker, day/night key suffix included.
@@ -1611,6 +1611,17 @@ function Settings:_wallpaperMenu()
             end,
         },
     }
+    -- While a pack lends its wallpaper, say so first and grey the rest: the
+    -- rows below set the reader's OWN picture, which shows again when the
+    -- pack's is switched off (bookshelf_theme_pack).
+    local TP = require("lib/bookshelf_theme_pack")
+    local pack = TP.activeWallpaperPack()
+    return TP.withOverride(items, pack and T(_("%1 wallpaper active - tap to deactivate"), pack),
+        function()
+            TP.setWallpaperPack(nil)
+            self:_markDirty()
+            UIManager:setDirty("all", "full")
+        end)
 end
 
 
@@ -2179,7 +2190,7 @@ function Settings:_colorsSubItems()
         BookshelfSettings.delete(base .. suffix)
     end
 
-    return {
+    local items = {
         {
             text_func = function()
                 -- Matches _isNight / modeSuffix, so the label names the
@@ -2487,7 +2498,14 @@ function Settings:_colorsSubItems()
             end,
         },
         {
+            -- A pack's plank design, while it shows, owns this row: it says
+            -- so and a tap switches the design off (bookshelf_theme_pack).
+            _theme_keep = true,
             text_func = function()
+                local ok_p, p = pcall(function()
+                    return require("lib/bookshelf_theme_pack").activePlankPack()
+                end)
+                if ok_p and p then return T(_("%1 plank active - tap to deactivate"), p) end
                 return _("Shelf plank color") .. ": " .. valueLabel("plank")
             end,
             help_text = _("Color of the shelf plank the Spines style stands"
@@ -2495,6 +2513,14 @@ function Settings:_colorsSubItems()
                 .. " are both tinted from this one color. Default light oak."),
             keep_menu_open = true,
             callback = function(touchmenu_instance)
+                local TP = require("lib/bookshelf_theme_pack")
+                local ok_p, p = pcall(TP.activePlankPack)
+                if ok_p and p then
+                    TP.setPlankOn(p, false)
+                    markDirty()
+                    if touchmenu_instance then touchmenu_instance:updateItems() end
+                    return
+                end
                 pickColor("spine_plank_color", "plank", 45,
                     _("Shelf plank color (% black)"), touchmenu_instance)
             end,
@@ -2612,6 +2638,16 @@ function Settings:_colorsSubItems()
             end,
         },
     }
+    -- While a pack lends its colors, say so first and grey the color rows
+    -- (they edit the reader's OWN colors, which show again when the pack's are
+    -- off). The day/night editing switch stays live (bookshelf_theme_pack).
+    local TP = require("lib/bookshelf_theme_pack")
+    local pack = TP.activeColoursPack()
+    return TP.withOverride(items, pack and T(_("%1 colors active - tap to deactivate"), pack),
+        function()
+            TP.setColoursPack(nil)
+            markDirty()
+        end, { [1] = true })
 end
 
 -- _showScaleNudge(touchmenu_instance, spec) -- the font-scale nudge dialog.

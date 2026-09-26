@@ -234,4 +234,29 @@ t.test("plankEntry: a browser item for the pack's plank design", function()
     package.loaded["lib/bookshelf_ornaments"] = nil
 end)
 
+t.test("withOverride: a first line while active, the rest greyed; tapping restores", function()
+    local TP = setup()
+    local items = { { text = "a" }, { text = "b", enabled_func = function() return true end } }
+    local plain = TP.withOverride(items, nil, function() end)
+    eq(#plain, 2, "nothing borrowed: menu unchanged")
+    local turned_off = false
+    local out = TP.withOverride({ { text = "a" }, { text = "b" }, { text = "c" } },
+                                "Xmas wallpaper active - tap to deactivate",
+                                function() turned_off = true end, { [3] = true })
+    eq(#out, 4); eq(out[1].text, "Xmas wallpaper active - tap to deactivate")
+    eq(out[2].enabled_func(), false); eq(out[4].enabled_func == nil or out[4].enabled_func(), true)
+    local menu = { item_table = out, updateItems = function() end }
+    out[1].callback(menu)
+    eq(turned_off, true); eq(#menu.item_table, 3, "the line is gone")
+    eq(out[2].enabled_func(), true, "rows live again")
+end)
+
+t.test("withOverride leaves a row marked _theme_keep live (another part's own line)", function()
+    local TP = setup()
+    local out = TP.withOverride({ { text = "a" }, { text = "plank", _theme_keep = true } },
+                                "X colors active - tap to deactivate", function() end)
+    eq(out[2].enabled_func(), false)
+    eq(out[3].enabled_func == nil or out[3].enabled_func(), true)
+end)
+
 t.done()
