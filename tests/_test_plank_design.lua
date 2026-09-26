@@ -103,4 +103,15 @@ t.test("footer page buttons drop their white fill over a plank design, not only 
         "unfill is gated on the painted ground alone: white boxes show over a design's lower band")
 end)
 
+
+t.test("plank art is unpremultiplied once when loaded (MuPDF decodes it premultiplied)", function()
+    -- A premultiplied bitmap blended as straight alpha darkens every
+    -- half-transparent pixel twice: a dark band where each end fades into the
+    -- middle. Converting at load keeps every blit and the night inversion on
+    -- the straight-alpha path, which the night frame handles correctly.
+    local bi = src:match("local function _bandImage%(.-\nend\n")
+    assert(bi and bi:find("_unpremultiply(", 1, true), "decoded plank art is used premultiplied")
+    assert(src:find("local function _unpremultiply(", 1, true))
+end)
+
 t.done()

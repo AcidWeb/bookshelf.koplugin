@@ -2898,6 +2898,28 @@ local function _pngInfo(path)
     return info
 end
 
+-- _unpremultiply(bb) -- straight alpha from premultiplied, in place. MuPDF
+-- decodes a PNG with colour already multiplied by alpha, and everything here
+-- (the ends over the middle, the strip onto the page, the night pre-invert)
+-- blends as STRAIGHT alpha, the way ornaments are drawn. Used premultiplied,
+-- every half-transparent pixel darkened twice: a dark band where each end
+-- fades into the middle, the width of the fade.
+local function _unpremultiply(bb)
+    pcall(function()
+        for yy = 0, bb:getHeight() - 1 do
+            for xx = 0, bb:getWidth() - 1 do
+                local p = bb:getPixelP(xx, yy)
+                local a = p.alpha
+                if a > 0 and a < 255 then
+                    p.r = math.min(255, math.floor(p.r * 255 / a + 0.5))
+                    p.g = math.min(255, math.floor(p.g * 255 / a + 0.5))
+                    p.b = math.min(255, math.floor(p.b * 255 / a + 0.5))
+                end
+            end
+        end
+    end)
+end
+
 -- _bandImage(path, W, l) -> the image at width W with its four bands fitted
 -- to (top_h, surf_h, face_h, bot_h): top third, the middle third split 80/20
 -- into surface and face, bottom third. Rendered at native size and each
@@ -2930,6 +2952,7 @@ local function _bandImage(path, W, l)
         ty = ty + th
     end
     src:free()
+    _unpremultiply(out)
     return out
 end
 
