@@ -2768,6 +2768,129 @@ function SpineShelf.plankSurfaceOf(pk)
     return math.max(1, SpineShelf.plankLift(pk.b) + (tonumber(pk.inset) or 0))
 end
 
+-- ── Plank designs (theme packs) ─────────────────────────────────────────────
+--
+-- A pack's plank design: three images the same height (middle repeated across
+-- the row, left and right drawn over it at the ends), each three equal bands:
+-- the top third ABOVE the plank (snow drifts up the back, behind the books),
+-- the middle third the plank EXACTLY (surface top to front-face bottom), the
+-- bottom third BELOW it (icicles). Drawn over Bookshelf's own plank, so
+-- transparent parts show the reader's plank colour. See bookshelf_theme_pack.
+--
+-- plankDesignLayout(row_w, plank_h, img_h, left_w, mid_w, right_w) -> the
+-- scaled sizes and where the middle tiles go. Ends are shrunk to half the row
+-- each at most, so on a narrow row they meet rather than cross.
+function SpineShelf.plankDesignLayout(row_w, plank_h, img_h, left_w, mid_w, right_w)
+    local s = (3 * plank_h) / math.max(1, img_h)
+    local function sc(v) return v and math.max(1, math.floor(v * s + 0.5)) or 0 end
+    local L, M, R = sc(left_w), sc(mid_w), sc(right_w)
+    local half = math.floor(row_w / 2)
+    if L > half then L = half end
+    if R > half then R = half end
+    local tiles = {}
+    if M > 0 then
+        local x = 0
+        while x < row_w do tiles[#tiles + 1] = x; x = x + M end
+    end
+    return { h = 3 * plank_h, left_w = L, mid_w = M, right_w = R,
+             tiles = tiles, right_x = row_w - R }
+end
+
+local _design_memo, _design_gen = nil, nil
+-- activePlankDesign() -> { middle, left, right } paths of the plank design on
+-- show, or nil. Memoised per settings generation (the browser's switches all
+-- save a setting).
+function SpineShelf.activePlankDesign()
+    local gen = BookshelfSettings.generation and BookshelfSettings.generation() or 0
+    if _design_gen == gen then return _design_memo or nil end
+    _design_gen = gen
+    _design_memo = false
+    pcall(function()
+        local TP = require("lib/bookshelf_theme_pack")
+        local pack = TP.activePlankPack()
+        _design_memo = pack and TP.theme(pack).plank or false
+    end)
+    return _design_memo or nil
+end
+
+-- Screen regions the design was last painted into, so the painters that
+-- reproduce the plank in computed colours (lift shadows, face-out strips,
+-- corner nicks) can put the design back over what they paint.
+local _design_regions = {}
+function SpineShelf.resetDesignRegions() _design_regions = {} end
+function SpineShelf.redrawDesign(bb, x, y, w, h)
+    for _k, r in pairs(_design_regions) do
+        local ix0, iy0 = math.max(x, r.x), math.max(y, r.y)
+        local ix1, iy1 = math.min(x + w, r.x + r.w), math.min(y + h, r.y + r.h)
+        if ix1 > ix0 and iy1 > iy0 then
+            bb:alphablitFrom(r.bb, ix0, iy0, ix0 - r.x, iy0 - r.y, ix1 - ix0, iy1 - iy0)
+        end
+    end
+end
+
+local _strip_cache, _strip_order = {}, {}
+local function _designStrip(design, row_w, plank_h, inverting)
+    local key = table.concat({ design.middle, design.left or "-", design.right or "-",
+                               row_w, plank_h, inverting and "n" or "d" }, "|")
+    local hit = _strip_cache[key]
+    if hit then return hit end
+    local Orn = require("lib/bookshelf_ornaments")
+    local function size(path)
+        if not path then return nil end
+        local f = io.open(path, "rb"); if not f then return nil end
+        local head = f:read(64); f:close()
+        local aspect = Orn.parsePngHeader(head)
+        local h = head and #head >= 24 and (((head:byte(21) * 256 + head:byte(22)) * 256 + head:byte(23)) * 256 + head:byte(24))
+        return aspect and h and { w = math.floor(aspect * h + 0.5), h = h } or nil
+    end
+    local mid = size(design.middle); if not mid then return nil end
+    local lft, rgt = size(design.left), size(design.right)
+    local l = SpineShelf.plankDesignLayout(row_w, plank_h, mid.h,
+                                           lft and lft.w, mid.w, rgt and rgt.w)
+    local strip = Blitbuffer.new(row_w, l.h, Blitbuffer.TYPE_BBRGB32)
+    local function part(path, w)
+        return Orn.render({ path = path, name = "plank:" .. path }, w, l.h, inverting)
+    end
+    local m = part(design.middle, l.mid_w)
+    if m then
+        for _i, x in ipairs(l.tiles) do
+            strip:alphablitFrom(m, x, 0, 0, 0, math.min(l.mid_w, row_w - x), l.h)
+        end
+    end
+    if design.left and l.left_w > 0 then
+        local p = part(design.left, l.left_w)
+        if p then strip:alphablitFrom(p, 0, 0, 0, 0, l.left_w, l.h) end
+    end
+    if design.right and l.right_w > 0 then
+        local p = part(design.right, l.right_w)
+        if p then strip:alphablitFrom(p, l.right_x, 0, 0, 0, l.right_w, l.h) end
+    end
+    _strip_cache[key] = strip
+    _strip_order[#_strip_order + 1] = key
+    if #_strip_order > 6 then
+        local old = table.remove(_strip_order, 1)
+        if _strip_cache[old] then _strip_cache[old]:free(); _strip_cache[old] = nil end
+    end
+    return strip
+end
+
+local PlankDesign = Widget:extend{}
+function PlankDesign:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local w, h = self.dimen.w, self.dimen.h
+    local plank_h = SpineShelf.plankSurface(h) + SpineShelf.plankFace(h)
+    local strip = _designStrip(self.design, w, plank_h, _nightMode())
+    if not strip then return end
+    local top = y + h - 2 * plank_h          -- the upper band's top
+    bb:alphablitFrom(strip, x, top, 0, 0, w, strip:getHeight())
+    _design_regions[x .. ":" .. top] = { x = x, y = top, w = w, h = strip:getHeight(), bb = strip }
+end
+function SpineShelf.plankDesignWidget(w, h)
+    local design = SpineShelf.activePlankDesign()
+    if not design then return nil end
+    return PlankDesign:new{ dimen = Geom:new{ w = w, h = h }, design = design }
+end
+
 -- The plank in 3D (user spec): the upward-facing top surface rises TWO edge
 -- units behind the books, the front-top edge is a thin dark line, and below
 -- it the plank's front face drops (see plankFace), darker. Shading is
@@ -4001,10 +4124,11 @@ function SpineShelf.rowWidget(opts)
             w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
             ornament = w_
         end)
-        if ornament then
-            return OverlapGroup:new{ dimen = dimen, plank, ornament }
-        end
-        return OverlapGroup:new{ dimen = dimen, plank }
+        local design = SpineShelf.plankDesignWidget(opts.width, opts.height)
+        local kids = { dimen = dimen, plank }
+        if design then kids[#kids + 1] = design end
+        if ornament then kids[#kids + 1] = ornament end
+        return OverlapGroup:new(kids)
     end
 
     -- Books stand ON the plank's top surface, a step back from the lip:
@@ -4786,6 +4910,10 @@ function SpineShelf.rowWidget(opts)
     end
     local children = { dimen = dimen, plank, group }
     if recess then table.insert(children, 2, recess) end
+    -- The plank design goes over the plank and the recess and UNDER the
+    -- books: its top band (drifts up the back) stands behind them.
+    local design = SpineShelf.plankDesignWidget(opts.width, opts.height)
+    if design then table.insert(children, recess and 3 or 2, design) end
     for _i = 1, #gap_ornaments do
         children[#children + 1] = gap_ornaments[_i]
     end
