@@ -205,4 +205,17 @@ t.test("the shelf asks the theme first, and pathFor knows theme names", function
     assert(wp:find("wallpaperPath(", 1, true), "pathFor does not resolve theme names")
 end)
 
+t.test("every colour read consults the borrowed theme; the menu reads the reader's own", function()
+    local cp = io.open("lib/bookshelf_cover_progress.lua"):read("*a")
+    assert(cp:find("local function _readOwnColor", 1, true), "no _readOwnColor")
+    assert(cp:find("TP.colourOverride, base_key", 1, true), "_readModeColor does not ask the theme")
+    local raw = cp:match("function M%.rawColors%(%).-\nend")
+    assert(raw and not raw:find("_readModeColor(", 1, true), "rawColors must read the reader's OWN colours")
+    local cb = io.open("lib/bookshelf_chip_bar.lua"):read("*a")
+    assert(cb:find("TP.colourOverride, base_key", 1, true), "selected chip colours ignore the theme")
+    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
+    local pg = w:match("function BookshelfWidget:_pageGroundColor%(%).-\nend")
+    assert(pg and pg:find("colourOverride(", 1, true), "page ground ignores the theme")
+end)
+
 t.done()

@@ -3642,7 +3642,10 @@ function BookshelfWidget:_pageGroundColor()
         local Wallpaper     = require("lib/bookshelf_wallpaper")
         local CoverProgress = require("lib/bookshelf_cover_progress")
         local suffix = CoverProgress.modeSuffix and CoverProgress.modeSuffix() or ""
-        local raw = BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)
+        -- A pack's borrowed page colour first (bookshelf_theme_pack).
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        local raw = ok_t and TP and TP.colourOverride(Wallpaper.BG_SETTING, suffix ~= "")
+                    or BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)
         if type(raw) ~= "table" then return nil end
         -- grey is stored in PAINT space already (the picker's % black helper
         -- does the night-mode flip on the way in), so it is used as-is.

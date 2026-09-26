@@ -801,7 +801,7 @@ local function _modeSuffix()
     return dark and "_night" or ""
 end
 
-local function _readModeColor(base_key, default_day, default_night)
+local function _readOwnColor(base_key, default_day, default_night)
     local suffix = _modeSuffix()
     if suffix ~= "" then
         -- Night mode: explicit override wins, otherwise fall through to
@@ -817,6 +817,20 @@ local function _readModeColor(base_key, default_day, default_night)
     end
     return BookshelfSettings.read(base_key) or default_day
 end
+
+-- _readModeColor: what the shelf PAINTS -- a pack's borrowed colour for this
+-- slot when its colours are switched on (bookshelf_theme_pack), else the
+-- reader's own. The menus read _readOwnColor: they show the reader's own
+-- values, greyed while a theme lends its colours.
+local function _readModeColor(base_key, default_day, default_night)
+    local ok, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if ok and TP and TP.colourOverride then
+        local ok2, v = pcall(TP.colourOverride, base_key, _modeSuffix() ~= "")
+        if ok2 and v then return v end
+    end
+    return _readOwnColor(base_key, default_day, default_night)
+end
+M._readOwnColor = _readOwnColor
 
 -- ink() -> the themed text colour, or nil to leave a widget's own default.
 --
@@ -1006,39 +1020,39 @@ function M.rawColors()
         return _raw_cache
     end
     _raw_cache = {
-        fill              = _readModeColor("progress_fill",  DEFAULT_FILL, NIGHT_DEFAULT_FILL),
-        track             = _readModeColor("progress_track", DEFAULT_TRACK, NIGHT_DEFAULT_TRACK),
-        bookmark          = _readModeColor("bookmark_color", DEFAULT_BOOKMARK, NIGHT_DEFAULT_BOOKMARK),
-        complete_bookmark = _readModeColor("complete_bookmark_color",
+        fill              = _readOwnColor("progress_fill",  DEFAULT_FILL, NIGHT_DEFAULT_FILL),
+        track             = _readOwnColor("progress_track", DEFAULT_TRACK, NIGHT_DEFAULT_TRACK),
+        bookmark          = _readOwnColor("bookmark_color", DEFAULT_BOOKMARK, NIGHT_DEFAULT_BOOKMARK),
+        complete_bookmark = _readOwnColor("complete_bookmark_color",
                                             DEFAULT_COMPLETE_BOOKMARK,
                                             NIGHT_DEFAULT_COMPLETE_BOOKMARK),
-        favorite_star     = _readModeColor("favorite_star_color",
+        favorite_star     = _readOwnColor("favorite_star_color",
                                             DEFAULT_FAVORITE_STAR,
                                             NIGHT_DEFAULT_FAVORITE_STAR),
-        favorite_heart    = _readModeColor("favorite_heart_color",
+        favorite_heart    = _readOwnColor("favorite_heart_color",
                                             DEFAULT_FAVORITE_HEART,
                                             NIGHT_DEFAULT_FAVORITE_HEART),
-        badge_fg          = _readModeColor("badge_fg", DEFAULT_BADGE_FG, NIGHT_DEFAULT_BADGE_FG),
-        badge_bg          = _readModeColor("badge_bg", DEFAULT_BADGE_BG, NIGHT_DEFAULT_BADGE_BG),
-        chrome_bg         = _readModeColor("chrome_bg", DEFAULT_CHROME_BG, NIGHT_DEFAULT_CHROME_BG),
-        module_bg         = _readModeColor("module_bg", DEFAULT_MODULE_BG, NIGHT_DEFAULT_MODULE_BG),
-        ink               = _readModeColor("ink_color", DEFAULT_INK, NIGHT_DEFAULT_INK),
-        plank             = _readModeColor("spine_plank_color", DEFAULT_PLANK, NIGHT_DEFAULT_PLANK),
-        border            = _readModeColor("border_color", DEFAULT_BORDER, NIGHT_DEFAULT_BORDER),
+        badge_fg          = _readOwnColor("badge_fg", DEFAULT_BADGE_FG, NIGHT_DEFAULT_BADGE_FG),
+        badge_bg          = _readOwnColor("badge_bg", DEFAULT_BADGE_BG, NIGHT_DEFAULT_BADGE_BG),
+        chrome_bg         = _readOwnColor("chrome_bg", DEFAULT_CHROME_BG, NIGHT_DEFAULT_CHROME_BG),
+        module_bg         = _readOwnColor("module_bg", DEFAULT_MODULE_BG, NIGHT_DEFAULT_MODULE_BG),
+        ink               = _readOwnColor("ink_color", DEFAULT_INK, NIGHT_DEFAULT_INK),
+        plank             = _readOwnColor("spine_plank_color", DEFAULT_PLANK, NIGHT_DEFAULT_PLANK),
+        border            = _readOwnColor("border_color", DEFAULT_BORDER, NIGHT_DEFAULT_BORDER),
         -- NO night defaults here, deliberately, unlike the resolved colours
         -- above. rawColors() is what the settings menu reads to label a row,
         -- and a value the reader has not set must read as "default" rather
         -- than as a percentage they never chose.
-        folder_bg         = _readModeColor("folder_overlay_bg", nil),
-        folder_fg         = _readModeColor("folder_overlay_fg", nil),
-        module_border     = _readModeColor("module_border", nil),
+        folder_bg         = _readOwnColor("folder_overlay_bg", nil),
+        folder_fg         = _readOwnColor("folder_overlay_fg", nil),
+        module_border     = _readOwnColor("module_border", nil),
         -- Selected chip (#294). Unset = the chip bar inverts as before, so no
         -- default here: nil is meaningful ("use the fast invert path").
         -- bookshelf_chip_bar reads the same keys directly when it paints; these
         -- entries exist so the settings menu's valueLabel/pickColor helpers can
         -- show and edit them like every other colour.
-        chip_selected_bg  = _readModeColor("chip_selected_bg", nil),
-        chip_selected_fg  = _readModeColor("chip_selected_fg", nil),
+        chip_selected_bg  = _readOwnColor("chip_selected_bg", nil),
+        chip_selected_fg  = _readOwnColor("chip_selected_fg", nil),
         fill_default              = DEFAULT_FILL,
         track_default             = DEFAULT_TRACK,
         bookmark_default          = DEFAULT_BOOKMARK,
