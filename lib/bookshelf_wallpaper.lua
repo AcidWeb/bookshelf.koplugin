@@ -549,6 +549,13 @@ end
 -- that produced the updater's traversal fix.
 function M.pathFor(name)
     if type(name) ~= "string" or name == "" then return nil end
+    -- A pack's borrowed wallpaper (bookshelf_theme_pack): resolved there, into
+    -- the pack's theme/ folder. Checked before the separator refusal below,
+    -- which is about the reader's own names.
+    if name:sub(1, 11) == "theme-pack\1" then
+        local ok, TP = pcall(require, "lib/bookshelf_theme_pack")
+        return ok and TP.wallpaperPath(name:sub(12)) or nil
+    end
     if name:find("/", 1, true) or name:find("\\", 1, true) then return nil end
     if name == "." or name == ".." then return nil end
     local d, fs = M.dir(), lfs()

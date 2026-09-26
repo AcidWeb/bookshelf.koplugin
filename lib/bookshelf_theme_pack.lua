@@ -237,4 +237,39 @@ function M.colourOverride(key, dark)
     return { hex = hex }
 end
 
+-- A borrowed wallpaper travels under a NAME, like every other wallpaper, so
+-- Wallpaper.bg's cache and the widget's plumbing need no second path. The
+-- prefix cannot collide with a file name (it carries a control character) and
+-- Wallpaper.pathFor hands names carrying it to wallpaperPath.
+M.NAME_PREFIX = "theme-pack\1"
+
+function M.wallpaperName(is_full, is_dark)
+    local pack = M.activeWallpaperPack()
+    if not pack then return nil end
+    local file = M.wallpaperFile(M.theme(pack).wallpaper, is_full, is_dark)
+    return file and (M.NAME_PREFIX .. pack .. "\1" .. file) or nil
+end
+
+function M.wallpaperPath(rest)
+    local pack, file = tostring(rest):match("^([^\1]+)\1([^\1]+)$")
+    if not pack then return nil end
+    for _i, part in ipairs({ pack, file }) do
+        if part:find("/", 1, true) or part:find("\\", 1, true) or part == "." or part == ".." then
+            return nil
+        end
+    end
+    local th = M.theme(pack)
+    local path = th.dir and (th.dir .. "/" .. file) or nil
+    if path and fs().attributes(path, "mode") == "file" then return path end
+    return nil
+end
+
+function M.isDarkName(name)
+    if type(name) ~= "string" then return false end
+    local file = name:match("\1([^\1]+)$")
+    local stem = file and file:match("^(.-)%.[^%.]+$")
+    stem = stem and stem:lower()
+    return stem == "wallpaper.dark" or stem == "wallpaper.full.dark"
+end
+
 return M

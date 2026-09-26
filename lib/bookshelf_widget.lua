@@ -3587,6 +3587,15 @@ end
 function BookshelfWidget:_wallpaperName()
     local ok, name = pcall(function()
         local Wallpaper = require("lib/bookshelf_wallpaper")
+        -- A pack's borrowed wallpaper wins while it is switched on; the
+        -- reader's own choice is untouched underneath (bookshelf_theme_pack).
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        if ok_t and TP then
+            local CoverProgress = require("lib/bookshelf_cover_progress")
+            local dark = CoverProgress.theme()
+            local n = TP.wallpaperName(self._expanded and true or false, dark and true or false)
+            if n then return n end
+        end
         -- self._expanded is the full screen shelves view, which can carry its
         -- own image: see Wallpaper.resolveFor for the precedence. That is the
         -- ONLY thing that can change the picture now -- the per-shelf override
@@ -3612,8 +3621,13 @@ function BookshelfWidget:_wallpaperWidget()
         -- preInvert: whether the cached picture holds the file's negative --
         -- the frame's own inversion undone, and one more when the reader
         -- asked for the picture inverted at night (Wallpaper.showsNegative).
-        return Wallpaper.bg(name, self.width, self.height,
-                            Wallpaper.preInvert(Screen.night_mode and true or false))
+        -- A pack's DARK variant was drawn for the night look: show it as drawn,
+        -- so only the frame's own inversion is undone and the reader's
+        -- invert-at-night is not applied on top.
+        local pre = Wallpaper.preInvert(Screen.night_mode and true or false)
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        if ok_t and TP and TP.isDarkName(name) then pre = Screen.night_mode and true or false end
+        return Wallpaper.bg(name, self.width, self.height, pre)
     end)
     return ok and w or nil
 end
