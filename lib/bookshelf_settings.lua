@@ -1950,6 +1950,7 @@ function Settings:_pickPlank(touchmenu_instance, refresh)
     local wood
     wood = {
         special_tile = { label = _("Oak"), selected = was_on,
+                         image = (TP.builtinPlank() or {}).middle,
                          on_tap = function() TP.setWood(true); refresh() end },
         extra_button = {
             text_func = function()

@@ -82,9 +82,27 @@ function Swatch:paintTo(bb, x, y)
     bb:paintBorder(x, y, self.side, self.side, bw, bc, r)
 end
 
+-- woodSwatch(path, side) -> a side x side bitmap of a plank design's own
+-- wood (its middle band: top surface and front face), or nil.
+local function woodSwatch(path, side)
+    local ok, bb = pcall(function()
+        local RenderImage = require("ui/renderimage")
+        local src = RenderImage:renderImageFile(path, false)
+        if not src then return nil end
+        local band = math.floor(src:getHeight() / 3)
+        local sq = Blitbuffer.new(band, band, Blitbuffer.TYPE_BBRGB32)
+        sq:blitFrom(src, 0, 0, math.floor(band / 2), band, band, band)
+        src:free()
+        return RenderImage:scaleBlitBuffer(sq, side, side)
+    end)
+    return ok and bb or nil
+end
+
 -- nullTile: a labelled white tile used as the "No background" sentinel.
 -- Rendered at grid position [0,0] of the palette when null_tile is set.
-local function nullTile(label, selected, side, on_tap)
+-- With image_path (a plank design), the tile shows that wood, its label on a
+-- white strip along the bottom.
+local function nullTile(label, selected, side, on_tap, image_path)
     local nt_face, nt_bold = BFont:getFace("ffont", 12)
     local tw = TextWidget:new{
         text      = label,
@@ -92,13 +110,31 @@ local function nullTile(label, selected, side, on_tap)
         bold      = nt_bold,
         max_width = side - 2 * Space.padding.small,
     }
+    local wood = image_path and woodSwatch(image_path, side)
+    local inner
+    if wood then
+        local ImageWidget  = require("ui/widget/imagewidget")
+        local OverlapGroup = require("ui/widget/overlapgroup")
+        local strip_h = tw:getSize().h + 2 * Space.padding.small
+        local strip = FrameContainer:new{
+            bordersize = 0, padding = 0, margin = 0, radius = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            CenterContainer:new{ dimen = Geom:new{ w = side, h = strip_h }, tw },
+        }
+        strip.overlap_offset = { 0, side - strip_h }
+        inner = OverlapGroup:new{
+            dimen = Geom:new{ w = side, h = side },
+            ImageWidget:new{ image = wood, image_disposable = true, width = side, height = side },
+            strip,
+        }
+    end
     local frame = FrameContainer:new{
         bordersize = selected and Size.border.thick or Size.border.thin,
         padding    = 0,
         margin     = 0,
         radius     = 0,
         background = Blitbuffer.COLOR_WHITE,
-        CenterContainer:new{
+        inner or CenterContainer:new{
             dimen = Geom:new{ w = side, h = side },
             tw,
         },
@@ -267,7 +303,7 @@ function ColorPaletteWidget:update()
             if sel == nil then sel = (self.selected_hex == nil) end
             hgroup[#hgroup + 1] = nullTile(self.null_tile.label, sel, side, function()
                 self.null_tile.on_tap()
-            end)
+            end, self.null_tile.image)
             hgroup[#hgroup + 1] = HorizontalSpan:new{ width = gap }
         end
         for col_idx, hex in ipairs(row_hexes) do
@@ -489,7 +525,7 @@ function ColorPaletteWidget:onShow()
 end
 
 -- Public entry point.
--- special_tile (optional): { label, selected, on_tap } -- a labelled tile at
+-- special_tile (optional): { label, selected, on_tap, image } -- a labelled tile at
 -- the grid's top-left that is not a colour: the plank's built-in wood. Tapping
 -- it runs on_tap and closes; it shows selected while `selected` is true.
 local function showColorPicker(bookshelf, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
@@ -523,6 +559,7 @@ local function showColorPicker(bookshelf, title, current_hex, default_hex, on_ap
         end,
         null_tile        = special_tile and {
             label    = special_tile.label,
+            image    = special_tile.image,
             selected = special_tile.selected and true or false,
             on_tap   = function()
                 UIManager:close(widget, "ui")
