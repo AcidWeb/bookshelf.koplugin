@@ -209,6 +209,10 @@ local ColorPaletteWidget = FocusManager:extend{
     revert_callback  = nil,
     ok_callback      = nil,
     null_tile        = nil,
+    -- special_tile { label, image, selected, on_tap }: a non-colour choice at
+    -- the start of the hex row, "[tile] or # RRGGBB" (the plank's built-in
+    -- wood). Not in the grid: the grid is colours only.
+    special_tile     = nil,
     -- When set, a "White" footer button appears that taps apply_callback with
     -- this hex and closes the picker (one-tap commit, like Default but to
     -- a fixed color rather than off). Used by the background-color picker
@@ -317,6 +321,7 @@ function ColorPaletteWidget:update()
             local is_selected = (hex == self.selected_hex)
             hgroup[#hgroup + 1] = swatchTile(hex, is_selected, side, function(tapped_hex)
                 self.selected_hex = tapped_hex
+                if self.special_tile then self.special_tile.selected = false end
                 if self.apply_callback then self.apply_callback(tapped_hex) end
                 self:update()
             end)
@@ -377,12 +382,22 @@ function ColorPaletteWidget:update()
         -- Left margin matches the palette's horizontal gutter (padding.fullscreen)
         -- so the "#" prefix aligns with the leftmost column of swatches.
         HorizontalSpan:new{ width = Space.padding.fullscreen },
+    }
+    if self.special_tile then
+        local st = self.special_tile
+        hex_row[#hex_row + 1] = nullTile(st.label, st.selected, side, function() st.on_tap() end, st.image)
+        hex_row[#hex_row + 1] = HorizontalSpan:new{ width = Space.padding.large }
+        hex_row[#hex_row + 1] = TextWidget:new{ text = _("or"), face = hex_face,
+                                                fgcolor = Blitbuffer.COLOR_BLACK }
+        hex_row[#hex_row + 1] = HorizontalSpan:new{ width = Space.padding.large }
+    end
+    for _i, w in ipairs({
         hash_label,
         HorizontalSpan:new{ width = Space.padding.small },
         self.hex_input,
         HorizontalSpan:new{ width = Space.padding.large },
         self.preview_swatch,
-    }
+    }) do hex_row[#hex_row + 1] = w end
 
     -- Footer row: Cancel | Default | [White] | Apply, matching the preset-library
     -- modal's Close | Manage… | Apply pattern (no button borders, LineWidget
@@ -514,6 +529,7 @@ function ColorPaletteWidget:onHexSubmit()
         return
     end
     self.selected_hex = hex
+    if self.special_tile then self.special_tile.selected = false end
     if self.apply_callback then self.apply_callback(hex) end
     -- Tear down the keyboard so the user lands back on the palette /
     -- footer-row buttons rather than being stuck in the keyboard. update()
@@ -529,8 +545,9 @@ function ColorPaletteWidget:onShow()
 end
 
 -- Public entry point.
--- special_tile (optional): { label, selected, on_tap, image } -- a labelled tile at
--- the grid's top-left that is not a colour: the plank's built-in wood. Tapping
+-- special_tile (optional): { label, selected, on_tap, image } -- a labelled tile
+-- before the hex field ("[tile] or # RRGGBB") that is not a colour: the
+-- plank's built-in wood. Tapping
 -- it runs on_tap and closes; it shows selected while `selected` is true.
 local function showColorPicker(bookshelf, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
     local restoreMenu = bookshelf:hideMenu(touchmenu_instance)
@@ -561,7 +578,7 @@ local function showColorPicker(bookshelf, title, current_hex, default_hex, on_ap
             UIManager:close(widget, "ui")
             finish()
         end,
-        null_tile        = special_tile and {
+        special_tile     = special_tile and {
             label    = special_tile.label,
             image    = special_tile.image,
             selected = special_tile.selected and true or false,
@@ -570,14 +587,15 @@ local function showColorPicker(bookshelf, title, current_hex, default_hex, on_ap
                 special_tile.on_tap()
                 finish()
             end,
-        } or (null_tile_label and {
+        } or nil,
+        null_tile        = null_tile_label and {
             label  = null_tile_label,
             on_tap = function()
                 UIManager:close(widget, "ui")
                 if on_default then on_default() end
                 finish()
             end,
-        }) or nil,
+        } or nil,
         white_callback   = white_hex and function()
             if on_apply then on_apply(white_hex) end
             UIManager:close(widget, "ui")
