@@ -2733,6 +2733,17 @@ end
 -- the same call the painter makes to carve that book's top edge -- rather
 -- than being one more multiple of the edge unit that happens to look close.
 -- Change the camera angle or the default aspect and the board follows.
+-- overhangReach(row_h) -> how far below an ornament's feet its overhang may
+-- reach: the plank's surface strip and front face, plus one plank unit of air
+-- under the front edge. Leaves or a scarf's fringe hanging over a shelf hang
+-- a little PAST its edge, and a piece whose overhang reaches further than
+-- this is shrunk until it does not (Orn.pick). From the row height alone, so
+-- the plan and the render agree on every piece's size.
+function SpineShelf.overhangReach(row_h)
+    local b = SpineShelf.plankUnit(row_h)
+    return SpineShelf.plankInset(b) + SpineShelf.plankFace(row_h) + b
+end
+
 function SpineShelf.plankSurface(row_h)
     row_h = tonumber(row_h) or 0
     if row_h <= 0 then return 1 end
@@ -3101,7 +3112,7 @@ function SpineShelf.plan(items, opts)
                 mod       = Orn,
                 stand_h   = math.max(1, opts.row_h - fh - inset),
                 pad       = math.max(book_gap, b),
-                max_below = inset + fh,
+                max_below = SpineShelf.overhangReach(opts.row_h),
                 -- Never more than a quarter of the row: a section break is
                 -- an aside, not an exhibit. Same share the row-end slot asks
                 -- for; see Orn.ASIDE_SHARE.
@@ -3641,6 +3652,9 @@ function SpineShelf.plan(items, opts)
                             min_h     = Screen:scaleBySize(orn.mod.MIN_H_DP),
                             max_below = orn.max_below,
                             chance    = orn.mod.GROUP_CHANCE,
+                            -- Chosen before rows exist, so it cannot know
+                            -- whether a shelf will be above it.
+                            no_hang   = true,
                             -- Damped at the lower levels: this is the most
                             -- numerous channel on a grouping chip, so the raw
                             -- level puts several on a page the reader asked to
@@ -3804,6 +3818,8 @@ function SpineShelf.plan(items, opts)
                 min_h_frac = Orn.ROW_END_MIN_H_FRAC,
                 max_below = orn.max_below,
                 chance    = owed and Orn.CHANCE_CERTAIN or Orn.ROW_END_CHANCE,
+                -- A page's first row has no shelf above it to hang from.
+                no_hang   = within == 1,
                 -- Damped like the section breaks, and zero at Rarely, so that
                 -- setting is exactly its per-page promise. The promise itself
                 -- passes CHANCE_CERTAIN above and is unaffected by the level.
@@ -3930,6 +3946,20 @@ end
 -- rowWidget(opts) -> a width × height widget: shelf plank across the base,
 -- spines stood on it. opts: plan, row (a {first,last} slice or nil for an
 -- empty row), width, height, gap, on_book_tap/on_book_hold/on_book_open.
+-- ornamentY(pl, stand_h, opts) -> the y (row coordinates) a placement's top
+-- goes at. A standing piece puts its feet on the plank (overhang below them);
+-- a HANGING one (bookshelf:hang) puts its top against the underside of the
+-- plank above, which is the row gap above this row's top: the strip the
+-- selection lift is allowed into (lift_headroom, which keeps one hairline
+-- back). Only reached for rows that have a shelf above -- the pick calls pass
+-- no_hang on a page's first row.
+function SpineShelf.ornamentY(pl, stand_h, opts)
+    if pl.entry and pl.entry.hang then
+        return -((opts and opts.lift_headroom or 0) + Screen:scaleBySize(2))
+    end
+    return stand_h - pl.above
+end
+
 function SpineShelf.rowWidget(opts)
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local HorizontalSpan  = require("ui/widget/horizontalspan")
@@ -3960,13 +3990,15 @@ function SpineShelf.rowWidget(opts)
                 -- space the books already left, changing no packing.
                 budgeted  = true,
                 min_h     = Screen:scaleBySize(Orn.MIN_H_DP),
-                max_below = inset + fh,
+                max_below = SpineShelf.overhangReach(opts.height),
+                -- Nothing above the first row to hang from.
+                no_hang   = (opts.row_index or 1) <= 1,
             })
             if not pl then return end
             local span = math.max(0, opts.width - 2 * margin - pl.w)
             local x = margin + math.floor(span * ((Orn.hash(seed .. "|x") % 1000) / 1000))
             local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
-            w_.overlap_offset = { x, stand_h - pl.above }
+            w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
             ornament = w_
         end)
         if ornament then
@@ -4054,7 +4086,7 @@ function SpineShelf.rowWidget(opts)
                         local w_  = Orn.Ornament:new{ placement = pl,
                                                       night = _nightMode() }
                         w_.overlap_offset = { cursor + math.floor((gap_w - pl.w) / 2),
-                                              stand_h - pl.above }
+                                              SpineShelf.ornamentY(pl, stand_h, opts) }
                         gap_ornaments[#gap_ornaments + 1] = w_
                     end)
                 end
@@ -4387,8 +4419,9 @@ function SpineShelf.rowWidget(opts)
                 -- space the books already left, changing no packing.
                 budgeted  = true,
                 min_h     = Screen:scaleBySize(Orn.MIN_H_DP),
-                max_below = inset + fh,
+                max_below = SpineShelf.overhangReach(opts.height),
                 chance    = reserved and 1 or nil,
+                no_hang   = (opts.row_index or 1) <= 1,
             })
         end
         if not pl then return end
@@ -4400,7 +4433,7 @@ function SpineShelf.rowWidget(opts)
         end
         if x < margin or x + pl.w > opts.width - margin then return end
         local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
-        w_.overlap_offset = { x, stand_h - pl.above }
+        w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
         ornament = w_
     end)
     -- ── Shelf recess ──────────────────────────────────────────────

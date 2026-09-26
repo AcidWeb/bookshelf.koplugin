@@ -419,8 +419,8 @@ t.test("png: aspect comes from the IHDR width and height", function()
     local O = fresh()
     local aspect, over, invert = O.parsePngHeader(png_header(120, 80))
     eq(aspect, 1.5)
-    eq(over, 0, "a raster never overhangs the plank")
-    eq(invert, false, "the night flag is not in the bytes")
+    eq(over, 0, "a raster with no directives stands on the plank")
+    eq(invert, false, "no night directive, no night flag")
 end)
 
 t.test("png: a large image parses without overflowing", function()
@@ -442,6 +442,64 @@ t.test("png: anything that is not a PNG header is refused", function()
     assert(not O.parsePngHeader(bad), "first chunk must be IHDR")
     assert(not O.parsePngHeader(png_header(0, 10)), "zero width")
     assert(not O.parsePngHeader(png_header(10, 0)), "zero height")
+end)
+
+-- A tEXt chunk: length, "tEXt", keyword NUL text, crc (not checked, zeros).
+local function png_text(keyword, text)
+    local data = keyword .. "\0" .. text
+    return be32(#data) .. "tEXt" .. data .. be32(0)
+end
+local function png_idat() return be32(4) .. "IDAT" .. "xxxx" .. be32(0) end
+
+t.test("png: bookshelf tEXt directives -- overhang in pixels, hang, night", function()
+    local O = fresh()
+    -- IHDR's own crc sits before the first tEXt in a real file.
+    local base = png_header(100, 200) .. be32(0)
+    local _a, _n
+    local a, over, night, hang = O.parsePngHeader(base .. png_text("bookshelf", "overhang=20") .. png_idat())
+    eq(a, 0.5); eq(over, 0.1, "20px of a 200px image"); eq(night, false); eq(hang, false)
+    a, over, night, hang = O.parsePngHeader(base .. png_text("bookshelf", "hang")
+        .. png_text("bookshelf", "night=invert") .. png_idat())
+    eq(over, 0); eq(night, true); eq(hang, true, "separate chunks each count")
+    _a, over, _n, hang = O.parsePngHeader(base .. png_text("bookshelf", "overhang=10; hang") .. png_idat())
+    eq(over, 0.05); eq(hang, true, "several directives in one chunk")
+    -- Other tools' text is not ours, and nothing after the image data is read.
+    _a, over, _n, hang = O.parsePngHeader(base .. png_text("Software", "overhang=50 hang")
+        .. png_idat() .. png_text("bookshelf", "hang"))
+    eq(over, 0); eq(hang, false)
+    -- A chunk cut off by the read limit is ignored rather than half-read.
+    local cut = base .. png_text("bookshelf", "overhang=40")
+    _a, over = O.parsePngHeader(cut:sub(1, #cut - 6))
+    eq(over, 0)
+    -- Overhang can never exceed the picture.
+    _a, over = O.parsePngHeader(base .. png_text("bookshelf", "overhang=999") .. png_idat())
+    eq(over, 1)
+end)
+
+t.test("svg: bookshelf:hang is read like the other directives", function()
+    local O = fresh()
+    local _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hang -->')
+    eq(hang, true)
+    _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hang=0 -->')
+    eq(hang, false, "=0 switches it off")
+    _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hanging-basket -->')
+    eq(hang, false, "a longer word is not the directive")
+    _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2">')
+    eq(hang, false)
+end)
+
+t.test("pick: no_hang leaves hanging pieces out; a hanging piece ignores overhang", function()
+    local O = fresh()
+    local bat  = { path = "/o/bat.png", name = "bat.png", aspect = 1, overhang = 0.5, hang = true }
+    local vase = { path = "/o/vase.png", name = "vase.png", aspect = 1, overhang = 0 }
+    for i = 1, 40 do
+        local p = O.pick("nh" .. i, 400, 300, { bat, vase }, { min_gap = 48, min_h = 10, chance = 1, no_hang = true })
+        assert(p and p.entry == vase, "a first row must never be given the bat")
+    end
+    local p = O.pick("h", 400, 300, { bat }, { min_gap = 48, min_h = 10, chance = 1, max_below = 5 })
+    assert(p and p.entry == bat, "the bat is fine where there is a shelf above")
+    eq(p.below, 0, "a hanging piece has nothing below its feet")
+    eq(p.h, 240, "and max_below does not shrink it: 0.8 of the stand")
 end)
 
 t.test("png: list picks PNGs up beside the SVGs, with no overhang", function()

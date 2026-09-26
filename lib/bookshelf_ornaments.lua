@@ -26,12 +26,19 @@
 -- KOReader's own RenderImage (nanosvg), so: bold solid shapes, no text, no
 -- filters, no masks. Night mode pre-inverts the bitmap, alpha kept.
 --
--- A PNG has none of those channels, so it gets the defaults: aspect from the
--- IHDR chunk, overhang always 0, and the night flag from the filename
--- (cat.invert.png). See parsePngHeader. Nothing else about the pipeline
--- differs -- same pick(), same cache, same widget -- because the only thing
--- that actually varies is how an entry is measured and which RenderImage call
--- draws it.
+-- A PNG carries the same directives as tEXt chunks (keyword "bookshelf",
+-- text "overhang=N" / "hang" / "night=invert"), N in the image's own pixels;
+-- aspect comes from the IHDR chunk and the night flag may also come from the
+-- filename (cat.invert.png). See parsePngHeader. Nothing else about the
+-- pipeline differs -- same pick(), same cache, same widget -- because the only
+-- thing that actually varies is how an entry is measured and which RenderImage
+-- call draws it.
+--
+-- "bookshelf:hang" (either format): the piece HANGS from the shelf above
+-- instead of standing on its own -- a bat, a spider on its thread. Its top
+-- meets the underside of the plank above, so it is only offered where there is
+-- one: row ends and bare planks from a page's second row down, never the
+-- section gaps (those are chosen before rows exist). See pick()'s o.no_hang.
 --
 -- Placement is deterministic per page composition (seeded by the row's first
 -- book and its index range), so an ornament stays put while a page is looked
@@ -334,6 +341,12 @@ M.TEMPLATE_SVG = [==[<?xml version="1.0" encoding="UTF-8"?>
     silhouette would sink into that black, so for one of those add a line
     above the svg tag in the form of the overhang line, with night=invert
     in place of overhang=0: it is then shown light, like the spine titles.
+  - Something that HANGS (a bat, a spider on its thread): add a line in the
+    same form with hang in place of overhang=0, and draw it with its top at
+    the top of the picture. It hangs from the shelf above instead of
+    standing, so it only turns up from the second shelf down.
+  - A .png can carry these too, as text chunks with the keyword bookshelf
+    (overhang=N in the picture's own pixels, hang, night=invert).
 -->
 <!-- bookshelf:overhang=0 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 106">
@@ -486,7 +499,7 @@ function M.ensureTemplate()
 end
 
 -- parseHeader(text) -> aspect (w/h) or nil, overhang fraction (0..1),
--- night_invert (bool). Reads the viewBox and the "bookshelf:..." comments
+-- night_invert (bool), hang (bool). Reads the viewBox and the "bookshelf:..." comments
 -- from the SVG text; no XML parser, the facts are plain patterns.
 function M.parseHeader(text)
     if type(text) ~= "string" then return nil, 0 end
@@ -525,7 +538,15 @@ function M.parseHeader(text)
     -- mode, like the spine titles, instead of keeping its colours the way a
     -- cover does. Default is faithful (colour artwork stays the right colour).
     local night_invert = text:match("bookshelf:night%s*=%s*invert") ~= nil
-    return w / h, over / h, night_invert
+    return w / h, over / h, night_invert, M.declaresHang(text)
+end
+
+-- declaresHang(text) -> bool: "bookshelf:hang", on its own or as "=1"/"=yes".
+function M.declaresHang(text)
+    if type(text) ~= "string" then return false end
+    local v = text:match("bookshelf:hang%s*=%s*(%w+)")
+    if v then return v ~= "0" and v ~= "no" and v ~= "false" end
+    return text:match("bookshelf:hang%f[^%w]") ~= nil
 end
 
 -- be32(s, i) -> the big-endian uint32 starting at byte i, or nil if short.
@@ -535,7 +556,8 @@ local function be32(s, i)
     return ((a * 256 + b) * 256 + c) * 256 + d
 end
 
--- parsePngHeader(bytes) -> aspect (w/h) or nil, overhang fraction, night_invert
+-- parsePngHeader(bytes) -> aspect (w/h) or nil, overhang fraction, night_invert,
+-- hang
 --
 -- The same contract as parseHeader, for a raster. Everything comes out of the
 -- IHDR chunk, which a valid PNG is required to put first: the 8-byte
@@ -544,16 +566,18 @@ end
 -- folder -- which matters, because list() runs on every folder mtime change
 -- and a decode is orders of magnitude dearer than a read.
 --
--- OVERHANG IS ALWAYS 0. An SVG can declare that its lowest N units hang over
--- the plank's front, because it was drawn for this shelf. A PNG is a picture
--- someone had; it stands on the plank. That also leaves the full stand height
--- available to the artwork, and a transparent margin inside the image sets an
--- ornament back if it wants to be set back -- which is the maintainer's
--- reasoning for leaving the placement alone rather than pushing rasters to the
--- face-out plane.
+-- DIRECTIVES come from tEXt chunks before the image data: keyword "bookshelf",
+-- text "overhang=N", "hang" or "night=invert" (one per chunk, or several in
+-- one separated by spaces or semicolons). N is in the image's own pixels, the
+-- raster's equivalent of an SVG's viewBox units. A PNG with none -- a picture
+-- someone had -- stands on the plank as it always did: overhang 0, not
+-- hanging. The ornament packs write them (the leaves under an apple basket
+-- hanging over the plank front, a contact shadow reaching onto it, a bat).
 --
--- The night flag is not in the bytes either; list() takes it from the
--- filename. It is returned false here so the shape matches parseHeader.
+-- Only chunks inside `bytes` are seen (list() reads 8KB, and a tool that puts
+-- its tEXt after the image data is not supported -- the pack builder writes
+-- them straight after IHDR). The filename night flag (cat.invert.png) is
+-- applied by the caller on top of whatever this returns.
 function M.parsePngHeader(bytes)
     if type(bytes) ~= "string" or #bytes < 24 then return nil end
     if bytes:sub(1, 8) ~= "\137PNG\r\n\026\n" then return nil end
@@ -563,7 +587,37 @@ function M.parsePngHeader(bytes)
     if bytes:sub(13, 16) ~= "IHDR" then return nil end
     local w, h = be32(bytes, 17), be32(bytes, 21)
     if not (w and h) or w <= 0 or h <= 0 then return nil end
-    return w / h, 0, false
+    local text = M.pngDirectives(bytes)
+    local over = tonumber(text:match("bookshelf:overhang%s*=%s*([%d%.]+)")) or 0
+    if over < 0 then over = 0 end
+    if over > h then over = h end
+    local night = text:match("bookshelf:night%s*=%s*invert") ~= nil
+    return w / h, over / h, night, M.declaresHang(text)
+end
+
+-- pngDirectives(bytes) -> "bookshelf:<directive>" lines from the "bookshelf"
+-- tEXt chunks ahead of the image data, or "". Walks the chunk list from the
+-- one after IHDR; stops at IDAT/IEND, at a chunk that runs past `bytes`, or at
+-- a length no real header chunk has.
+function M.pngDirectives(bytes)
+    local out = {}
+    local pos = 9                                   -- first chunk, 1-based
+    while pos + 8 <= #bytes do
+        local len, typ = be32(bytes, pos), bytes:sub(pos + 4, pos + 7)
+        if not len or len > 65536 or typ == "IDAT" or typ == "IEND" then break end
+        if pos + 11 + len > #bytes + 4 then break end
+        if typ == "tEXt" then
+            local data = bytes:sub(pos + 8, pos + 7 + len)
+            local z = data:find("\0", 1, true)
+            if z and data:sub(1, z - 1) == "bookshelf" then
+                for d in data:sub(z + 1):gmatch("[^;%s]+") do
+                    out[#out + 1] = "bookshelf:" .. d
+                end
+            end
+        end
+        pos = pos + 12 + len                        -- length, type, data, crc
+    end
+    return table.concat(out, "\n")
 end
 
 -- The folder's cache key. Why it is not just an mtime -- a delete that does
@@ -650,16 +704,16 @@ local function entryFor(path, relpath, file, pack)
     if not f then return nil end
     local head = f:read(8192)
     f:close()
-    local aspect, over, night_invert
+    local aspect, over, night_invert, hang
     if is_png then
-        aspect, over, night_invert = M.parsePngHeader(head)
-        -- A PNG has nowhere to write "bookshelf:night=invert", so the name
-        -- carries it: cat.invert.png. The only channel that needs no tooling.
-        night_invert = lname:match("%.invert%.png$") ~= nil
+        aspect, over, night_invert, hang = M.parsePngHeader(head)
+        -- The name can carry the night flag too: cat.invert.png, the one
+        -- channel that needs no tooling.
+        night_invert = night_invert or lname:match("%.invert%.png$") ~= nil
     else
         -- sizeOf rather than parseHeader: it falls back to the renderer's own
         -- natural size when the header carries no usable viewBox or size.
-        aspect, over, night_invert = M.sizeOf(path, head)
+        aspect, over, night_invert, hang = M.sizeOf(path, head)
     end
     if not aspect then
         -- warn, not dbg: a dropped file is invisible on the shelf and the
@@ -686,7 +740,8 @@ local function entryFor(path, relpath, file, pack)
     -- name is the relative path: unique across packs, and what the rotation
     -- and the on/off state key on. file is the bare file name, for display.
     return { path = path, name = relpath, file = file, pack = pack,
-             aspect = aspect, overhang = over, night_invert = night_invert }
+             aspect = aspect, overhang = over or 0, night_invert = night_invert,
+             hang = hang or nil }
 end
 
 -- displayName(entry) -> the file name without its extension (or the
@@ -850,8 +905,8 @@ local function defaultSize(path)
 end
 
 function M.sizeOf(path, head)
-    local aspect, over, night_invert = M.parseHeader(head)
-    if aspect then return aspect, over, night_invert end
+    local aspect, over, night_invert, hang = M.parseHeader(head)
+    if aspect then return aspect, over, night_invert, hang end
     local ok, w, h = pcall(M._size or defaultSize, path)
     if not ok or not (w and h) or w <= 0 or h <= 0 then return nil end
     -- Re-read the conventions from the header: only the SIZE was missing.
@@ -861,7 +916,7 @@ function M.sizeOf(path, head)
     if o > h then o = h end
     local inv = type(head) == "string"
         and head:match("bookshelf:night%s*=%s*invert") ~= nil or false
-    return w / h, o / h, inv
+    return w / h, o / h, inv, M.declaresHang(head)
 end
 
 -- hash(s) -> non-negative integer, djb2 (LuaJIT-safe arithmetic).
@@ -918,7 +973,8 @@ end
 --   entries : pool (default M.list())
 --   o.min_gap, o.min_h : px floors; o.min_h_frac : floor as a share of
 --   stand_h (default M.MIN_H_FRAC); o.max_below : how far below the feet the
---   overhang may reach (the plank's surface strip + front face)
+--   overhang may reach (the plank's surface strip + front face); o.no_hang :
+--   leave out pieces that hang from the shelf above (no shelf above here)
 -- rotationFor(seed, count) -> which ornament this seed gets.
 --
 -- A ROTATION rather than a hash of the seed. With two or three files in the
@@ -1025,7 +1081,7 @@ function M.pick(seed, gap_px, stand_h, entries, o)
             width  = gap_px
             height = math.floor(width / entry.aspect)
         end
-        if entry.overhang > 0 and o.max_below then
+        if entry.overhang > 0 and o.max_below and not entry.hang then
             -- Shrink so the overhang never reaches past the plank's front.
             local below = height * entry.overhang
             if below > o.max_below then
@@ -1059,8 +1115,10 @@ function M.pick(seed, gap_px, stand_h, entries, o)
     local fits = {}
     for _i = 1, #entries do
         local cand = entries[_i]
-        local w, h = sizeFor(cand)
-        if w then fits[#fits + 1] = { entry = cand, w = w, h = h } end
+        if not (o.no_hang and cand.hang) then
+            local w, h = sizeFor(cand)
+            if w then fits[#fits + 1] = { entry = cand, w = w, h = h } end
+        end
     end
     if #fits == 0 then return nil end
     -- Seeded choice first, then walk on within the fitting set. Walking
@@ -1081,7 +1139,7 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         local cand = fits[idx]
         entry, width, height = cand.entry, cand.w, cand.h
     end
-    local below = math.floor(height * entry.overhang)
+    local below = entry.hang and 0 or math.floor(height * entry.overhang)
     -- Marked only now: pick bails out above on several paths (too short, too
     -- narrow, the odds), and an entry that never stood must not be counted as
     -- standing -- that would push the next gap onto a different file for no
