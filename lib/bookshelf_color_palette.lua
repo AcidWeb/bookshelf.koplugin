@@ -305,6 +305,10 @@ function ColorPaletteWidget:update()
                 self.null_tile.on_tap()
             end, self.null_tile.image)
             hgroup[#hgroup + 1] = HorizontalSpan:new{ width = gap }
+        elseif self.null_tile then
+            -- The rows below the tile keep its column empty, so the grid stays
+            -- six aligned columns rather than each row centring on its own.
+            hgroup[#hgroup + 1] = HorizontalSpan:new{ width = side + gap }
         end
         for col_idx, hex in ipairs(row_hexes) do
             if col_idx > 1 then
