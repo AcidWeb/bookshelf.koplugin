@@ -2872,8 +2872,7 @@ function SpineShelf.activePlankDesign()
     _design_memo = false
     pcall(function()
         local TP = require("lib/bookshelf_theme_pack")
-        local pack = TP.activePlankPack()
-        _design_memo = pack and TP.theme(pack).plank or false
+        _design_memo = TP.activePlank() or false
     end)
     return _design_memo or nil
 end

@@ -115,11 +115,26 @@ end)
 t.test("plank files: middle required, ends optional", function()
     local TP, d = setup()
     touch(d .. "/A/theme/plank.left.png")
-    eq(TP.theme("A").plank, nil, "no middle, no plank")
+    eq(#TP.theme("A").planks, 0, "no middle, no plank")
     touch(d .. "/B/theme/plank.middle.png"); touch(d .. "/B/theme/plank.right.png")
-    local p = TP.theme("B").plank
+    local p = TP.theme("B").planks[1]
     assert(p.middle:match("/B/theme/plank%.middle%.png$")); eq(p.left, nil)
     assert(p.right:match("plank%.right%.png$"))
+    eq(p.id, "B/theme/plank"); eq(p.name, nil); eq(p.pack, "B")
+end)
+
+t.test("a pack of planks: each named plank is its own design", function()
+    local TP, d = setup()
+    for _, f in ipairs({ "plank.Dark Oak.middle.png", "plank.Dark Oak.left.png",
+                         "plank.birch.middle.png", "plank.middle.png", "plank.ash.left.png" }) do
+        touch(d .. "/Woods/theme/" .. f)
+    end
+    local ps = TP.theme("Woods").planks
+    eq(#ps, 3, "unnamed, birch, Dark Oak; ash has no middle")
+    eq(ps[1].name, nil); eq(ps[2].name, "birch"); eq(ps[3].name, "Dark Oak")
+    eq(ps[3].id, "Woods/theme/plank.Dark Oak")
+    assert(ps[3].left:match("plank%.Dark Oak%.left%.png$")); eq(ps[2].left, nil)
+    eq(TP.plankLabel(ps[3]), "Dark Oak"); eq(TP.plankLabel(ps[1]), "Woods")
 end)
 
 t.test("colours.json maps friendly names to settings", function()
@@ -175,12 +190,14 @@ end)
 t.test("plank: on by default when one pack has it, one at a time, follows the pack", function()
     local TP, d, settings, packs_off = setup()
     touch(d .. "/A/theme/plank.middle.png"); touch(d .. "/B/theme/plank.middle.png")
-    eq(TP.activePlankPack(), "A", "unset: the first pack with a plank")
-    TP.setPlankOn("B", true); eq(TP.activePlankPack(), "B")
-    TP.setPlankOn("B", false); eq(TP.activePlankPack(), nil,
-        "switching the shown plank off shows none, not the next pack's")
-    TP.setPlankOn("A", true); packs_off["A"] = true
-    eq(TP.activePlankPack(), nil, "a switched-off pack shows no plank")
+    touch(d .. "/B/theme/plank.oak.middle.png")
+    local function shown() local p = TP.activePlank(); return p and p.id end
+    eq(shown(), "A/theme/plank", "unset: the first plank there is")
+    TP.setPlankOn("B/theme/plank.oak", true); eq(shown(), "B/theme/plank.oak")
+    TP.setPlankOn("B/theme/plank.oak", false); eq(shown(), nil,
+        "switching the shown plank off shows none, not the next one")
+    TP.setPlankOn("A/theme/plank", true); packs_off["A"] = true
+    eq(shown(), "B/theme/plank", "a switched-off pack's plank never shows; the next one does")
 end)
 
 t.test("borrowed wallpaper resolves through a theme name, dark variant flagged", function()
@@ -218,9 +235,9 @@ t.test("every colour read consults the borrowed theme; the menu reads the reader
     assert(pg and pg:find("colourOverride(", 1, true), "page ground ignores the theme")
 end)
 
-t.test("plankEntry: a browser item for the pack's plank design", function()
+t.test("plankEntries: a browser item per plank design", function()
     local TP, d = setup()
-    eq(TP.plankEntry("None"), nil)
+    eq(#TP.plankEntries("None"), 0)
     local png = "\137PNG\r\n\026\n" .. string.char(0,0,0,13) .. "IHDR"
                 .. string.char(0,0,1,0) .. string.char(0,0,0,96) .. string.char(8,6,0,0,0)
     touch(d .. "/Xmas/theme/plank.middle.png", png)
@@ -228,9 +245,12 @@ t.test("plankEntry: a browser item for the pack's plank design", function()
         local w = b:byte(17) * 16777216 + b:byte(18) * 65536 + b:byte(19) * 256 + b:byte(20)
         local h = b:byte(21) * 16777216 + b:byte(22) * 65536 + b:byte(23) * 256 + b:byte(24)
         return w / h end }
-    local e = TP.plankEntry("Xmas")
-    eq(e.name, "Xmas/theme/plank"); eq(e.file, "Plank"); eq(e.is_plank, true)
-    eq(e.aspect, 256 / 96)
+    touch(d .. "/Xmas/theme/plank.gold.middle.png", png)
+    local es = TP.plankEntries("Xmas")
+    eq(#es, 2)
+    eq(es[1].name, "Xmas/theme/plank"); eq(es[1].file, "Plank"); eq(es[1].is_plank, true)
+    eq(es[1].aspect, 256 / 96)
+    eq(es[2].name, "Xmas/theme/plank.gold"); eq(es[2].file, "gold")
     package.loaded["lib/bookshelf_ornaments"] = nil
 end)
 
@@ -260,7 +280,7 @@ t.test("withOverride leaves a row marked _theme_keep live (another part's own li
 end)
 
 
-t.test("activePlankPack is cached for the scan TTL; setPlankOn and invalidate() drop it", function()
+t.test("activePlank is cached for the scan TTL; setPlankOn and invalidate() drop it", function()
     local TP, d = setup()
     touch(d .. "/A/theme/plank.middle.png")
     TP.SCAN_TTL = 15
@@ -268,11 +288,11 @@ t.test("activePlankPack is cached for the scan TTL; setPlankOn and invalidate() 
     local calls = 0
     local real = TP._orn.listAll
     TP._orn.listAll = function(...) calls = calls + 1; return real(...) end
-    eq(TP.activePlankPack(), "A"); eq(TP.activePlankPack(), "A")
+    eq(TP.activePlank().pack, "A"); eq(TP.activePlank().pack, "A")
     eq(calls, 1, "a page turn must not re-list the ornaments folder")
-    TP.setPlankOn("A", false); eq(TP.activePlankPack(), nil, "a switch is seen at once")
-    TP.setPlankOn("A", true); TP.invalidate(); eq(TP.activePlankPack(), "A")
-    now = now + 16; TP.activePlankPack(); eq(calls >= 3, true, "and it expires")
+    TP.setPlankOn("A/theme/plank", false); eq(TP.activePlank(), nil, "a switch is seen at once")
+    TP.setPlankOn("A/theme/plank", true); TP.invalidate(); eq(TP.activePlank().pack, "A")
+    now = now + 16; TP.activePlank(); eq(calls >= 3, true, "and it expires")
 end)
 
 t.test("borrowed colours cost no file checks per read within the scan TTL", function()
@@ -299,7 +319,7 @@ t.test("the browser drops the cached plank choice on any change, and a plank swi
     assert(toggle and toggle:find('setDirty("all", "full")', 1, true),
         "a plank switch changes the band under the last row: needs a full repaint")
     local st = io.open("lib/bookshelf_settings.lua"):read("*a")
-    local row = st:match("TP%.setPlankOn%(p, false%).-return")
+    local row = st:match("TP%.setPlankOn%(p%.id, false%).-return")
     assert(row and row:find('setDirty("all", "full")', 1, true),
         "the plank row's deactivate must repaint fully too")
 end)

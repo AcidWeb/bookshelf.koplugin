@@ -4,6 +4,9 @@
 --
 --   <pack>/theme/wallpaper.<ext>            + .full / .dark / .full.dark variants
 --   <pack>/theme/plank.middle.png           + plank.left.png / plank.right.png
+--   <pack>/theme/plank.<name>.middle.png    a NAMED plank (+ .left / .right):
+--                                           a pack may hold several, e.g. a
+--                                           pack of wood shelves
 --   <pack>/theme/colours.json               {"day": {name: "#RRGGBB"}, "night": {...}}
 --
 -- In a subfolder on purpose: the ornament scan is one level deep and png/svg
@@ -123,6 +126,19 @@ local function parseColours(path, pack)
     return any and out or nil
 end
 
+-- _plankPart(file) -> name, part for "plank[.<name>].<middle|left|right>.png"
+-- (name "" for the unnamed plank), or nil.
+function M._plankPart(file)
+    local stem = file:match("^(.+)%.[Pp][Nn][Gg]$")
+    if not stem or stem:sub(1, 6):lower() ~= "plank." then return nil end
+    local rest = stem:sub(7)
+    local name, part = rest:match("^(.*)%.([^%.]+)$")
+    if not name then name, part = "", rest end
+    part = part:lower()
+    if part ~= "middle" and part ~= "left" and part ~= "right" then return nil end
+    return name, part
+end
+
 -- theme(pack) -> what the pack's theme/ holds (fields nil when absent).
 M._cache = {}
 function M.theme(pack)
@@ -133,25 +149,38 @@ function M.theme(pack)
     local tdir = d and (d .. "/" .. pack .. "/" .. M.SUBDIR) or nil
     -- exists: the pack folder is there, checked once per scan rather than on
     -- every colour read (a stat is dear on a Kindle's FUSE storage).
-    local v = { dir = tdir,
+    local v = { dir = tdir, planks = {},
                 exists = d and fs().attributes(d .. "/" .. pack, "mode") == "directory" or false }
     if tdir and fs().attributes(tdir, "mode") == "directory" then
         local names = listDir(tdir)
         local w = {}
-        local plank = {}
+        local planks = {}          -- by name ("" = the unnamed plank)
         for _i, n in ipairs(names) do
             local stem, ext = n:match("^(.-)%.([^%.]+)$")
             local lstem = stem and stem:lower()
             if lstem and M.WALL_EXTS[ext:lower()] and VARIANT[lstem] and not w[VARIANT[lstem]] then
                 w[VARIANT[lstem]] = n
-            elseif n:lower() == "plank.middle.png" then plank.middle = tdir .. "/" .. n
-            elseif n:lower() == "plank.left.png" then plank.left = tdir .. "/" .. n
-            elseif n:lower() == "plank.right.png" then plank.right = tdir .. "/" .. n
+            elseif M._plankPart(n) then
+                local name, part = M._plankPart(n)
+                planks[name] = planks[name] or {}
+                planks[name][part] = tdir .. "/" .. n
             elseif n:lower() == "colours.json" then v.colours = parseColours(tdir .. "/" .. n, pack)
             end
         end
         if w.base then v.wallpaper = w end
-        if plank.middle then v.plank = plank end
+        v.planks = {}
+        for name, pl in pairs(planks) do
+            if pl.middle then
+                pl.pack = pack
+                pl.name = name ~= "" and name or nil
+                pl.id = pack .. "/" .. M.SUBDIR .. "/plank" .. (pl.name and ("." .. name) or "")
+                v.planks[#v.planks + 1] = pl
+            end
+        end
+        table.sort(v.planks, function(a, b)
+            if (a.name == nil) ~= (b.name == nil) then return a.name == nil end
+            return (a.name or ""):lower() < (b.name or ""):lower()
+        end)
     end
     M._cache[pack] = { at = now, v = v }
     return v
@@ -189,20 +218,22 @@ function M.setWallpaperPack(pack) save(M.WALLPAPER_SETTING, pack) end
 function M.activeColoursPack() return activeFor(M.COLOURS_SETTING, "colours") end
 function M.setColoursPack(pack) save(M.COLOURS_SETTING, pack) end
 
-function M.plankItemName(pack) return pack .. "/" .. M.SUBDIR .. "/plank" end
+-- plankLabel(p) -> what menus call a plank: its name, or its pack's.
+function M.plankLabel(p) return p and (p.name or p.pack) or nil end
 
--- activePlankPack() -> the one pack whose plank design shows, or nil. The
--- chosen one if it still qualifies, else the first (by name) that does: a
--- plank shows by default, like ornaments do, when its pack is on.
+-- activePlank() -> the plank design on show ({id, pack, name, middle, left,
+-- right}), or nil. The chosen one if it still qualifies, else the first there
+-- is: a plank shows by default, like ornaments do, when its pack is on.
 --
 -- Cached for the scan TTL: it is asked on every shelf build, a page turn bumps
 -- the settings generation, and answering means listing the ornaments folder.
 -- A switch (setPlankOn, invalidate) drops the answer at once.
 --
 -- theme_plank_pack = false means "none": switching the SHOWN plank off must
--- not hand the shelf to the next pack whose plank happens to be on too.
+-- not hand the shelf to the next plank that happens to be on too. Otherwise it
+-- holds the chosen plank's id.
 M._plank_memo = nil
-function M.activePlankPack()
+function M.activePlank()
     local now = M._clock()
     local memo = M._plank_memo
     if memo and M.SCAN_TTL > 0 and (now - memo.at) < M.SCAN_TTL then return memo.v end
@@ -216,23 +247,27 @@ function M._activePlank()
     local _all, packs = O.listAll()
     local ok_list = {}
     for _i, p in ipairs(packs or {}) do
-        if M.theme(p).plank and not O.isPackOff(p) and not O.isOff(M.plankItemName(p)) then
-            ok_list[#ok_list + 1] = p
+        if not O.isPackOff(p) then
+            for _j, pl in ipairs(M.theme(p).planks or {}) do
+                if not O.isOff(pl.id) then ok_list[#ok_list + 1] = pl end
+            end
         end
     end
     local chosen = read(M.PLANK_SETTING)
     if chosen == false then return nil end
-    for _i, p in ipairs(ok_list) do if p == chosen then return p end end
+    for _i, pl in ipairs(ok_list) do if pl.id == chosen then return pl end end
     return ok_list[1]
 end
 
-function M.setPlankOn(pack, on)
+-- setPlankOn(id, on): switch one plank design; switching one on makes it the
+-- one shown.
+function M.setPlankOn(id, on)
     local O = orn()
-    local shown = M.activePlankPack() == pack
-    O.setOff(M.plankItemName(pack), not on)
+    local cur = M.activePlank()
+    O.setOff(id, not on)
     if on then
-        save(M.PLANK_SETTING, pack)
-    elseif shown then
+        save(M.PLANK_SETTING, id)
+    elseif cur and cur.id == id then
         save(M.PLANK_SETTING, false)        -- none, not the next in line
     end
     M._plank_memo = nil
@@ -298,18 +333,23 @@ function M.isDarkName(name)
     return stem == "wallpaper.dark" or stem == "wallpaper.full.dark"
 end
 
--- plankEntry(pack) -> an ornament-shaped entry for the pack's plank design, so
--- the browser can show and switch it like an ornament. Previewed from the
+-- plankEntries(pack) -> ornament-shaped entries for the pack's plank designs,
+-- so the browser shows and switches them like ornaments. Previewed from each
 -- middle image; never placed on a shelf by the ornament picker (is_plank).
-function M.plankEntry(pack)
-    local p = M.theme(pack).plank
-    if not p then return nil end
-    local f = io.open(p.middle, "rb"); if not f then return nil end
-    local head = f:read(64); f:close()
-    local aspect = require("lib/bookshelf_ornaments").parsePngHeader(head)
-    if not aspect then return nil end
-    return { path = p.middle, name = M.plankItemName(pack), file = "Plank", pack = pack,
-             aspect = aspect, overhang = 0, is_plank = true }
+function M.plankEntries(pack)
+    local out = {}
+    for _i, p in ipairs(M.theme(pack).planks or {}) do
+        local f = io.open(p.middle, "rb")
+        local head = f and f:read(64)
+        if f then f:close() end
+        local aspect = head and require("lib/bookshelf_ornaments").parsePngHeader(head)
+        if aspect then
+            out[#out + 1] = { path = p.middle, name = p.id, file = p.name or "Plank",
+                              pack = pack, aspect = aspect, overhang = 0,
+                              is_plank = true, plank = p }
+        end
+    end
+    return out
 end
 
 -- withOverride(items, label, on_deactivate, keep) -> the menu with, while a

@@ -140,12 +140,11 @@ function Browser:_items()
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
     if ok_t and TP then
         local _all, packs = Orn.listAll()
-        local shown = TP.activePlankPack()
+        local shown = TP.activePlank()
         for _i, pack in ipairs(packs or {}) do
             if self.chip == ALL or self.chip == pack then
-                local e = TP.plankEntry(pack)
-                if e then
-                    out[#out + 1] = { entry = e, off = shown ~= pack,
+                for _j, e in ipairs(TP.plankEntries(pack)) do
+                    out[#out + 1] = { entry = e, off = not (shown and shown.id == e.name),
                                       pack_off = Orn.isPackOff(pack) }
                 end
             end
@@ -157,7 +156,7 @@ end
 -- _toggle(item): switch an ornament, or a pack's plank design, on or off.
 function Browser:_toggle(item)
     if item.entry.is_plank then
-        require("lib/bookshelf_theme_pack").setPlankOn(item.entry.pack, item.off)
+        require("lib/bookshelf_theme_pack").setPlankOn(item.entry.name, item.off)
         -- The design's lower band hangs below the last row, into the strip a
         -- page-turn refresh stops short of: repaint the whole panel.
         UIManager:setDirty("all", "full")

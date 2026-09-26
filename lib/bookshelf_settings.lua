@@ -2502,10 +2502,11 @@ function Settings:_colorsSubItems()
             -- so and a tap switches the design off (bookshelf_theme_pack).
             _theme_keep = true,
             text_func = function()
-                local ok_p, p = pcall(function()
-                    return require("lib/bookshelf_theme_pack").activePlankPack()
+                local ok_p, label = pcall(function()
+                    local TP = require("lib/bookshelf_theme_pack")
+                    return TP.plankLabel(TP.activePlank())
                 end)
-                if ok_p and p then return T(_("%1 plank active - tap to deactivate"), p) end
+                if ok_p and label then return T(_("%1 plank active - tap to deactivate"), label) end
                 return _("Shelf plank color") .. ": " .. valueLabel("plank")
             end,
             help_text = _("Color of the shelf plank the Spines style stands"
@@ -2514,9 +2515,9 @@ function Settings:_colorsSubItems()
             keep_menu_open = true,
             callback = function(touchmenu_instance)
                 local TP = require("lib/bookshelf_theme_pack")
-                local ok_p, p = pcall(TP.activePlankPack)
+                local ok_p, p = pcall(TP.activePlank)
                 if ok_p and p then
-                    TP.setPlankOn(p, false)
+                    TP.setPlankOn(p.id, false)
                     markDirty()
                     UIManager:setDirty("all", "full")   -- the band under the last row
                     if touchmenu_instance then touchmenu_instance:updateItems() end
