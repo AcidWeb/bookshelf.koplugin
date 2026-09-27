@@ -17,3 +17,5 @@ assets/**                   export-ignore
 assets/bookshelf-logo.png   -export-ignore
 assets/wallpapers           -export-ignore
 assets/wallpapers/**        -export-ignore
+assets/planks               -export-ignore
+assets/planks/**            -export-ignore
