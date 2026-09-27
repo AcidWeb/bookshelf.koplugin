@@ -924,7 +924,97 @@ local function applyLayers(e, layers)
     -- What sizing and placement read: the part below the feet, and a raise.
     e.overhang = (lift < 0) and -lift or 0
     e.raise    = (lift > 0) and lift or 0
-    e.lookup = nil
+end
+
+-- The directive-only values, kept so a re-apply (a reader's nudge) starts
+-- from what the file itself says rather than from the last merge.
+local function keepDirectives(e)
+    if e._dir then return end
+    e._dir = { overhang = e.overhang or 0, hang = e.hang, night_invert = e.night_invert }
+end
+local function reapply(e)
+    if not (e and e._layers) then return end
+    e.overhang, e.hang, e.night_invert = e._dir.overhang, e._dir.hang, e._dir.night_invert
+    pcall(applyLayers, e, e._layers)
+end
+
+-- ── The reader's own file: <ornaments folder>/ornaments.json ────────────────
+-- Held in memory while a long-press menu edits it (every nudge re-applies the
+-- piece at once, no rescan), and written when the menu closes.
+function M.readerPath()
+    local d = M.dir()
+    return d and (d .. "/" .. M.JSON_NAME) or nil
+end
+function M.readerTable()
+    local path = M.readerPath()
+    local fs = lfs()
+    local mt = path and fs and fs.attributes(path, "modification")
+    if M._reader and M._reader_mtime == mt then return M._reader end
+    if M._reader and M._reader_dirty then return M._reader end
+    M._reader = path and M.readJson(path) or {}
+    M._reader_mtime = mt
+    return M._reader
+end
+
+-- readerGet(name) -> the reader's record for a piece (a copy), or {}.
+function M.readerGet(name)
+    local rec = M.readerTable()[name]
+    local out = {}
+    if type(rec) == "table" then for k, v in pairs(rec) do out[k] = v end end
+    return out
+end
+
+-- readerSet(entry, field, value): one field of the reader's record (nil
+-- removes it; an empty record is dropped), applied to the piece at once.
+function M.readerSet(entry, field, value)
+    if not (entry and entry.name and M.FIELDS[field]) then return end
+    local t = M.readerTable()
+    local rec = type(t[entry.name]) == "table" and t[entry.name] or {}
+    rec[field] = value
+    t[entry.name] = next(rec) and rec or nil
+    M._reader_dirty = true
+    reapply(entry)
+end
+
+-- readerReset(entry): the reader's record for the piece goes; the pack's
+-- values (or the defaults) show again.
+function M.readerReset(entry)
+    if not (entry and entry.name) then return end
+    local t = M.readerTable()
+    if t[entry.name] ~= nil then
+        t[entry.name] = nil
+        M._reader_dirty = true
+    end
+    reapply(entry)
+end
+
+local function encodeJson(t)
+    if M._encode then return M._encode(t) end
+    local ok, rj = pcall(require, "rapidjson")
+    if ok and rj and rj.encode then return rj.encode(t, { pretty = true, sort_keys = true }) end
+    return require("json").encode(t)
+end
+
+-- saveReader() -> true when written (or nothing to write).
+function M.saveReader()
+    if not M._reader_dirty then return true end
+    local path = M.readerPath()
+    if not path then return false end
+    local ok, text = pcall(encodeJson, M._reader or {})
+    if not ok or type(text) ~= "string" then
+        logger.warn("[bookshelf] ornaments: could not encode", path, tostring(text))
+        return false
+    end
+    local f = io.open(path, "w")
+    if not f then
+        logger.warn("[bookshelf] ornaments: could not write", path)
+        return false
+    end
+    f:write(text); f:write("\n"); f:close()
+    M._reader_dirty = false
+    local fs = lfs()
+    M._reader_mtime = fs and fs.attributes(path, "modification") or nil
+    return true
 end
 
 -- listAll() -> every ornament in the folders and their packs, switched off
@@ -1007,7 +1097,9 @@ function M.listAll()
     -- The settings layers. The root files of both folders, then each pack's
     -- own file, read from the folder its piece came from.
     local root_json = {}
-    for _r, d in ipairs(roots) do root_json[_r] = M.readJson(d .. "/" .. M.JSON_NAME) end
+    for _r, d in ipairs(roots) do
+        root_json[_r] = (d == M.dir()) and M.readerTable() or M.readJson(d .. "/" .. M.JSON_NAME)
+    end
     local pack_json = {}
     for _i, e in ipairs(out) do
         local layers = {}
@@ -1020,7 +1112,8 @@ function M.listAll()
             layers[#layers + 1] = pack_json[pdir]
             lookup[#layers] = e.file
         end
-        e.lookup = lookup
+        e.lookup, e._layers = lookup, layers
+        keepDirectives(e)
         pcall(applyLayers, e, layers)
     end
     M._all_cache, M._all_key, M._all_packs = out, key, packs
@@ -1625,7 +1718,13 @@ function M.contentBox(entry)
 end
 
 -- The widget: blits the cached render at paint time. Inert to gestures.
-M.Ornament = Widget:extend{
+-- The piece on the shelf. It takes a long-press (its menu) and, when it has
+-- a tap action, a tap; anything else falls through to the shelf. The shelf
+-- hands the handlers in once (M.handlers = { hold = fn(entry), tap =
+-- fn(entry) }), since a piece knows nothing of the widget it stands in.
+local ok_ic, InputContainer = pcall(require, "ui/widget/container/inputcontainer")
+M.handlers = {}
+M.Ornament = ((ok_ic and InputContainer) or Widget):extend{
     placement = nil,
     night     = false,
 }
@@ -1633,6 +1732,25 @@ M.Ornament = Widget:extend{
 function M.Ornament:init()
     local p = self.placement
     self.dimen = require("ui/geometry"):new{ w = p.w, h = p.h }
+    local ok_g, GestureRange = pcall(require, "ui/gesturerange")
+    if ok_g and GestureRange then
+        self.ges_events = {
+            HoldOrnament = { GestureRange:new{ ges = "hold", range = self.dimen } },
+            TapOrnament  = { GestureRange:new{ ges = "tap",  range = self.dimen } },
+        }
+    end
+end
+
+function M.Ornament:onHoldOrnament()
+    local h = M.handlers.hold
+    if not h then return false end
+    return h(self.placement.entry, self.placement, self.dimen) and true or false
+end
+
+function M.Ornament:onTapOrnament()
+    local h = M.handlers.tap
+    if not (h and self.placement.entry.tap) then return false end
+    return h(self.placement.entry) and true or false
 end
 
 function M.Ornament:paintTo(bb, x, y)

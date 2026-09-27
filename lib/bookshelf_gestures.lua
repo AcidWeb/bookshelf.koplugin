@@ -48,7 +48,9 @@ function M.list(tr)
     { id = "skip_ten",         text = _("Long-press the arrows to skip ten pages"), sep = true },
     { id = "module_hold",      text = _("Long-press a micro-module to edit it") },
     { id = "module_tap",       text = _("Tap a micro-module to use it") },
-    { id = "start_menu_hold",  text = _("Long-press a start menu entry to edit it") },
+    { id = "start_menu_hold",  text = _("Long-press a start menu entry to edit it"), sep = true },
+    { id = "ornament_hold",    text = _("Long-press an ornament to adjust it") },
+    { id = "ornament_tap",     text = _("Tap an ornament to run its action") },
 }
 end
 

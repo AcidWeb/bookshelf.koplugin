@@ -237,6 +237,26 @@ function BookshelfWidget:init()
     self.width  = Screen:getWidth()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
+    -- An ornament on the shelf: long-press adjusts it, a tap runs its action
+    -- if it has one. The pieces know nothing of this widget, so they are
+    -- handed these (the live shelf's, replaced by each new one).
+    do
+        local shelf = self
+        require("lib/bookshelf_ornaments").handlers = {
+            hold = function(entry, _placement, piece)
+                if not Gestures.on("ornament_hold") then return false end
+                require("lib/bookshelf_ornament_menu").show(entry, shelf, piece)
+                return true
+            end,
+            tap = function(entry)
+                if not Gestures.on("ornament_tap") then return false end
+                UIManager:nextTick(function()
+                    require("lib/bookshelf_action_exec").dispatch(entry.tap, shelf)
+                end)
+                return true
+            end,
+        }
+    end
     -- Per-book invalidation from the repo (status edits, history removal,
     -- cover changes) must reach the spine shelf's own caches -- the
     -- persisted status behind the glyphs, the hydration answers, the

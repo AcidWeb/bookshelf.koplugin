@@ -146,4 +146,89 @@ t.test("a broken file is logged and ignored, not fatal", function()
     eq(e.scale, 1)
 end)
 
+t.test("a reader's change applies at once, and is written when asked", function()
+    local O, new = setup()
+    svg(new .. "/Autumn/owl.svg")
+    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "pad": 0.1 } }')
+    local e = byName(O)["Autumn/owl.svg"]
+    O.readerSet(e, "scale", 0.7)
+    eq(e.scale, 0.7, "not applied to the piece")
+    eq(e.pad, 0.1, "the pack's other values went")
+    local written
+    O._encode = function(t) written = t; return "{}" end
+    assert(O.saveReader())
+    eq(written["Autumn/owl.svg"].scale, 0.7, "keyed Pack/file in the reader's file")
+    local f = io.open(new .. "/Autumn/ornaments.json"):read("*a")
+    assert(not f:find("0.7", 1, true), "the pack's own file was written")
+end)
+
+t.test("reset drops the reader's record; the pack shows again", function()
+    local O, new = setup()
+    svg(new .. "/Autumn/owl.svg")
+    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5 } }')
+    local e = byName(O)["Autumn/owl.svg"]
+    O.readerSet(e, "scale", 0.7)
+    O.readerSet(e, "lift", 0.2)
+    O.readerReset(e)
+    eq(e.scale, 1.5); eq(e.lift, 0)
+    eq(O.readerTable()["Autumn/owl.svg"], nil)
+end)
+
+t.test("a directive survives a reader's change to another field", function()
+    local O, new = setup()
+    svg(new .. "/pot.svg", "<!-- bookshelf:overhang=2 -->")
+    local e = byName(O)["pot.svg"]
+    O.readerSet(e, "scale", 1.2)
+    eq(e.lift, -0.2, "the directive's overhang was lost on re-apply")
+    O.readerSet(e, "lift", nil)
+    eq(e.lift, -0.2)
+end)
+
+t.test("nudges step on a grid and stop at the limits", function()
+    package.loaded["ffi/util"] = { template = function(s) return s end }
+    package.loaded["lib/bookshelf_ornaments"] = fresh()
+    local Menu = dofile("lib/bookshelf_ornament_menu.lua")
+    local e = { scale = 1, lift = 0, pad = 0 }
+    local v = 0
+    for _i = 1, 3 do e.lift = Menu.nudged(e, "lift", 0.1) end
+    eq(e.lift, 0.3, "three steps of 0.1 drifted")
+    e.scale = 3.9
+    eq(Menu.nudged(e, "scale", 0.25), 4, "past the most a nudge allows")
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(src:find("\\xEE\\xA1\\x82", 1, true) and src:find("\\xEE\\xA0\\xBF", 1, true),
+        "up/down are not the bookends chevrons")
+    assert(src:find("hold_callback", 1, true), "no big step on hold")
+    assert(src:find("function dialog:onCloseWidget%(%.%.%.%)\n%s*Orn%.saveReader%(%)"),
+        "nothing writes the file when the menu closes")
+end)
+
+t.test("the piece on the shelf answers long-press and, with an action, tap", function()
+    local O = fresh()
+    local held, tapped
+    O.handlers = { hold = function(e) held = e return true end, tap = function(e) tapped = e return true end }
+    local plain = { entry = { name = "a.svg" } }
+    local w = setmetatable({ placement = plain }, { __index = O.Ornament })
+    assert(w:onHoldOrnament(), "long-press not taken")
+    eq(held, plain.entry)
+    eq(w:onTapOrnament(), false, "a piece with no action took the tap from the shelf")
+    local acting = { entry = { name = "b.svg", tap = { action = "x" } } }
+    local w2 = setmetatable({ placement = acting }, { __index = O.Ornament })
+    assert(w2:onTapOrnament())
+    eq(tapped, acting.entry)
+    local wsrc = io.open("lib/bookshelf_widget.lua"):read("*a")
+    assert(wsrc:find('Gestures.on("ornament_hold")', 1, true) and wsrc:find('Gestures.on("ornament_tap")', 1, true),
+        "the ornament gestures cannot be switched off")
+end)
+
+t.test("the menu opens clear of the piece it adjusts", function()
+    package.loaded["ffi/util"] = { template = function(s) return s end }
+    package.loaded["lib/bookshelf_ornaments"] = fresh()
+    local Menu = dofile("lib/bookshelf_ornament_menu.lua")
+    eq(Menu.offsetFor({ y = 700, h = 200 }, 1648), 412, "a piece in the top half: menu goes down")
+    eq(Menu.offsetFor({ y = 1200, h = 200 }, 1648), -412, "bottom half: menu goes up")
+    eq(Menu.offsetFor(nil, 1648), 0)
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(src:find("dialog:reinit(); place()", 1, true), "a redraw loses the offset")
+end)
+
 t.done()
