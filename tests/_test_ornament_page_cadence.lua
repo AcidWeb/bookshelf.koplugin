@@ -263,9 +263,12 @@ t.test("a wide ornament makes room for itself, up to the whole row", function()
     assert(shelf:find("orn.row_end = (opts.content_w or 0)", 1, true),
         "the row-end ceiling (for a reader's size nudge) is not the whole row")
     assert(shelf:find("math.min(orn.row_end - 2 * orn.pad, orn.budget)", 1, true),
-        "the row-end piece is not capped at the quarter-row default")
-    assert(shelf:find("math.floor(plank_w * (Orn.ASIDE_SHARE or 0.25))", 1, true),
-        "the bare plank's piece is not capped at the quarter-row default")
+        "the row-end piece is not capped at the default")
+    assert(shelf:find("Orn.maxWidth(stand_h, plank_w)", 1, true),
+        "the bare plank's piece is not capped like the others")
+    assert(shelf:find("budget    = Orn.maxWidth(", 1, true),
+        "the row-end and section-gap cap does not follow the books")
+    assert(not shelf:find("ASIDE_SHARE", 1, true), "a share of the row is back")
     assert(not shelf:find("orn.keep", 1, true),
         "a book's width is still held back from every row-end piece")
     local n = select(2, shelf:gsub("makes_room = true", ""))

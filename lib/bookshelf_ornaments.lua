@@ -80,10 +80,17 @@ M.HEIGHT_FRAC   = 0.8    -- height as a fraction of the books' stand height
 -- seat a book (SpineLayout.fillRows seats at least one), and with only a
 -- sliver left that book gets painted past the end of the plank, which is what
 -- the device showed. The slot itself is worked out in bookshelf_spine_shelf.
--- A section break stays an aside: it widens a gap BETWEEN two books, in the
--- middle of a row, where a big piece reads as a hole rather than as an end
--- piece. A quarter of the row is as much as that is allowed to take.
-M.ASIDE_SHARE   = 0.25
+-- The widest a piece stands by default, anywhere: its stand height, in book
+-- heights (ASIDE_STANDS). A wider piece is scaled down to it, never left out.
+-- Measured against the BOOKS, not the row, so taller rows (fewer of them)
+-- grow the ornaments with the books: it was a quarter of the row, which stayed
+-- the same width while the books grew around it (maintainer). At the PW5's two
+-- rows the two agree (280px against 284px). Only a reader's own size nudge
+-- takes a piece past it, up to the whole row.
+M.ASIDE_STANDS  = 1.0
+function M.maxWidth(stand_h, row_w)
+    return math.max(0, math.min(row_w or 0, math.floor((stand_h or 0) * M.ASIDE_STANDS)))
+end
 -- ...and a piece that spreads across a row-end slot may stand shorter than
 -- one wedged into a gap between books. There is nothing above a row end to
 -- crowd, so a low wide piece reads as an ornament rather than as a mistake,

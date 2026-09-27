@@ -1349,4 +1349,15 @@ t.test("shuffle is a KOReader action the shelf answers", function()
     assert(h:find("_rebuild()", 1, true), "the shelf is not rebuilt")
 end)
 
+t.test("the default width cap grows with the books, never past the row", function()
+    -- "When your shelf size grows, we should also grow the ornaments in line
+    -- with the books" (maintainer): a quarter of the row stayed the same
+    -- width while taller rows made the books bigger around it.
+    local O = fresh()
+    eq(O.maxWidth(280, 1135), 280, "PW5, two rows: one stand height, as the quarter row was (284)")
+    eq(O.maxWidth(560, 1135), 560, "twice the books, twice the room")
+    eq(O.maxWidth(900, 800), 800, "never wider than the row itself")
+    eq(O.maxWidth(0, 1135), 0)
+end)
+
 t.done()

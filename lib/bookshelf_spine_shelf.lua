@@ -3422,14 +3422,14 @@ function SpineShelf.plan(items, opts)
                 pad       = math.max(book_gap, b),
                 max_below = SpineShelf.overhangReach(opts.row_h),
                 -- The widest any piece stands by default, in a section gap,
-                -- at a row end or on a bare plank: a quarter of the row. A
-                -- wider piece is scaled down to it, never left out. Sizing
-                -- by height alone put a 3:1 pair of glasses 677px along a
-                -- 1135px row (maintainer: "it looks crazy"); only a reader's
-                -- own size nudge takes a piece past it, up to orn.row_end.
-                -- See Orn.ASIDE_SHARE.
-                budget    = math.floor((opts.content_w or 0)
-                                       * (Orn.ASIDE_SHARE or 0.25)),
+                -- at a row end or on a bare plank (Orn.maxWidth: one stand
+                -- height, so it grows with the books). A wider piece is
+                -- scaled down to it, never left out. Sizing by height alone
+                -- put a 3:1 pair of glasses 677px along a 1135px row
+                -- (maintainer: "it looks crazy"); only a reader's own size
+                -- nudge takes a piece past it, up to orn.row_end.
+                budget    = Orn.maxWidth(math.max(1, opts.row_h - fh - inset),
+                                         opts.content_w or 0),
             }
             -- Row-end reservation, at the higher frequencies only.
             --
@@ -4023,7 +4023,7 @@ function SpineShelf.plan(items, opts)
                 max_below = orn.max_below,
                 chance    = orn.mod.GROUP_CHANCE,
                 -- Every piece is eligible: the gap widens to it, up to the
-                -- quarter-row cap (maintainer). Only a hanging piece on a
+                -- default cap, Orn.maxWidth (maintainer). Only a hanging piece on a
                 -- page's first row waits, with no shelf above it.
                 makes_room = true,
                 no_hang   = fillWithin() == 1,
@@ -4314,7 +4314,7 @@ function SpineShelf.rowWidget(opts)
                             .. tostring(opts.row_index or 0)
             local plank_w = opts.width - 2 * margin
             local pl = Orn.pick(seed,
-                math.min(plank_w, math.floor(plank_w * (Orn.ASIDE_SHARE or 0.25))),
+                Orn.maxWidth(stand_h, plank_w),
                 stand_h, nil, {
                 min_gap   = Screen:scaleBySize(Orn.MIN_GAP_DP),
                 -- Render-only, so it can take a ceiling: it paints into
@@ -4324,7 +4324,7 @@ function SpineShelf.rowWidget(opts)
                 max_below = SpineShelf.overhangReach(opts.height),
                 -- Nothing above the first row to hang from.
                 no_hang   = (opts.row_index or 1) <= 1,
-                -- Scaled to the quarter-row cap if wider, never left out.
+                -- Scaled to the default cap if wider, never left out.
                 makes_room = true,
             })
             if not pl then return end
