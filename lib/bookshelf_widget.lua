@@ -6813,6 +6813,17 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
         width      = slots.edge,
         callback   = open_ended and function() bw:_opdsWalkToEnd() end
                                  or function()
+                                        -- A spine shelf's pages vary, so its last
+                                        -- page comes from the page map, built on
+                                        -- this tap: past the end clamps to the
+                                        -- last page. Asking for the count first
+                                        -- only READ the map, and before anything
+                                        -- had built it the tap jumped to the
+                                        -- estimate and stopped short (issue 463).
+                                        if bw:_isSpineMode() then
+                                            go_page(math.huge)()
+                                            return
+                                        end
                                         -- Live count at tap time: the map may
                                         -- have arrived after this footer was built.
                                         go_page(bw:_spineTotalPages() or total_pages)()
