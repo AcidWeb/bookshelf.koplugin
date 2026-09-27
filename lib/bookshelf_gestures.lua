@@ -75,18 +75,48 @@ function M.on(id)
     return v ~= false
 end
 
-function M.set(id, on)
+-- set(id, on, deferred): deferred writes in memory only (the caller
+-- flushes), for switching many at once: each save flushes the whole
+-- settings file, which is slow on a Kindle.
+function M.set(id, on, deferred)
     local k = M.key(id)
     if not k then return end
     local st = store()
+    local save = (deferred and st.saveDeferred) or st.save
     -- nil for on, so the default applies and the settings file stays small.
     -- (Not `(not on) and false or nil`: `false or nil` is nil.)
-    if on then st.save(k, nil) else st.save(k, false) end
+    if on then save(k, nil) else save(k, false) end
 end
 
--- menuItems() -> checkbox rows for the Behavior menu.
+-- allOn() -> is every gesture switched on?
+function M.allOn()
+    for id in pairs(M.IDS) do if not M.on(id) then return false end end
+    return true
+end
+
+-- menuItems() -> checkbox rows for the Behavior menu: an "all" row first
+-- (ticked when every gesture is on; a tap switches all off, or, if any is
+-- off, all on), then one per gesture.
 function M.menuItems()
-    local items = {}
+    local _ = require("lib/bookshelf_i18n").gettext
+    local items = {
+        {
+            text = _("All gestures"),
+            checked_func = function() return M.allOn() end,
+            keep_menu_open = true,
+            separator = true,
+            callback = function(touchmenu_instance)
+                local on = not M.allOn()
+                local st = store()
+                for id in pairs(M.IDS) do M.set(id, on, true) end
+                if st.flush then pcall(st.flush) end
+                -- Every row's tick changed, not just this one.
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
+            end,
+        },
+    }
     for _i, g in ipairs(M.list()) do
         items[#items + 1] = {
             text = g.text,

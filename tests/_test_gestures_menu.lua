@@ -12,7 +12,11 @@ local eq = helpers.eq
 
 local mem = {}
 local G = dofile("lib/bookshelf_gestures.lua")
-G._store = { read = function(k) return mem[k] end, save = function(k, v) mem[k] = v end }
+local saves, flushes = 0, 0
+G._store = { read = function(k) return mem[k] end,
+             save = function(k, v) saves = saves + 1; mem[k] = v end,
+             saveDeferred = function(k, v) mem[k] = v end,
+             flush = function() flushes = flushes + 1 end }
 
 t.test("every gesture is on until switched off, and off reads back", function()
     for _i, g in ipairs(G.list()) do assert(G.on(g.id), g.id .. " starts off") end
@@ -34,13 +38,33 @@ t.test("an unknown id is on: a typo never disables a gesture", function()
     eq(G.on("no_such_gesture"), true)
 end)
 
-t.test("the menu is one checkbox per gesture, in order", function()
+t.test("the menu is an all row, then one checkbox per gesture, in order", function()
     local items = G.menuItems()
-    eq(#items, #G.list())
-    items[1].callback()
-    eq(items[1].checked_func(), false, "the checkbox did not switch it off")
-    items[1].callback()
-    eq(items[1].checked_func(), true)
+    eq(#items, #G.list() + 1)
+    assert(items[1].separator, "no separator under the all row")
+    items[2].callback()
+    eq(items[2].checked_func(), false, "the checkbox did not switch it off")
+    items[2].callback()
+    eq(items[2].checked_func(), true)
+end)
+
+t.test("the all row switches every gesture off, then every one on", function()
+    for k in pairs(mem) do mem[k] = nil end
+    local all = G.menuItems()[1]
+    eq(all.checked_func(), true, "all on: ticked")
+    saves, flushes = 0, 0
+    all.callback()
+    eq(saves, 0, "each gesture flushed the settings file on its own")
+    eq(flushes, 1, "one flush for the lot")
+    for _i, g in ipairs(G.list()) do eq(G.on(g.id), false, g.id .. " is still on") end
+    eq(all.checked_func(), false)
+    all.callback()
+    for _i, g in ipairs(G.list()) do eq(G.on(g.id), true, g.id .. " is still off") end
+    -- Some off: the row is unticked, and a tap switches everything on.
+    G.set("rate", false)
+    eq(all.checked_func(), false, "some off: not ticked")
+    all.callback()
+    eq(G.on("rate"), true)
 end)
 
 -- Where each gesture is honoured. Source-matched: each check sits in the
