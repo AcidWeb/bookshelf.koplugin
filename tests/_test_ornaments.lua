@@ -151,9 +151,8 @@ t.test("ensureTemplate creates the folder with the template, once", function()
     O.ensureTemplate()
     assert(exists(O.dir() .. "/template.svg"), "template should be written")
     assert(exists(O.dir() .. "/cactus.svg"), "cactus should be written")
-    -- The folder lives inside KOReader's own user-icons directory, not at
-    -- the root of its storage.
-    eq(O.dir(), d .. "/icons/bookshelf.ornaments")
+    -- The folder lives beside the wallpapers (v5.3), not in icons/.
+    eq(O.dir(), d .. "/settings/bookshelf/ornaments")
     -- A user deletes the plant: a later session must not bring it back.
     os.remove(O.dir() .. "/template.svg")
     local O2 = fresh()
@@ -165,10 +164,9 @@ t.test("ensureTemplate creates the folder with the template, once", function()
     os.execute("rm -rf '" .. d .. "'")
 end)
 
-t.test("an icons folder a reader already has is reused, not disturbed", function()
-    -- KOReader only creates icons/ if the reader made it themselves, so both
-    -- branches are real: we may be creating it, or joining one that already
-    -- holds their own SVGs. Joining must not touch what is in it.
+t.test("an icons folder a reader already has is left alone", function()
+    -- The ornaments moved out of icons/ (v5.3): a reader's own icons folder
+    -- is neither touched nor given an ornaments folder.
     local O = fresh()
     local d = scratch()
     O._data_dir = d
@@ -177,8 +175,10 @@ t.test("an icons folder a reader already has is reused, not disturbed", function
     local mine = io.open(d .. "/icons/my-own-icon.svg", "w")
     mine:write("<svg/>"); mine:close()
     O.ensureTemplate()
-    assert(exists(O.dir() .. "/template.svg"), "ornaments folder not created inside icons/")
+    assert(exists(O.dir() .. "/template.svg"), "the ornaments folder was not seeded")
     assert(exists(d .. "/icons/my-own-icon.svg"), "a reader's own icon was disturbed")
+    assert(lfs_shim.attributes(d .. "/icons/bookshelf.ornaments", "mode") == nil,
+        "an ornaments folder was made in icons/")
     os.execute("rm -rf '" .. d .. "'")
 end)
 

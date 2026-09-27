@@ -156,12 +156,16 @@ function M.theme(pack)
     local now = M._clock()
     local hit = M._cache[pack]
     if hit and M.SCAN_TTL > 0 and (now - hit.at) < M.SCAN_TTL then return hit.v end
-    local d = orn().dir()
-    local tdir = d and (d .. "/" .. pack .. "/" .. M.SUBDIR) or nil
+    -- The pack's own folder, in whichever ornaments folder holds it (the
+    -- new one first: Orn.packDir). A stub without packDir has one folder.
+    local O = orn()
+    local pdir = (O.packDir and O.packDir(pack))
+                 or (O.dir() and (O.dir() .. "/" .. pack)) or nil
+    local tdir = pdir and (pdir .. "/" .. M.SUBDIR) or nil
     -- exists: the pack folder is there, checked once per scan rather than on
     -- every colour read (a stat is dear on a Kindle's FUSE storage).
     local v = { dir = tdir, planks = {},
-                exists = d and fs().attributes(d .. "/" .. pack, "mode") == "directory" or false }
+                exists = pdir and fs().attributes(pdir, "mode") == "directory" or false }
     if tdir and fs().attributes(tdir, "mode") == "directory" then
         local names = listDir(tdir)
         local w = {}

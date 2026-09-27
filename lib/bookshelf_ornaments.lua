@@ -49,9 +49,15 @@ local Widget = require("ui/widget/widget")
 
 local M = {}
 
--- KOReader does not create icons/ itself (it is absent from datastorage's
--- initDataDir list and iconwidget only reads it if it happens to exist), so
--- the parent is created alongside the ornaments folder.
+-- THE FOLDERS. Since v5.3 the ornaments live beside the wallpapers, in
+-- koreader/settings/bookshelf/ornaments, so one folder backs up (or moves to
+-- another device) everything Bookshelf (maintainer). Until then they lived in
+-- koreader/icons/bookshelf.ornaments, which is still read and never moved or
+-- created; where both hold the same file, the new folder's copy wins. The
+-- help, the browser and the README name only the new one.
+M.NEW_PARENT    = "bookshelf"
+M.NEW_SUBDIR    = "ornaments"
+-- The old one. KOReader does not create icons/ itself.
 M.PARENT        = "icons"
 M.SUBDIR        = "bookshelf.ornaments"
 M.TEMPLATE_NAME = "template.svg"
@@ -441,14 +447,56 @@ function M.dataDir()
     return nil
 end
 
+-- settingsDir(): KOReader's settings folder (koreader/settings). A test that
+-- names a data folder gets the settings folder inside it, as KOReader has it.
+function M.settingsDir()
+    if M._settings_dir then return M._settings_dir end
+    if M._data_dir then return M._data_dir .. "/settings" end
+    local ok, DataStorage = pcall(require, "datastorage")
+    if ok and DataStorage and DataStorage.getSettingsDir then
+        local ok2, d = pcall(DataStorage.getSettingsDir, DataStorage)
+        if ok2 and type(d) == "string" and d ~= "" then return d end
+    end
+    local d = M.dataDir()
+    return d and (d .. "/settings") or nil
+end
+
+-- dir(): the ornaments folder, the one to tell people about.
+function M.dir()
+    local s = M.settingsDir()
+    return s and (s .. "/" .. M.NEW_PARENT .. "/" .. M.NEW_SUBDIR) or nil
+end
+
+-- legacyDir(): where they lived before v5.3; read, never created.
 function M.parentDir()
     local d = M.dataDir()
     return d and (d .. "/" .. M.PARENT) or nil
 end
-
-function M.dir()
+function M.legacyDir()
     local p = M.parentDir()
     return p and (p .. "/" .. M.SUBDIR) or nil
+end
+
+-- roots() -> the folders that exist, the new one first.
+function M.roots()
+    local fs = lfs()
+    local out = {}
+    if not fs then return out end
+    for _i, d in ipairs({ M.dir(), M.legacyDir() }) do
+        if d and fs.attributes(d, "mode") == "directory" then out[#out + 1] = d end
+    end
+    return out
+end
+
+-- packDir(pack) -> the folder a pack lives in (the new one if both have it).
+function M.packDir(pack)
+    local fs = lfs()
+    if not (fs and pack) then return nil end
+    for _i, r in ipairs(M.roots()) do
+        local p = r .. "/" .. pack
+        if fs.attributes(p, "mode") == "directory" then return p end
+    end
+    return nil
 end
 
 -- refreshSeeds(d, fs): rewrite OUR seed files where they exist at an older
@@ -477,6 +525,10 @@ end
 -- -- a deleted seed stays deleted, their own files are never read -- with one
 -- exception: a seed of OURS still present at an older version is rewritten
 -- (refreshSeeds), so improvements to the artwork reach existing installs.
+--
+-- The new folder is always made, so the path the browser and the help show
+-- exists; the seeds go into it only on a fresh install. A reader with the old
+-- folder already has theirs there, and a second template would be a stray.
 M._ensured = false
 function M.ensureTemplate()
     if M._ensured then return end
@@ -484,20 +536,29 @@ function M.ensureTemplate()
     local d = M.dir()
     local fs = lfs()
     if not (d and fs) then return end
+    local old = M.legacyDir()
+    local has_old = old and fs.attributes(old, "mode") == "directory"
+    if has_old then pcall(refreshSeeds, old, fs) end
     if fs.attributes(d, "mode") ~= nil then
         pcall(refreshSeeds, d, fs)
         return
     end
-    -- The parent may not exist: KOReader only creates icons/ if a reader has
-    -- made it themselves. mkdir is not recursive, so do it a level at a time,
-    -- and tolerate an existing parent.
-    local parent = M.parentDir()
-    if parent and fs.attributes(parent, "mode") == nil then
-        pcall(fs.mkdir, parent)
-        if fs.attributes(parent, "mode") ~= "directory" then return end
+    -- settings/ exists wherever KOReader runs; bookshelf/ may not yet.
+    -- mkdir is not recursive, so a level at a time.
+    local settings = M.settingsDir()
+    local parent = settings and (settings .. "/" .. M.NEW_PARENT)
+    for _i, p in ipairs({ settings, parent }) do
+        if p and fs.attributes(p, "mode") == nil then
+            pcall(fs.mkdir, p)
+            if fs.attributes(p, "mode") ~= "directory" then return end
+        end
     end
     local ok_mk = pcall(fs.mkdir, d)
     if not ok_mk or fs.attributes(d, "mode") ~= "directory" then return end
+    if has_old then
+        logger.dbg("[bookshelf] ornaments folder created (the old one stays in use too):", d)
+        return
+    end
     for _i, seed in ipairs(M.SEED_FILES) do
         local f = io.open(d .. "/" .. seed.name, "w")
         if f then f:write(seed.svg); f:close() end
@@ -774,53 +835,76 @@ function M.displayName(entry)
     return base ~= "" and base or f
 end
 
--- listAll() -> every ornament in the folder and its packs, switched off or
--- not, sorted by pack (loose ones first) then name; and the pack names.
--- Cached on the folders' own scan keys.
+-- listAll() -> every ornament in the folders and their packs, switched off
+-- or not, sorted by pack (loose ones first) then name; and the pack names.
+-- Both folders are read (see M.dir); a relative path present in both is the
+-- new folder's. Cached on the folders' own scan keys.
 function M.listAll()
-    local d = M.dir()
     local fs = lfs()
-    if not (d and fs) then return {}, {} end
-    -- ONE listing of the folder for its files and its packs together: a FUSE
+    local roots = M.roots()
+    if not fs or #roots == 0 then return {}, {} end
+    -- ONE listing of each folder for its files and its packs together: a FUSE
     -- directory listing was measured at 340ms on a tired Kindle, and this runs
     -- once per scan TTL. Same key as AssetFolder.scan: the folder's mtime and
     -- its sorted names.
-    local mtime = fs.attributes(d, "modification")
-    if not mtime then return {}, {} end
-    local names, packs = {}, {}
-    local ok_l = pcall(function()
-        for name in fs.dir(d) do
-            if name:sub(1, 1) ~= "." then
-                local ext = name:match("%.([^%.]+)$")
-                if ext and ORNAMENT_EXTS[ext:lower()] then
-                    names[#names + 1] = name
-                elseif fs.attributes(d .. "/" .. name, "mode") == "directory" then
-                    packs[#packs + 1] = name
+    local key_parts = {}
+    local loose, loose_root = {}, {}        -- name -> true, name -> root
+    local pack_set, pack_files = {}, {}     -- pack -> true; pack -> { file -> root }
+    for _r, d in ipairs(roots) do
+        local mtime = fs.attributes(d, "modification")
+        local names, packs = {}, {}
+        local ok_l = mtime and pcall(function()
+            for name in fs.dir(d) do
+                if name:sub(1, 1) ~= "." then
+                    local ext = name:match("%.([^%.]+)$")
+                    if ext and ORNAMENT_EXTS[ext:lower()] then
+                        names[#names + 1] = name
+                    elseif fs.attributes(d .. "/" .. name, "mode") == "directory" then
+                        packs[#packs + 1] = name
+                    end
+                end
+            end
+        end)
+        if ok_l then
+            table.sort(names)
+            table.sort(packs)
+            key_parts[#key_parts + 1] = d .. "\3" .. tostring(mtime) .. "|" .. table.concat(names, "\0")
+            for _i, n in ipairs(names) do
+                if not loose[n] then loose[n], loose_root[n] = true, d end
+            end
+            for _i, pack in ipairs(packs) do
+                local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
+                key_parts[#key_parts + 1] = "\1" .. pack .. "\2" .. tostring(pk)
+                pack_set[pack] = true
+                pack_files[pack] = pack_files[pack] or {}
+                for _j, file in ipairs(pn or {}) do
+                    if not pack_files[pack][file] then pack_files[pack][file] = d end
                 end
             end
         end
-    end)
-    if not ok_l then return {}, {} end
-    table.sort(names)
-    table.sort(packs)
-    local key = tostring(mtime) .. "|" .. table.concat(names, "\0")
-    local pack_names = {}
-    for _i, pack in ipairs(packs) do
-        local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
-        pack_names[pack] = pn or {}
-        key = key .. "\1" .. pack .. "\2" .. tostring(pk)
     end
+    local key = table.concat(key_parts, "\4")
     if M._all_cache and M._all_key == key then return M._all_cache, M._all_packs end
+    local names = {}
+    for n in pairs(loose) do names[#names + 1] = n end
+    table.sort(names)
+    local packs = {}
+    for p in pairs(pack_set) do packs[#packs + 1] = p end
+    table.sort(packs)
     local out = {}
     local ok = pcall(function()
         for _i = 1, #names do
-            local e = entryFor(d .. "/" .. names[_i], names[_i], names[_i], nil)
+            local n = names[_i]
+            local e = entryFor(loose_root[n] .. "/" .. n, n, n, nil)
             if e then out[#out + 1] = e end
         end
         for _i, pack in ipairs(packs) do
-            for _j, file in ipairs(pack_names[pack]) do
+            local files = {}
+            for f in pairs(pack_files[pack]) do files[#files + 1] = f end
+            table.sort(files)
+            for _j, file in ipairs(files) do
                 local rel = pack .. "/" .. file
-                local e = entryFor(d .. "/" .. rel, rel, file, pack)
+                local e = entryFor(pack_files[pack][file] .. "/" .. rel, rel, file, pack)
                 if e then out[#out + 1] = e end
             end
         end

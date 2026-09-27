@@ -167,11 +167,11 @@ Long-press a shelf and pick **Spines** under Show as, or hold the page range in 
 
 **Spine text direction.** Which way a title runs down a spine: **Top to bottom** (the default, how British and American books are printed) or **Bottom to top** (Continental European). Set it once for the whole library under **menu -> Settings -> Library & search**.
 
-**Ornaments.** Drop PNG or SVG files into KOReader's `icons/bookshelf.ornaments` folder and they turn up in the gaps, standing on the plank like the books. A potted plant and a cactus are seeded there to start you off; delete them if you would rather not see them and they stay deleted.
+**Ornaments.** Drop PNG or SVG files into the `koreader/settings/bookshelf/ornaments` folder (beside the wallpapers) and they turn up in the gaps, standing on the plank like the books. A potted plant and a cactus are seeded there to start you off; delete them if you would rather not see them and they stay deleted.
 
-A folder of ornaments inside `bookshelf.ornaments` is a **pack**, which you can switch on and off as one. **menu -> Wallpaper, ornaments and colours -> Ornaments** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on, long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
+A folder of ornaments inside `ornaments` is a **pack**, which you can switch on and off as one. **menu -> Wallpaper, ornaments and colours -> Ornaments** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on, long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
 
-Ready-made ornament packs, drawn to sit on the plank at the right size on colour and black and white screens, are in the [Ko-fi shop](https://ko-fi.com/andyhazz/shop). Unzip a pack's folder into `bookshelf.ornaments` and it gets its own tab. Packs need Bookshelf 5.2 or later.
+Ready-made ornament packs, drawn to sit on the plank at the right size on colour and black and white screens, are in the [Ko-fi shop](https://ko-fi.com/andyhazz/shop). Unzip a pack's folder into `ornaments` and it gets its own tab. Packs need Bookshelf 5.2 or later.
 
 How often they appear is per shelf, next to **Author on spine** in the shelf's style dialog: **None**, **Rarely**, **Often** or **Always**. Above None, every so often a page is promised a piece whether or not a wide enough gap happens to fall there, so a densely packed shelf still gets some.
 
@@ -988,7 +988,7 @@ Existing v1 settings migrate automatically on first launch -- legacy keys are re
 | `start_menu_seeded` / `start_menu_next_id` | One-shot seed flag for the default menu, and the counter behind generated entry ids. |
 | `micromodule_<key>_*` | Per-micro-module settings (e.g. `micromodule_clock_format`, `micromodule_random_unread_source`). Each module owns its own keys. |
 | `wallpaper_folder` | Extra folder the wallpaper list also reads from. |
-| `ornaments_off` / `ornament_packs_off` | Ornaments and packs switched off in the ornament browser, keyed by path within `bookshelf.ornaments` / by pack folder name. |
+| `ornaments_off` / `ornament_packs_off` | Ornaments and packs switched off in the ornament browser, keyed by path within the ornaments folder / by pack folder name. |
 | `search_include_genres` | Include genres and tags in search. Default on. |
 | `migrated` | One-shot flag; presence indicates v1 -> v2 migration has run. |
 
