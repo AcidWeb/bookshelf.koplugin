@@ -2111,7 +2111,7 @@ function Settings:_ornamentsRow()
     }
 end
 
--- "Background and colors": theme, the background itself, ornaments, and the
+-- "Wallpaper, ornaments and colors": theme, the background itself, ornaments, and the
 -- accent colours. These were spread across two menus and a third level -- the
 -- theme under Colors, the background colour and panel shading under Wallpaper
 -- -- and read as unrelated settings even though they are only ever set
@@ -2142,7 +2142,7 @@ function Settings:_backgroundSubItems()
 end
 
 -- The shelf's light/dark choice. Its own builder because it is shown in
--- "Background and colors" rather than in the accent-colour list: theme,
+-- "Wallpaper, ornaments and colors" rather than in the accent-colour list: theme,
 -- background colour and panel shading were in three different menus and read
 -- as unrelated settings (maintainer). One definition, so the two cannot drift.
 function Settings:_shelfThemeRow()
@@ -2849,7 +2849,7 @@ function Settings:_settingsSubItems()
         end,
     }
     -- Colors and Wallpaper both left this menu for the top-level
-    -- "Background and colors" (see _backgroundSubItems): the theme, the
+    -- "Wallpaper, ornaments and colors" (see _backgroundSubItems): the theme, the
     -- background and the accents are only ever set together, and being three
     -- levels apart made them read as unrelated.
     -- Bookshelf UI font: promoted here from Advanced to sit with the other

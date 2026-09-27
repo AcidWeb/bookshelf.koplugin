@@ -169,7 +169,7 @@ Long-press a shelf and pick **Spines** under Show as, or hold the page range in 
 
 **Ornaments.** Drop PNG or SVG files into KOReader's `icons/bookshelf.ornaments` folder and they turn up in the gaps, standing on the plank like the books. A potted plant and a cactus are seeded there to start you off; delete them if you would rather not see them and they stay deleted.
 
-A folder of ornaments inside `bookshelf.ornaments` is a **pack**, which you can switch on and off as one. **menu -> Background and colours -> Ornaments** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on, long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
+A folder of ornaments inside `bookshelf.ornaments` is a **pack**, which you can switch on and off as one. **menu -> Wallpaper, ornaments and colours -> Ornaments** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on, long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
 
 Ready-made ornament packs, drawn to sit on the plank at the right size on colour and black and white screens, are in the [Ko-fi shop](https://ko-fi.com/andyhazz/shop). Unzip a pack's folder into `bookshelf.ornaments` and it gets its own tab. Packs need Bookshelf 5.2 or later.
 
@@ -179,7 +179,7 @@ Shape is up to you. A row end offers as much width as the row can spare once it 
 
 For a PNG, the bottom edge of the image is the plank surface and the whole image is scaled to one fixed height against the books, so transparent space above the picture makes it stand smaller, and space at the sides keeps it off the books. `template.svg` carries the SVG conventions in its comments: the bottom of the viewBox is the plank surface, `bookshelf:overhang=N` lets part of the shape hang over the front edge, and the renderer is small, so bold solid shapes work and text, filters and masks do not.
 
-**Shelf plank colour** is under **Settings -> Background and colours -> Accent colours**. The lit top surface and the shaded front edge are both tinted from that one colour; the default is light oak.
+**Shelf plank colour** is under **menu -> Wallpaper, ornaments and colours -> Accent colours**. The lit top surface and the shaded front edge are both tinted from that one colour; the default is light oak.
 
 Spines are not available for OPDS catalogues, which have no local page counts or cover art to measure.
 
@@ -445,7 +445,7 @@ Each cover can show small badges and bars at the corners. Configure them under *
 - **Show page count** -- a page-count pill in the bottom-right ("123 p"). An EPUB you have never opened has no count until you run [Extract page counts](#page-counts).
 - **Show series #** -- a "#3" badge on covers in a series. Tri-state: Always, Within series folder (so mixed shelves stay clean), or Never.
 
-The colours of these elements are set separately under **menu -> Background and colours -> Accent colours** (see below).
+The colours of these elements are set separately under **menu -> Wallpaper, ornaments and colours -> Accent colours** (see below).
 
 The same **Cover display** menu also has **True cover aspect ratio**. Off by default, Bookshelf fits every cover to a uniform book rectangle; turn this on to show each cover at its real shape instead. Covers keep the same width but vary in height -- on the shelf they sit along the bottom shelf line, in the top panel they align to the top -- so wide or square covers stop being cropped or stretched.
 
@@ -453,9 +453,9 @@ Two more rows in that menu change how a cover is drawn rather than how it is siz
 
 ---
 
-## Background and colours
+## Wallpaper, ornaments and colours
 
-Everything that decides how the shelf looks now lives in one place: **menu -> Background and colours**, one level up from Settings. It used to be split between a Colours menu and a separate Wallpaper menu, which put the theme, the background colour and the panel shading in three different places.
+Everything that decides how the shelf looks now lives in one place: **menu -> Wallpaper, ornaments and colours**, one level up from Settings. It used to be split between a Colours menu and a separate Wallpaper menu, which put the theme, the background colour and the panel shading in three different places.
 
 ### Wallpaper
 

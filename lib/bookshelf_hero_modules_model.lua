@@ -78,6 +78,13 @@ function M.load()
     local defaults = M.DEFAULTS()
     BookshelfSettings.save(STORAGE_KEY, defaults)
     BookshelfSettings.save(SEEDED_KEY, true)
+    -- A new install's clock starts without the date (maintainer, v5.3). Set
+    -- here rather than by changing the module's default, which would also
+    -- take the date away from every reader who never touched the toggle.
+    -- Key: micromodules/analogue_clock.lua DATE_KEY.
+    if BookshelfSettings.read("micromodule_analogue_clock_date") == nil then
+        BookshelfSettings.save("micromodule_analogue_clock_date", false)
+    end
     return defaults
 end
 

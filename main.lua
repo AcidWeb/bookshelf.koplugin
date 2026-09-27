@@ -49,7 +49,7 @@ local Bookshelf = WidgetContainer:extend{
 -- action, which probes addToMainMenu and hosts these in this order.
 -- Display order, banded with separators (set on the last item of each band in
 -- addToMainMenu): actions (Open) | customise (Shelf size, Chips) | configure
--- (Hardcover, Settings) | meta (Updates, About). Background and colors
+-- (Hardcover, Settings) | meta (Updates, About). Wallpaper, ornaments and colors
 -- joined the customise band in 5.1: it is what a reader changes to make the
 -- shelf look like theirs, and it was buried two levels down under Settings. The detail-view editor and
 -- collection manager moved under Settings in 4.0, and the selection-mode
@@ -758,7 +758,7 @@ function Bookshelf:buildMenuItems(menu_items)
     -- menus (maintainer). Text size stays under Settings on purpose.
     menu_items.bookshelf_background = {
         text                = MenuIcons.label(MenuIcons.APPEARANCE,
-                                  _("Background and colors")),
+                                  _("Wallpaper, ornaments and colors")),
         sub_item_table_func = function()
             S._bw = _live_widget
             return S:_backgroundSubItems()

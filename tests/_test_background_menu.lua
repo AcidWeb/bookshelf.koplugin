@@ -1,5 +1,5 @@
 -- tests/_test_background_menu.lua
--- "Background and colors" is one top-level menu, not three scattered rows.
+-- "Wallpaper, ornaments and colors" is one top-level menu, not three scattered rows.
 --
 -- WHAT NEEDS PINNING. The theme lived under Settings > Colors, the background
 -- colour and the panel shading under Settings > Wallpaper and ornaments, and
@@ -37,7 +37,7 @@ end)
 t.test("the row is registered, with the maintainer's name", function()
     local row = main:match("(menu_items%.bookshelf_background = {.-\n    }\n)")
     assert(row, "menu_items.bookshelf_background missing")
-    assert(row:find('_("Background and colors")', 1, true), "the label changed")
+    assert(row:find('_("Wallpaper, ornaments and colors")', 1, true), "the label changed")
     assert(row:find("_backgroundSubItems", 1, true), "it must build the new menu")
     assert(row:find("S._bw = _live_widget", 1, true),
         "every menu that can repaint the shelf hands the live widget over first")

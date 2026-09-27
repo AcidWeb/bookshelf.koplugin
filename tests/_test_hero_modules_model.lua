@@ -149,4 +149,18 @@ t.test("sanitize/save/load preserve per-instance fields on a module entry", func
         "per-instance fields not preserved through load/sanitize")
 end)
 
+t.test("a new install's clock starts without the date; an existing one keeps its choice", function()
+    kv = {}
+    Model.load()
+    assert(kv.micromodule_analogue_clock_date == false, "a new install's clock shows the date")
+    -- Upgrading: modules already seeded, date never touched (nil = shown).
+    kv = { hero_modules_seeded = true, hero_module_items = { { id = "hm_clock", type = "module", module = "analogue_clock" } } }
+    Model.load()
+    assert(kv.micromodule_analogue_clock_date == nil, "an upgrade changed the date setting")
+    -- Seeded, everything deleted: still not a new install.
+    kv = { hero_modules_seeded = true }
+    Model.load()
+    assert(kv.micromodule_analogue_clock_date == nil, "a reader who deleted every module had the date setting changed")
+end)
+
 t.done()
