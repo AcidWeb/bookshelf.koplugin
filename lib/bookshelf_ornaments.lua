@@ -1212,6 +1212,7 @@ end
 -- at worst re-deals pieces the reader has paged away from.
 M._deck, M._deck_pos, M._deck_key = nil, 1, nil
 M._dealt, M._dealt_n = {}, 0
+M._dealt_mirror, M._deal_count = {}, {}
 M.DEAL_MAX = 2048
 M.PASS_LIMIT = 6
 M._passes = 0
@@ -1262,6 +1263,7 @@ end
 -- next paint deals every shelf again.
 function M.shuffle()
     M._dealt, M._dealt_n, M._passes = {}, 0, 0
+    M._dealt_mirror, M._deal_count = {}, {}
     M._used = {}
     M._deck, M._deck_pos, M._deck_key = nil, 1, nil
 end
@@ -1302,14 +1304,23 @@ function M.pick(seed, gap_px, stand_h, entries, o)
     -- sizeFor(entry) -> w, h at this slot, or nil when it cannot stand here.
     local function sizeFor(entry)
         if o.no_hang and entry.hang then return nil end
-        local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC)
+        -- A reader's (or a pack's) size nudge scales the piece AND the width
+        -- it may take: a slot that makes room grows its cap with it, up to
+        -- o.max_room (the whole row); packing slack cannot grow.
+        local scale = entry.scale or 1
+        local cap = gap_px
+        if o.makes_room then
+            cap = math.floor(gap_px * scale)
+            if o.max_room then cap = math.min(cap, o.max_room) end
+        end
+        local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC * scale)
         local width  = math.floor(height * entry.aspect)
         local shrunk = false
-        if width > gap_px then
-            -- Only a slot that makes room scales a piece, and only to the
-            -- whole row; anywhere else the piece waits for one that can.
+        if width > cap then
+            -- Only a slot that makes room scales a piece down to fit;
+            -- anywhere else the piece waits for one that can.
             if not o.makes_room then return nil end
-            width  = gap_px
+            width  = cap
             height = math.floor(width / entry.aspect)
             shrunk = true
         end
@@ -1327,6 +1338,8 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         if not shrunk or not o.makes_room then
             local frac  = o.min_h_frac or M.MIN_H_FRAC
             local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
+            -- A piece made smaller on purpose stays: the floor shrinks with it.
+            if scale < 1 then min_h = math.floor(min_h * scale) end
             if height < min_h then return nil end
         end
         return width, height
@@ -1334,6 +1347,7 @@ function M.pick(seed, gap_px, stand_h, entries, o)
 
     local byName
     local entry
+    local mirror
     local dealt = M._dealt[tostring(seed)]
     if dealt == false then return nil end
     if dealt then
@@ -1345,11 +1359,14 @@ function M.pick(seed, gap_px, stand_h, entries, o)
     if entry then
         width, height = sizeFor(entry)
         if not width then return nil end
+        mirror = M._dealt_mirror[tostring(seed)]
     else
         -- A seed never dealt (or its piece was switched off): the top card.
         local card = topCard(entries)
         if not card then return nil end
-        if M._dealt_n >= M.DEAL_MAX then M._dealt, M._dealt_n = {}, 0 end
+        if M._dealt_n >= M.DEAL_MAX then
+            M._dealt, M._dealt_n, M._dealt_mirror = {}, 0, {}
+        end
         M._dealt_n = M._dealt_n + 1
         width, height = sizeFor(card)
         if not width then
@@ -1371,6 +1388,12 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         M._passes = 0
         M._deck_pos = M._deck_pos + 1
         M._dealt[tostring(seed)] = entryName(card)
+        -- Mirror: every time, or every other time this piece is dealt, so a
+        -- repeat reads as a variation (maintainer).
+        local n = (M._deal_count[entryName(card)] or 0) + 1
+        M._deal_count[entryName(card)] = n
+        mirror = card.mirror == "always" or (card.mirror == "alternate" and n % 2 == 0)
+        M._dealt_mirror[tostring(seed)] = mirror
     end
     local below = entry.hang and 0 or math.floor(height * entry.overhang)
     M._used[entryName(entry)] = true
@@ -1378,6 +1401,12 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         entry = entry, w = width, h = height,
         above = height - below, below = below,
         side  = (math.floor(h / 10000) % 2 == 0) and "right" or "left",
+        mirror = mirror or false,
+        -- Lifted above the plank (a positive lift), in px.
+        raise = math.floor((entry.raise or 0) * height + 0.5),
+        -- Extra room each side, in px (negative: tighter against the books);
+        -- the shelf adds it to its own pad, never below touching.
+        pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
     }
 end
 
@@ -1483,7 +1512,7 @@ end
 -- plank. The cache is keyed on what was painted, the one thing that
 -- distinguishes two renders of one file at one size. RGB32 invert keeps the
 -- alpha, so the shelf still shows through.
-function M.render(entry, w, h, inverting)
+function M.render(entry, w, h, inverting, mirror)
     inverting = inverting and true or false
     local dark = inverting
     pcall(function()
@@ -1509,6 +1538,7 @@ function M.render(entry, w, h, inverting)
                   and not picture and dark
     local paint_inverted = (chalk and true or false) ~= inverting
     local key = entry.path .. "|" .. w .. "x" .. h .. (paint_inverted and "|i" or "")
+                .. (mirror and "|m" or "")
     local bb = M._cache[key]
     if bb then return bb end
     local ok, res = pcall(M._render or defaultRender, entry.path, w, h)
@@ -1520,6 +1550,7 @@ function M.render(entry, w, h, inverting)
     if paint_inverted and bb.invertRect then
         pcall(function() bb:invertRect(0, 0, bb:getWidth(), bb:getHeight()) end)
     end
+    if mirror then bb = M.flipped(bb) or bb end
     M._cache[key] = bb
     M._cache_order[#M._cache_order + 1] = key
     while #M._cache_order > M.CACHE_MAX do
@@ -1529,6 +1560,22 @@ function M.render(entry, w, h, inverting)
         if ob and ob.free then pcall(function() ob:free() end) end
     end
     return bb
+end
+
+-- flipped(bb) -> a left-to-right mirror of bb (bb itself is freed), or nil.
+-- Blitbuffer has no flip; a column at a time through blitFrom is a plain
+-- copy (alpha included) and runs once per size, before the cache keeps it.
+function M.flipped(bb)
+    local ok, out = pcall(function()
+        local BB = require("ffi/blitbuffer")
+        local w, h = bb:getWidth(), bb:getHeight()
+        local dst = BB.new(w, h, bb:getType())
+        for x = 0, w - 1 do dst:blitFrom(bb, w - 1 - x, 0, x, 0, 1, h) end
+        return dst
+    end)
+    if not ok or not out then return nil end
+    if bb.free then pcall(function() bb:free() end) end
+    return out
 end
 
 -- contentBox(entry) -> l, t, r, b as fractions (0..1) of the image, the part
@@ -1591,7 +1638,7 @@ end
 function M.Ornament:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local p = self.placement
-    local img = M.render(p.entry, p.w, p.h, self.night)
+    local img = M.render(p.entry, p.w, p.h, self.night, p.mirror)
     if not img then return end
     pcall(function()
         bb:alphablitFrom(img, x, y, 0, 0, p.w, p.h)

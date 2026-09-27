@@ -4026,12 +4026,14 @@ function SpineShelf.plan(items, opts)
                 -- default cap, Orn.maxWidth (maintainer). Only a hanging piece on a
                 -- page's first row waits, with no shelf above it.
                 makes_room = true,
+                -- A size nudge above 1 may take it up to the whole row.
+                max_room   = (opts.content_w or 0) - 2 * orn.pad,
                 no_hang   = fillWithin() == 1,
                 -- Damped at the lower levels: this is the most numerous
                 -- channel on a grouping chip. See M.GROUP_LEVEL.
                 level     = orn.mod.groupLevel and orn.mod.groupLevel() or nil,
             })
-            if pl then g = g + 2 * orn.pad + pl.w end
+            if pl then g = g + 2 * SpineShelf.ornPad(orn.pad, pl) + pl.w end
         end
         e.gap_before, e.ornament = g, pl
         rawset(t, i, g)
@@ -4141,6 +4143,8 @@ function SpineShelf.plan(items, opts)
                 max_below = orn.max_below,
                 -- The books move over for it, up to the whole row.
                 makes_room = true,
+                -- A size nudge above 1 may take it up to the whole row.
+                max_room   = orn.row_end - 2 * orn.pad,
                 chance    = owed and Orn.CHANCE_CERTAIN or Orn.ROW_END_CHANCE,
                 -- A page's first row has no shelf above it to hang from.
                 no_hang   = within == 1,
@@ -4165,7 +4169,7 @@ function SpineShelf.plan(items, opts)
     local function availAt(r, i)
         if r and r > fill_row then fill_row = r end
         local pl = r and rowPiece(r, i)
-        if pl then return content_w_books - (pl.w + 2 * orn.pad) end
+        if pl then return content_w_books - (pl.w + 2 * SpineShelf.ornPad(orn.pad, pl)) end
         return content_w_books
     end
     -- A row may stand as its ornament alone, but only a row that HAS one:
@@ -4285,7 +4289,15 @@ function SpineShelf.ornamentY(pl, stand_h, opts)
     if pl.entry and pl.entry.hang then
         return -((opts and opts.lift_headroom or 0) + Screen:scaleBySize(2))
     end
-    return stand_h - pl.above
+    -- raise: a positive lift from ornaments.json (a negative one is the
+    -- overhang, already in pl.above).
+    return stand_h - pl.above - (pl.raise or 0)
+end
+
+-- ornPad(base, pl) -> the room each side of a placed piece: the shelf's own
+-- pad plus the piece's padding (ornaments.json, px), never below touching.
+function SpineShelf.ornPad(base, pl)
+    return math.max(0, (base or 0) + (pl and pl.pad_px or 0))
 end
 
 function SpineShelf.rowWidget(opts)
@@ -4326,6 +4338,8 @@ function SpineShelf.rowWidget(opts)
                 no_hang   = (opts.row_index or 1) <= 1,
                 -- Scaled to the default cap if wider, never left out.
                 makes_room = true,
+                -- A size nudge above 1 may take it up to the whole row.
+                max_room   = plank_w,
             })
             if not pl then return end
             local span = math.max(0, opts.width - 2 * margin - pl.w)
@@ -4761,9 +4775,9 @@ function SpineShelf.rowWidget(opts)
         if not pl then return end
         local x
         if pl.side == "left" then
-            x = lead - pad - pl.w
+            x = lead - SpineShelf.ornPad(pad, pl) - pl.w
         else
-            x = lead + content_w + pad
+            x = lead + content_w + SpineShelf.ornPad(pad, pl)
         end
         if x < margin or x + pl.w > opts.width - margin then return end
         local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }

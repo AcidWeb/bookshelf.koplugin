@@ -1360,4 +1360,47 @@ t.test("the default width cap grows with the books, never past the row", functio
     eq(O.maxWidth(0, 1135), 0)
 end)
 
+t.test("json: scale sizes the piece and its cap together, up to the whole row", function()
+    local O = fresh()
+    local wide = { name = "w.svg", aspect = 3, overhang = 0, scale = 2 }
+    -- stand 280: natural 224 tall; x2 = 448 tall, 1344 wide; cap 280 x2 = 560.
+    local p = O.pick("a", 280, 280, { wide }, { min_gap = 0, min_h = 1, chance = 1, makes_room = true, max_room = 1135 })
+    eq(p.w, 560, "the cap grows with the scale")
+    local q = O.pick("b", 280, 280, { { name = "w2.svg", aspect = 3, overhang = 0, scale = 4 } },
+                     { min_gap = 0, min_h = 1, chance = 1, makes_room = true, max_room = 1000 })
+    eq(q.w, 1000, "never past the whole row")
+    local small = O.pick("c", 280, 280, { { name = "s.svg", aspect = 1, overhang = 0, scale = 0.5 } },
+                         { min_gap = 0, min_h = 1, chance = 1, makes_room = true, max_room = 1135 })
+    eq(small.h, 112, "half of 224")
+end)
+
+t.test("json: padding and raise reach the placement in px", function()
+    local O = fresh()
+    local p = O.pick("a", 400, 300, { { name = "p.svg", aspect = 1, overhang = 0, pad = -0.05, raise = 0.1 } },
+                     { min_gap = 0, min_h = 1, chance = 1, makes_room = true })
+    eq(p.pad_px, -15, "5% of a 300px stand, tighter")
+    eq(p.raise, 24, "10% of its own 240px")
+end)
+
+t.test("json: mirror always flips every deal; alternate every other one", function()
+    local O = fresh()
+    local al = { name = "al.svg", aspect = 1, overhang = 0, mirror = "always" }
+    for i = 1, 3 do assert(O.pick("x" .. i, 1000, 300, { al }, ANY).mirror, "always, deal " .. i) end
+    local O2 = fresh()
+    local alt = { name = "alt.svg", aspect = 1, overhang = 0, mirror = "alternate" }
+    local got = {}
+    for i = 1, 4 do got[i] = O2.pick("y" .. i, 1000, 300, { alt }, ANY).mirror end
+    eq(table.concat({ tostring(got[1]), tostring(got[2]), tostring(got[3]), tostring(got[4]) }, ","),
+       "false,true,false,true")
+    eq(O2.pick("y2", 1000, 300, { alt }, ANY).mirror, true, "a repaint keeps the slot's own flip")
+end)
+
+t.test("json: the shelf honours padding everywhere it reserves or paints the gap, and the raise", function()
+    local sh = io.open("lib/bookshelf_spine_shelf.lua"):read("*a")
+    local n = select(2, sh:gsub("SpineShelf%.ornPad%(", ""))
+    assert(n >= 4, "padding is applied in only " .. n .. " places (section gap, row-end reserve, both row-end sides)")
+    assert(sh:find("stand_h - pl.above - (pl.raise or 0)", 1, true), "the raise is not applied")
+    eq(select(2, sh:gsub("max_room   = ", "")), 3, "every slot that makes room gives its whole-row ceiling")
+end)
+
 t.done()
