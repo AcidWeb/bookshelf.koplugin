@@ -258,12 +258,20 @@ t.test("a wide ornament makes room for itself, up to the whole row", function()
     -- is a full row, it can even have no books" (maintainer). The row-end slot
     -- is the whole row and the pick is told it makes room; the books move over
     -- and a row too narrow for its next book stands empty (fillRows empty_ok).
+    -- ...but by default no wider than a quarter of the row: sizing by height
+    -- alone put a 3:1 piece 677px along a 1135px row ("it looks crazy").
     assert(shelf:find("orn.row_end = (opts.content_w or 0)", 1, true),
-        "the row-end slot is not the whole row")
+        "the row-end ceiling (for a reader's size nudge) is not the whole row")
+    assert(shelf:find("math.min(orn.row_end - 2 * orn.pad, orn.budget)", 1, true),
+        "the row-end piece is not capped at the quarter-row default")
+    assert(shelf:find("math.floor(plank_w * (Orn.ASIDE_SHARE or 0.25))", 1, true),
+        "the bare plank's piece is not capped at the quarter-row default")
     assert(not shelf:find("orn.keep", 1, true),
         "a book's width is still held back from every row-end piece")
     local n = select(2, shelf:gsub("makes_room = true", ""))
-    eq(n, 2, "the row end and the bare plank must both make room (and only they)")
+    eq(n, 3, "the row end, the bare plank and the section gap all make room")
+    assert(shelf:find("no_hang   = fillWithin() == 1", 1, true),
+        "a section gap refuses hanging pieces on every row, not just a page's first")
     assert(shelf:find("min_h_frac = Orn.ROW_END_MIN_H_FRAC", 1, true),
         "the row-end pick does not pass its own minimum height")
 

@@ -3421,9 +3421,13 @@ function SpineShelf.plan(items, opts)
                 stand_h   = math.max(1, opts.row_h - fh - inset),
                 pad       = math.max(book_gap, b),
                 max_below = SpineShelf.overhangReach(opts.row_h),
-                -- Never more than a quarter of the row: a section break is
-                -- an aside, not an exhibit. Same share the row-end slot asks
-                -- for; see Orn.ASIDE_SHARE.
+                -- The widest any piece stands by default, in a section gap,
+                -- at a row end or on a bare plank: a quarter of the row. A
+                -- wider piece is scaled down to it, never left out. Sizing
+                -- by height alone put a 3:1 pair of glasses 677px along a
+                -- 1135px row (maintainer: "it looks crazy"); only a reader's
+                -- own size nudge takes a piece past it, up to orn.row_end.
+                -- See Orn.ASIDE_SHARE.
                 budget    = math.floor((opts.content_w or 0)
                                        * (Orn.ASIDE_SHARE or 0.25)),
             }
@@ -3442,14 +3446,12 @@ function SpineShelf.plan(items, opts)
             -- down to the budget by pick itself.
             if (Orn.frequency and Orn.frequency() > 0)
                     or (Orn.reservesRowEnds and Orn.reservesRowEnds()) then
-                -- The most a row-end piece may be OFFERED: the whole row. The
-                -- piece is the next card in the deck (Orn.pick) at its own
-                -- natural width, and the books make room for it; one wider
-                -- than the row is scaled to it, and the row it stands on
-                -- carries no books (maintainer: "max width for an ornament is
-                -- a full row, it can even have no books"). A row left too
-                -- narrow for its next book stands empty rather than
-                -- overflowing (SpineLayout.fillRows, empty_ok).
+                -- The most a row-end piece can ever take: the whole row, for a
+                -- piece a reader has scaled up (maintainer: "max width for an
+                -- ornament is a full row, it can even have no books"). By
+                -- default it gets orn.budget. The books make room for it, and
+                -- a row left too narrow for its next book stands empty rather
+                -- than overflowing (SpineLayout.fillRows, empty_ok).
                 --
                 -- Derived from opts alone: the ACTUAL widths on a row are
                 -- not something the two planning passes can agree on, since
@@ -3999,6 +4001,16 @@ function SpineShelf.plan(items, opts)
     -- A section gap's width, worked out when the fill first asks for it. The
     -- entries are cached across plans, so the answer is written onto them for
     -- the painter (gap_before, ornament) from gap_base each time.
+    -- Which row of its PAGE the fill is on: a section gap on a page's first
+    -- row has no shelf above it for a hanging piece.
+    local per_page_g = tonumber(opts.rows_per_page)
+        or (opts.n_rows and opts.n_rows < math.huge and opts.n_rows) or 1
+    if per_page_g < 1 then per_page_g = 1 end
+    local function fillWithin()
+        local r = math.max(fill_row, 1)
+        if paginating_all then return ((r - 1) % per_page_g) + 1 end
+        return r
+    end
     local gaps = setmetatable({}, { __index = function(t, i)
         local e = entries[i]
         if not e then return nil end
@@ -4010,8 +4022,11 @@ function SpineShelf.plan(items, opts)
                 min_h     = Screen:scaleBySize(orn.mod.MIN_H_DP),
                 max_below = orn.max_below,
                 chance    = orn.mod.GROUP_CHANCE,
-                -- Nothing above a section break is known to be a shelf.
-                no_hang   = true,
+                -- Every piece is eligible: the gap widens to it, up to the
+                -- quarter-row cap (maintainer). Only a hanging piece on a
+                -- page's first row waits, with no shelf above it.
+                makes_room = true,
+                no_hang   = fillWithin() == 1,
                 -- Damped at the lower levels: this is the most numerous
                 -- channel on a grouping chip. See M.GROUP_LEVEL.
                 level     = orn.mod.groupLevel and orn.mod.groupLevel() or nil,
@@ -4116,7 +4131,7 @@ function SpineShelf.plan(items, opts)
                      and Orn.pageGuaranteed(key)
         local ok_p, pl = pcall(Orn.pick,
             "page[" .. tostring(key) .. "]|rowend|" .. within,
-            orn.row_end - 2 * orn.pad, orn.stand_h, nil, {
+            math.min(orn.row_end - 2 * orn.pad, orn.budget), orn.stand_h, nil, {
                 min_gap   = Screen:scaleBySize(Orn.MIN_GAP_DP),
                 min_h     = Screen:scaleBySize(Orn.MIN_H_DP),
                 -- Lower than a gap's floor on purpose: a wide piece spread
@@ -4297,7 +4312,10 @@ function SpineShelf.rowWidget(opts)
             local margin  = SpineShelf.endMargin(opts.height)
             local seed    = tostring(opts.page_key or "") .. "|empty|"
                             .. tostring(opts.row_index or 0)
-            local pl = Orn.pick(seed, opts.width - 2 * margin, stand_h, nil, {
+            local plank_w = opts.width - 2 * margin
+            local pl = Orn.pick(seed,
+                math.min(plank_w, math.floor(plank_w * (Orn.ASIDE_SHARE or 0.25))),
+                stand_h, nil, {
                 min_gap   = Screen:scaleBySize(Orn.MIN_GAP_DP),
                 -- Render-only, so it can take a ceiling: it paints into
                 -- space the books already left, changing no packing.
@@ -4306,7 +4324,7 @@ function SpineShelf.rowWidget(opts)
                 max_below = SpineShelf.overhangReach(opts.height),
                 -- Nothing above the first row to hang from.
                 no_hang   = (opts.row_index or 1) <= 1,
-                -- A bare plank is the whole row.
+                -- Scaled to the quarter-row cap if wider, never left out.
                 makes_room = true,
             })
             if not pl then return end

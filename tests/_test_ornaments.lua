@@ -1293,7 +1293,8 @@ end)
 
 t.test("device geometry: every piece of a mixed folder stands, in equal shares", function()
     -- Twelve-to-fourteen test ornaments of every shape, reported twice as
-    -- "the same two over and over". PW5 row end: a 1135px row, books 280px.
+    -- "the same two over and over". PW5 row end: a 1135px row, books 280px;
+    -- the 9:1 panorama is scaled to the cap, not left out.
     local O = fresh()
     local pool = {}
     local aspects = { 0.57, 0.57, 0.48, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 9.0 }
@@ -1302,10 +1303,11 @@ t.test("device geometry: every piece of a mixed folder stands, in equal shares",
     for page = 1, 140 do
         O.beginScreen()
         for within = 1, 2 do
-            local pl = O.pick("page" .. page .. "|rowend|" .. within, 1135, 280, pool,
+            -- The slot offers the quarter-row default (1135 / 4).
+            local pl = O.pick("page" .. page .. "|rowend|" .. within, 283, 280, pool,
                               { chance = math.huge, min_h_frac = O.ROW_END_MIN_H_FRAC, makes_room = true })
             assert(pl, "a row end was left empty")
-            assert(pl.w <= 1135, "a piece is wider than the row")
+            assert(pl.w <= 283, "a piece is wider than the quarter-row default")
             seen[pl.entry.name] = (seen[pl.entry.name] or 0) + 1
         end
     end
