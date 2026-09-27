@@ -313,7 +313,7 @@ function Browser:_footerRows()
         end
         if #row > 0 then rows[#rows + 1] = row end
     end
-    rows[#rows + 1] = { self:_packAction(), { key = "close", label = _("Close"), on_tap = self._close } }
+    rows[#rows + 1] = { self:_packAction(), { key = "close", label = _("Apply"), on_tap = self._close } }
     return rows
 end
 
