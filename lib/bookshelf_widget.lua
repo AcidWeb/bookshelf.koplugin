@@ -14671,10 +14671,76 @@ function BookshelfWidget:_setExpanded(expanded)
     BookshelfSettings.flush()
 end
 
+-- ── Rows from the top panel (issue 465) ─────────────────────────────────────
+-- A swipe down on the top panel takes a row off the shelf and the panel grows
+-- into the space; a swipe up there gives back the rows taken that way, and
+-- once there are none to give back it goes to full screen shelves as it always
+-- did (maintainer: "add a row only if you previously removed a row").
+-- What is owed is remembered per view, since each keeps its own count: the
+-- cover grid's is global, spines and lists keep one per shelf.
+function BookshelfWidget:_topPanelRowsKey()
+    if self:_isListMode() then return "list:" .. tostring(self.chip) end
+    if self:_isSpineMode() then return "spine:" .. tostring(self.chip) end
+    return "covers"
+end
+
+-- _nudgeRows(delta): one row more (+1) or fewer (-1) in the collapsed view,
+-- through each view's own setter.
+function BookshelfWidget:_nudgeRows(delta)
+    if self:_isListMode() then return self:_nudgeListRows(delta) end
+    if self:_isSpineMode() then return self:_nudgeSpineRows(delta) end
+    return self:_nudgeCoverRows(delta)
+end
+
+-- _topPanelRowStep(dir) -> handled. dir -1: take a row (consumed even at the
+-- minimum, so the swipe never falls through to something else). dir +1: give
+-- one back, or false when none is owed (the caller goes full screen). A count
+-- that cannot grow any more (the reader set it in the Rows editor meanwhile)
+-- forgets what it owed.
+function BookshelfWidget:_topPanelRowStep(dir)
+    local key = self:_topPanelRowsKey()
+    local taken = BookshelfSettings.read("top_panel_rows_taken")
+    taken = type(taken) == "table" and taken or {}
+    local n = tonumber(taken[key]) or 0
+    if dir > 0 and n <= 0 then return false end
+    local before = self:_nShelves()
+    self:_nudgeRows(dir)
+    local moved = self:_nShelves() ~= before
+    if dir > 0 and not moved then n = 0
+    elseif moved then n = n - dir end
+    taken[key] = n > 0 and n or nil
+    BookshelfSettings.saveDeferred("top_panel_rows_taken", next(taken) and taken or nil)
+    if dir > 0 then return moved end
+    return true
+end
+
+-- _nudgeCoverRows(delta): the cover grid's collapsed row count (the Rows
+-- editor's bookshelf_rows), a step at a time; the top panel takes up the rest.
+function BookshelfWidget:_nudgeCoverRows(delta)
+    local cur = self:_baseShelves()
+    local new = math.max(ROWS_MIN, math.min(self:_maxShelfRows(), cur + delta))
+    if new == cur then return true end
+    BookshelfSettings.saveDeferred("bookshelf_rows", new)
+    self._nav_dirty = true
+    self:_scheduleNavFlush()
+    self:_clearDpadFocus()
+    self:_draftRebuild()
+    UIManager:setDirty(self, "ui")
+    if not SpineWidget.draftWasLossless() then
+        self:_scheduleCoverSettle()
+    end
+    return true
+end
+
 function BookshelfWidget:onSwipeShelvesUp(_, ges)
     -- Collapses the hero to the thin strip in both modes; in micro mode this
     -- hides the module grid (swipe-down / modules-chip restores it).
     if self._expanded then return false end
+    -- Started on the top panel with rows owed: give one back instead.
+    if self:_isHeroSwipe(ges) and BookshelfSettings.nilOrTrue("gesture_top_panel_rows")
+            and self:_topPanelRowStep(1) then
+        return true
+    end
     local _diag_t0 = _gettime()
     self:_setExpanded(true)
     self:_rebuild()
@@ -14725,10 +14791,15 @@ function BookshelfWidget:onSwipeShelvesDown(_, ges)
             (_gettime() - _diag_t0) * 1000, self.chip))
         return true
     end
+    -- Started on the top panel: one row fewer, the panel grows (issue 465).
+    -- The range already leaves out the top 1/8, where KOReader's own menu
+    -- swipe starts, so that still reaches KOReader.
+    if self:_isHeroSwipe(ges) and BookshelfSettings.nilOrTrue("gesture_top_panel_rows") then
+        return self:_topPanelRowStep(-1)
+    end
     -- Only claim the gesture for a refresh when it started in the shelf
-    -- area. Returning false elsewhere (top edge, chip strip, hero) lets
-    -- KOReader's top-of-screen menu swipe-down through to its handler
-    -- and leaves the hero's own gesture surface alone.
+    -- area. Returning false elsewhere (top edge, chip strip) lets
+    -- KOReader's top-of-screen menu swipe-down through to its handler.
     if not self:_isShelfSwipe(ges) then return false end
     self:_refreshLibrary()
     return true

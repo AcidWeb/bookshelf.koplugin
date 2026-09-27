@@ -35,6 +35,7 @@ local function widget(on_shelf)
     function w:_setExpanded(v) self._expanded = v; self.calls[#self.calls + 1] = "expanded=" .. tostring(v) end
     function w:_rebuild() end
     function w:_isShelfSwipe() return on_shelf end
+    function w:_isHeroSwipe() return false end
     function w:_refreshLibrary() self.calls[#self.calls + 1] = "refresh" end
     return w
 end

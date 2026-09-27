@@ -155,6 +155,7 @@ local function expanding(collapsed_view, expanded_view, total_items, cursor)
         _markOpdsNav    = function() end,
         _clearDpadFocus = function() end,
         _rebuild        = function(self_) self_._rebuilt = true end,
+        _isHeroSwipe    = function() return false end,
     }
     for k, fn in pairs(Shelf) do s[k] = fn end
     return s
