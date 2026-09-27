@@ -1053,6 +1053,15 @@ function M.reshuffle(entries)
     M._deck, M._deck_pos = fresh, 1
 end
 
+-- shuffle(): a new layout (the "Bookshelf: shuffle ornaments" action). Every
+-- slot forgets what it was dealt and the deck starts a fresh order, so the
+-- next paint deals every shelf again.
+function M.shuffle()
+    M._dealt, M._dealt_n, M._passes = {}, 0, 0
+    M._used = {}
+    M._deck, M._deck_pos, M._deck_key = nil, 1, nil
+end
+
 local function topCard(entries)
     local deck = M.deck(entries)
     if M._deck_pos > #deck then M.reshuffle(entries); deck = M._deck end

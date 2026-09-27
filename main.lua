@@ -1115,6 +1115,15 @@ function Bookshelf:onDispatcherRegisterActions()
     -- drilled into: this also drops the drilldown and returns to page 1, so a
     -- gesture bound to it always lands on the same view -- the home-screen
     -- gesture other home-replacement plugins offer.
+    -- A fresh deal of the ornaments, same books (maintainer: "a gesture to
+    -- shuffle ornaments to get a new layout without having to change
+    -- anything else"). An action to bind, not a built-in gesture.
+    Dispatcher:registerAction("bookshelf_shuffle_ornaments", {
+        category = "none",
+        event    = "BookshelfShuffleOrnaments",
+        title    = _("Bookshelf: shuffle ornaments"),
+        general  = true,
+    })
     Dispatcher:registerAction("bookshelf_go_home", {
         category = "none",
         event    = "BookshelfGoHome",

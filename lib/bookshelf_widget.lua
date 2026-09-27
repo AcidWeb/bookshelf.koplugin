@@ -14231,6 +14231,17 @@ function BookshelfWidget:onBookshelfToggleHero()
     return true
 end
 
+function BookshelfWidget:onBookshelfShuffleOrnaments()
+    require("lib/bookshelf_ornaments").shuffle()
+    -- The pieces' widths decide where rows (and so pages) break: the page
+    -- map is rebuilt on the next jump. The page on screen keeps its first
+    -- book; what follows it may move.
+    if self._spine_fetch_cache then self._spine_fetch_cache.page_firsts = nil end
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
+    return true
+end
+
 function BookshelfWidget:onBookshelfToggleSelectionMode()
     if self._selection:isActive() then
         self._selection:exitMode()

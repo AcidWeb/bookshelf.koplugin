@@ -1320,4 +1320,33 @@ t.test("device geometry: every piece of a mixed folder stands, in equal shares",
     eq(hi - lo, 0, "280 slots over 14 pieces: exactly 20 each")
 end)
 
+t.test("shuffle: every slot is dealt afresh, from a new order", function()
+    local O = fresh()
+    local pool = deckPool(8)
+    local before = {}
+    for i = 1, 8 do before[i] = O.pick("s" .. i, 10000, 400, pool, ANY).entry.name end
+    O.shuffle()
+    eq(O._dealt_n, 0, "the deals were not forgotten")
+    local same = 0
+    local seen = {}
+    for i = 1, 8 do
+        local n = O.pick("s" .. i, 10000, 400, pool, ANY).entry.name
+        if n == before[i] then same = same + 1 end
+        assert(not seen[n], "a repeat within the new round")
+        seen[n] = true
+    end
+    assert(same < 8, "the same slots got the same pieces after a shuffle")
+end)
+
+t.test("shuffle is a KOReader action the shelf answers", function()
+    local main = io.open("main.lua"):read("*a")
+    assert(main:find('registerAction("bookshelf_shuffle_ornaments"', 1, true), "no action registered")
+    assert(main:find('event    = "BookshelfShuffleOrnaments"', 1, true), "the action sends no event")
+    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
+    local h = w:match("function BookshelfWidget:onBookshelfShuffleOrnaments%(%)(.-)\nend\n")
+    assert(h and h:find("shuffle()", 1, true), "the shelf does not shuffle")
+    assert(h:find("page_firsts = nil", 1, true), "the page map survives a shuffle, so page numbers go stale")
+    assert(h:find("_rebuild()", 1, true), "the shelf is not rebuilt")
+end)
+
 t.done()
