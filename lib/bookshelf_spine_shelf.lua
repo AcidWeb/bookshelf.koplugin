@@ -3991,26 +3991,28 @@ function SpineShelf.plan(items, opts)
     -- a piece dealt to a row or gap it then throws away is gone from the
     -- round unseen. The pagination pass plans every row, all of them seen on
     -- some page, so it deals throughout, in reading order like the render.
-    local paginating_all = not (opts.n_rows and opts.n_rows < math.huge)
+    -- Rows per page, whether this plan is the whole-library pagination pass,
+    -- and pageOf(r) -> page, row within it: the two passes' shared language
+    -- for where a row falls (see ROW-END ORNAMENTS below).
+    local per_page = tonumber(opts.rows_per_page)
+        or (opts.n_rows and opts.n_rows < math.huge and opts.n_rows) or 1
+    if per_page < 1 then per_page = 1 end
+    local paginating = not (opts.n_rows and opts.n_rows < math.huge)
+    local function pageOf(r)
+        if paginating then
+            return math.floor((r - 1) / per_page) + 1, ((r - 1) % per_page) + 1
+        end
+        return tonumber(opts.page_index) or 1, r
+    end
     local fill_row, dealing = 0, true
     local function mayDeal(r)
-        return dealing and (paginating_all or (r or fill_row) <= (opts.n_rows or 1))
+        return dealing and (paginating or (r or fill_row) <= (opts.n_rows or 1))
     end
     local widths = {}
     for i = 1, #entries do widths[i] = entries[i].w end
     -- A section gap's width, worked out when the fill first asks for it. The
     -- entries are cached across plans, so the answer is written onto them for
     -- the painter (gap_before, ornament) from gap_base each time.
-    -- Which row of its PAGE the fill is on: a section gap on a page's first
-    -- row has no shelf above it for a hanging piece.
-    local per_page_g = tonumber(opts.rows_per_page)
-        or (opts.n_rows and opts.n_rows < math.huge and opts.n_rows) or 1
-    if per_page_g < 1 then per_page_g = 1 end
-    local function fillWithin()
-        local r = math.max(fill_row, 1)
-        if paginating_all then return ((r - 1) % per_page_g) + 1 end
-        return r
-    end
     local gaps = setmetatable({}, { __index = function(t, i)
         local e = entries[i]
         if not e then return nil end
@@ -4028,7 +4030,8 @@ function SpineShelf.plan(items, opts)
                 makes_room = true,
                 -- A size nudge above 1 may take it up to the whole row.
                 max_room   = (opts.content_w or 0) - 2 * orn.pad,
-                no_hang   = fillWithin() == 1,
+                -- A page's first row has no shelf above it to hang from.
+                no_hang   = select(2, pageOf(math.max(fill_row, 1))) == 1,
                 -- Damped at the lower levels: this is the most numerous
                 -- channel on a grouping chip. See M.GROUP_LEVEL.
                 level     = orn.mod.groupLevel and orn.mod.groupLevel() or nil,
@@ -4070,16 +4073,8 @@ function SpineShelf.plan(items, opts)
     -- passes can state: the render knows it directly, the pagination pass
     -- derives it from rows_per_page. Decided lazily, as fillRows asks, so
     -- there is no cap and no wasted pick.
-    local per_page = tonumber(opts.rows_per_page)
-        or (opts.n_rows and opts.n_rows < math.huge and opts.n_rows) or 1
-    if per_page < 1 then per_page = 1 end
-    local paginating = not (opts.n_rows and opts.n_rows < math.huge)
-    local function pageOf(r)
-        if paginating then
-            return math.floor((r - 1) / per_page) + 1, ((r - 1) % per_page) + 1
-        end
-        return tonumber(opts.page_index) or 1, r
-    end
+    -- (per_page, paginating and pageOf are defined above, with the fill's
+    -- dealing rules, which need them too.)
     -- WHICH PAGE THIS IS, named by its own first book rather than by an
     -- ordinal.
     --

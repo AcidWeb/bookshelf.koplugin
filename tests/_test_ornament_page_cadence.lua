@@ -273,7 +273,7 @@ t.test("a wide ornament makes room for itself, up to the whole row", function()
         "a book's width is still held back from every row-end piece")
     local n = select(2, shelf:gsub("makes_room = true", ""))
     eq(n, 3, "the row end, the bare plank and the section gap all make room")
-    assert(shelf:find("no_hang   = fillWithin() == 1", 1, true),
+    assert(shelf:find("no_hang   = select(2, pageOf(math.max(fill_row, 1))) == 1", 1, true),
         "a section gap refuses hanging pieces on every row, not just a page's first")
     assert(shelf:find("min_h_frac = Orn.ROW_END_MIN_H_FRAC", 1, true),
         "the row-end pick does not pass its own minimum height")

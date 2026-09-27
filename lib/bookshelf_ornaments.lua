@@ -1,48 +1,29 @@
 -- bookshelf_ornaments.lua
--- Ornaments: user-supplied SVGs that stand in the gaps of a spine shelf, the
--- way a shop dresses a half-empty shelf with a plant or a figurine.
+-- Ornaments: PNGs and SVGs that stand in the gaps of a spine shelf, the way a
+-- shop dresses a half-empty shelf with a plant or a figurine.
 --
--- Deliberately undocumented -- a thing to find. The first spine render creates
--- <KOReader data dir>/icons/bookshelf.ornaments/ holding template.svg (a
--- potted plant, carrying the conventions in its comments) and cactus.svg; both
--- are ordinary ornaments, and any *.svg or *.png dropped beside them joins the
--- pool. The template's comment block is the whole documentation, so anything
--- a reader needs to know has to end up in there.
--- The template is written only when the folder is first created -- a user who
--- deletes the plant keeps it deleted.
+-- WHERE (M.dir): koreader/settings/bookshelf/ornaments, beside the wallpapers,
+-- since v5.3; koreader/icons/bookshelf.ornaments is still read (see THE
+-- FOLDERS). Loose files and one level of pack folders; a pack may carry a
+-- theme/ (lib/bookshelf_theme_pack) and an ornaments.json. The first render
+-- seeds template.svg (a potted plant, its comments the SVG conventions) and
+-- cactus.svg; a deleted seed stays deleted.
 --
--- INSIDE icons/ on purpose. That is KOReader's own user-asset directory (see
--- iconwidget.lua, which prepends <data dir>/icons to its search path), so it
--- is where a reader already goes to manage SVGs of their own. A
--- bookshelf.ornaments/ folder in the root of KOReader's storage would be one
--- plugin helping itself to the top level (maintainer ruling). Still namespaced
--- by the folder name, so it cannot collide with an icon a reader drops in, and
--- still outside plugins/, so a plugin update never touches it.
+-- WHAT A PIECE IS (listAll -> entries). Measured from its file: aspect (SVG
+-- viewBox, PNG IHDR) and the directives an artist can put in it: overhang
+-- (the lowest N units/pixels hang over the plank's front), hang (it hangs
+-- from the shelf above: a bat), night=invert (chalk in the dark look; also
+-- cat.invert.png). Then ornaments.json, per field (see ornaments.json below):
+-- scale, lift, pad, hang, night, mirror, tap. Rendering is KOReader's
+-- RenderImage (nanosvg for SVG, MuPDF for PNG, unpremultiplied here), so for
+-- SVG: bold solid shapes, no text, filters or masks.
 --
--- Conventions the SVG follows (also in the template): the bottom of the
--- viewBox is the plank surface the ornament stands on; a comment
--- "bookshelf:overhang=N" declares that the lowest N viewBox units hang below
--- the surface, over the plank's front (a paw, a trailing vine). Rendering is
--- KOReader's own RenderImage (nanosvg), so: bold solid shapes, no text, no
--- filters, no masks. Night mode pre-inverts the bitmap, alpha kept.
---
--- A PNG carries the same directives as tEXt chunks (keyword "bookshelf",
--- text "overhang=N" / "hang" / "night=invert"), N in the image's own pixels;
--- aspect comes from the IHDR chunk and the night flag may also come from the
--- filename (cat.invert.png). See parsePngHeader. Nothing else about the
--- pipeline differs -- same pick(), same cache, same widget -- because the only
--- thing that actually varies is how an entry is measured and which RenderImage
--- call draws it.
---
--- "bookshelf:hang" (either format): the piece HANGS from the shelf above
--- instead of standing on its own -- a bat, a spider on its thread. Its top
--- meets the underside of the plank above, so it is only offered where there is
--- one: row ends and bare planks from a page's second row down, never the
--- section gaps (those are chosen before rows exist). See pick()'s o.no_hang.
---
--- Placement is deterministic per page composition (seeded by the row's first
--- book and its index range), so an ornament stays put while a page is looked
--- at and changes across pages; about half the eligible gaps stay empty.
+-- WHERE A PIECE GOES (pick). The shelf asks at four kinds of slot: a row's
+-- end and a section break (both planned, so the books make room for the
+-- piece), a bare plank under a short page, and packing slack left at a row's
+-- end (render only). Each asks with a seed that holds for that slot, so a
+-- page keeps its pieces while it is looked at. The per-shelf frequency sets
+-- the odds; THE DECK decides which piece; sizeFor how big.
 
 local logger = require("logger")
 local Widget = require("ui/widget/widget")
@@ -820,8 +801,8 @@ local function entryFor(path, relpath, file, pack)
             .. "come out blank. Drop the picture in as a "
             .. ".png instead: " .. tostring(relpath))
     end
-    -- name is the relative path: unique across packs, and what the rotation
-    -- and the on/off state key on. file is the bare file name, for display.
+    -- name is the relative path: unique across packs, and what the deck, the
+    -- on/off state and ornaments.json key on. file is the bare file name, for display.
     return { path = path, name = relpath, file = file, pack = pack,
              aspect = aspect, overhang = over or 0, night_invert = night_invert,
              hang = hang or nil }
@@ -921,25 +902,22 @@ local function applyLayers(e, layers)
     if night ~= nil then e.night_invert = (night == "invert") end
     e.mirror = get("mirror") or "off"
     e.tap    = get("tap")
-    -- What sizing and placement read. The SIZE only ever follows the file's
-    -- own overhang (size_overhang): a height nudge moves a piece, it must not
-    -- resize it (device report). The lift then sinks it (sink, stopped at the
-    -- plank's front edge) or raises it.
-    e.size_overhang = e._dir and e._dir.overhang or (e.overhang or 0)
-    e.sink     = (lift < 0) and -lift or 0
-    e.raise    = (lift > 0) and lift or 0
-    e.overhang = e.sink
+    -- What placement reads: the lift sinks the piece or raises it. Its SIZE
+    -- follows only the file's own overhang (e.overhang, untouched here), so a
+    -- height nudge moves it without resizing it.
+    e.sink  = (lift < 0) and -lift or 0
+    e.raise = (lift > 0) and lift or 0
 end
 
 -- The directive-only values, kept so a re-apply (a reader's nudge) starts
 -- from what the file itself says rather than from the last merge.
 local function keepDirectives(e)
     if e._dir then return end
-    e._dir = { overhang = e.overhang or 0, hang = e.hang, night_invert = e.night_invert }
+    e._dir = { hang = e.hang, night_invert = e.night_invert }
 end
 local function reapply(e)
     if not (e and e._layers) then return end
-    e.overhang, e.hang, e.night_invert = e._dir.overhang, e._dir.hang, e._dir.night_invert
+    e.hang, e.night_invert = e._dir.hang, e._dir.night_invert
     pcall(applyLayers, e, e._layers)
 end
 
@@ -1127,7 +1105,7 @@ end
 
 -- list() -> the ornaments the shelf may place: every one in listAll() that is
 -- not switched off and whose pack is not. Sorted by name (relative path),
--- which the rotation relies on.
+-- which the deck's pool key relies on.
 function M.list()
     local now = M._clock()
     if M._list_cache and M._list_at and M.SCAN_TTL > 0
@@ -1137,7 +1115,7 @@ function M.list()
     local all = M.listAll()
     M._list_at = now
     local off, packs_off = readSet(M.OFF_KEY), readSet(M.PACKS_OFF_KEY)
-    -- The same table while nothing changed: the rotation and the plan key on
+    -- The same table while nothing changed: the deck and the plan key on
     -- it, and re-filtering every render would hand out a new one each time.
     local sig = {}
     for k in pairs(off) do sig[#sig + 1] = k end
@@ -1310,7 +1288,7 @@ end
 -- at worst re-deals pieces the reader has paged away from.
 M._deck, M._deck_pos, M._deck_key = nil, 1, nil
 M._dealt, M._dealt_n = {}, 0
-M._dealt_mirror, M._deal_count = {}, {}
+M._deal_no, M._deal_count = {}, {}
 M.DEAL_MAX = 2048
 M.PASS_LIMIT = 6
 M._passes = 0
@@ -1361,7 +1339,7 @@ end
 -- next paint deals every shelf again.
 function M.shuffle()
     M._dealt, M._dealt_n, M._passes = {}, 0, 0
-    M._dealt_mirror, M._deal_count = {}, {}
+    M._deal_no, M._deal_count = {}, {}
     M._used = {}
     M._deck, M._deck_pos, M._deck_key = nil, 1, nil
 end
@@ -1382,6 +1360,102 @@ end
 --   a hanging piece cannot go here (no shelf above); o.makes_room : the slot
 --   is sized to the piece (a row end, a bare plank), so gap_px is the whole
 --   row and a piece wider than that is scaled to it rather than passed over.
+-- sizeFor(entry, gap_px, stand_h, o) -> w, h of the piece at a slot, or nil
+-- when it cannot stand there. 80% of the books' stand height, times the
+-- piece's scale; no wider than the slot's cap (gap_px, grown with the scale
+-- up to o.max_room where the slot makes room); the file's own overhang kept
+-- on the plank; a height floor against specks. Only a slot that makes room
+-- scales a too-wide piece down; anywhere else it waits for one that can.
+function M.sizeFor(entry, gap_px, stand_h, o)
+    o = o or {}
+    if o.no_hang and entry.hang then return nil end
+    local scale = entry.scale or 1
+    local cap = gap_px
+    if o.makes_room then
+        cap = math.floor(gap_px * scale)
+        if o.max_room then cap = math.min(cap, o.max_room) end
+    end
+    local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC * scale)
+    local width  = math.floor(height * entry.aspect)
+    local shrunk = false
+    if width > cap then
+        if not o.makes_room then return nil end
+        width  = cap
+        height = math.floor(width / entry.aspect)
+        shrunk = true
+    end
+    -- The FILE's overhang sizes the piece; a reader's height nudge only moves
+    -- it (the sink, in pick), or nudging the height would resize it.
+    local over = entry.overhang or 0
+    if over > 0 and o.max_below and not entry.hang then
+        if height * over > o.max_below then
+            height = math.floor(o.max_below / over)
+            width  = math.floor(height * entry.aspect)
+        end
+    end
+    if width < 1 or height < 1 then return nil end
+    -- A piece as wide as the whole row is shown however low that makes it.
+    if not shrunk or not o.makes_room then
+        local frac  = o.min_h_frac or M.MIN_H_FRAC
+        local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
+        -- A piece made smaller on purpose stays: the floor shrinks with it.
+        if scale < 1 then min_h = math.floor(min_h * scale) end
+        if height < min_h then return nil end
+    end
+    return width, height
+end
+
+-- deal(seed, entries, size) -> entry, w, h, deal_no, or nil. The slot's
+-- card: the one it was dealt before (still in the pool), else the top of the
+-- deck if it can stand here (size(entry) -> w, h or nil), else nothing, the
+-- slot remembered as passed over and the card left on top (see THE DECK).
+-- deal_no counts this piece's deals, for "mirror every other time".
+local function deal(seed, entries, size)
+    local key = tostring(seed)
+    local had = M._dealt[key]
+    if had == false then return nil end
+    if had then
+        for i = 1, #entries do
+            local e = entries[i]
+            if entryName(e) == had then
+                local w, h = size(e)
+                if not w then return nil end
+                return e, w, h, M._deal_no[key] or 1
+            end
+        end
+        -- Its piece was switched off or removed: deal this slot afresh.
+    end
+    local card = topCard(entries)
+    if not card then return nil end
+    if M._dealt_n >= M.DEAL_MAX then
+        M._dealt, M._dealt_n, M._deal_no = {}, 0, {}
+    end
+    M._dealt_n = M._dealt_n + 1
+    local w, h = size(card)
+    if not w then
+        -- Remembered as passed over, so a repaint does not deal it after all.
+        -- A card passed over PASS_LIMIT slots running (a hanging piece on a
+        -- one-row shelf, say) goes to the back of this round rather than
+        -- block the deck.
+        M._dealt[key] = false
+        M._passes = M._passes + 1
+        if M._passes >= M.PASS_LIMIT then
+            table.insert(M._deck, table.remove(M._deck, M._deck_pos))
+            M._passes = 0
+        end
+        return nil
+    end
+    M._passes = 0
+    M._deck_pos = M._deck_pos + 1
+    local name = entryName(card)
+    M._dealt[key] = name
+    local n = (M._deal_count[name] or 0) + 1
+    M._deal_count[name], M._deal_no[key] = n, n
+    return card, w, h, n
+end
+
+-- pick(seed, gap_px, stand_h, entries, o) -> placement or nil: whether this
+-- slot gets a piece (the odds), which (the deal), and where it stands.
 function M.pick(seed, gap_px, stand_h, entries, o)
     o = o or {}
     entries = entries or M.list()
@@ -1399,115 +1473,26 @@ function M.pick(seed, gap_px, stand_h, entries, o)
     if chance <= 0 then return nil end
     if chance < 1 and (h % 100) >= math.floor(chance * 100) then return nil end
 
-    -- sizeFor(entry) -> w, h at this slot, or nil when it cannot stand here.
-    local function sizeFor(entry)
-        if o.no_hang and entry.hang then return nil end
-        -- A reader's (or a pack's) size nudge scales the piece AND the width
-        -- it may take: a slot that makes room grows its cap with it, up to
-        -- o.max_room (the whole row); packing slack cannot grow.
-        local scale = entry.scale or 1
-        local cap = gap_px
-        if o.makes_room then
-            cap = math.floor(gap_px * scale)
-            if o.max_room then cap = math.min(cap, o.max_room) end
-        end
-        local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC * scale)
-        local width  = math.floor(height * entry.aspect)
-        local shrunk = false
-        if width > cap then
-            -- Only a slot that makes room scales a piece down to fit;
-            -- anywhere else the piece waits for one that can.
-            if not o.makes_room then return nil end
-            width  = cap
-            height = math.floor(width / entry.aspect)
-            shrunk = true
-        end
-        -- The file's own overhang sizes the piece (a nudged lift does not).
-        local size_over = entry.size_overhang or entry.overhang or 0
-        if size_over > 0 and o.max_below and not entry.hang then
-            -- Shrink so the overhang never reaches past the plank's front.
-            local below = height * size_over
-            if below > o.max_below then
-                height = math.floor(o.max_below / size_over)
-                width  = math.floor(height * entry.aspect)
-            end
-        end
-        if width < 1 or height < 1 then return nil end
-        -- The height floor guards against a piece shrunk to a speck; a piece
-        -- as wide as the whole row is shown however low that makes it.
-        if not shrunk or not o.makes_room then
-            local frac  = o.min_h_frac or M.MIN_H_FRAC
-            local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
-            -- A piece made smaller on purpose stays: the floor shrinks with it.
-            if scale < 1 then min_h = math.floor(min_h * scale) end
-            if height < min_h then return nil end
-        end
-        return width, height
-    end
-
-    local byName
-    local entry
-    local mirror
-    local dealt = M._dealt[tostring(seed)]
-    if dealt == false then return nil end
-    if dealt then
-        byName = {}
-        for i = 1, #entries do byName[entryName(entries[i])] = entries[i] end
-        entry = byName[dealt]
-    end
-    local width, height
-    if entry then
-        width, height = sizeFor(entry)
-        if not width then return nil end
-    else
-        -- A seed never dealt (or its piece was switched off): the top card.
-        local card = topCard(entries)
-        if not card then return nil end
-        if M._dealt_n >= M.DEAL_MAX then
-            M._dealt, M._dealt_n, M._dealt_mirror = {}, 0, {}
-        end
-        M._dealt_n = M._dealt_n + 1
-        width, height = sizeFor(card)
-        if not width then
-            -- Passed over, remembered as such so a repaint does not deal it
-            -- after all; the card stays on top. A card that keeps being
-            -- passed over (a hanging piece on a one-row shelf, a piece too
-            -- wide for any section gap on a shelf that reserves no row ends)
-            -- would block the deck for good, so after PASS_LIMIT slots it goes
-            -- to the back of this round.
-            M._dealt[tostring(seed)] = false
-            M._passes = (M._passes or 0) + 1
-            if M._passes >= M.PASS_LIMIT then
-                table.insert(M._deck, table.remove(M._deck, M._deck_pos))
-                M._passes = 0
-            end
-            return nil
-        end
-        entry = card
-        M._passes = 0
-        M._deck_pos = M._deck_pos + 1
-        M._dealt[tostring(seed)] = entryName(card)
-        -- Mirror: every time, or every other time this piece is dealt, so a
-        -- repeat reads as a variation (maintainer).
-        local n = (M._deal_count[entryName(card)] or 0) + 1
-        M._deal_count[entryName(card)] = n
-        M._dealt_mirror[tostring(seed)] = n        -- this slot's deal number
-    end
-    local sink = entry.sink or entry.overhang or 0
-    local below = entry.hang and 0 or math.floor(height * sink)
-    -- A sink stops at the plank's front edge.
-    if o.max_below and below > o.max_below then below = o.max_below end
+    local entry, width, height, deal_no = deal(seed, entries, function(e)
+        return M.sizeFor(e, gap_px, stand_h, o)
+    end)
+    if not entry then return nil end
     M._used[entryName(entry)] = true
-    -- Mirror from the piece's CURRENT setting, every time: a change in its
-    -- menu must reach slots already dealt (device report: "mirror does
-    -- nothing"). The slot's deal number decides "every other time".
-    local deal_n = M._dealt_mirror[tostring(seed)] or 1
-    mirror = entry.mirror == "always" or (entry.mirror == "alternate" and deal_n % 2 == 0)
+    -- Below the plank's surface: the file's overhang, or the reader's sink,
+    -- stopped at the plank's front edge. A hanging piece has nothing below.
+    local sink = entry.sink
+    if sink == nil then sink = entry.overhang or 0 end
+    local below = entry.hang and 0 or math.floor(height * sink)
+    if o.max_below and below > o.max_below then below = o.max_below end
+    -- Mirror from the piece's CURRENT setting on every paint, so a change in
+    -- its menu reaches slots already dealt.
+    local mirror = entry.mirror == "always"
+                   or (entry.mirror == "alternate" and deal_no % 2 == 0)
     return {
         entry = entry, w = width, h = height,
         above = height - below, below = below,
         side  = (math.floor(h / 10000) % 2 == 0) and "right" or "left",
-        mirror = mirror or false,
+        mirror = mirror,
         -- Lifted above the plank (a positive lift), in px.
         raise = math.floor((entry.raise or 0) * height + 0.5),
         -- Extra room each side, in px (negative: tighter against the books);

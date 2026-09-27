@@ -1409,7 +1409,7 @@ t.test("menu fix: a height nudge moves a piece, it never changes its size", func
     -- plank, so moving its lift moved its size.
     local O = fresh()
     local function at(lift)
-        local e = { name = "pot.png", aspect = 1, overhang = 0.05, size_overhang = 0.05,
+        local e = { name = "pot.png", aspect = 1, overhang = 0.05,
                     sink = lift < 0 and -lift or 0, raise = lift > 0 and lift or 0 }
         return O.pick("s" .. lift, 1000, 300, { e }, { min_gap = 0, min_h = 1, chance = 1, max_below = 20, makes_room = true })
     end
