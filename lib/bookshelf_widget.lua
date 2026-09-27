@@ -10239,7 +10239,15 @@ function BookshelfWidget:_startStatusTimer()
     self:_startFilePoll()
     if self._status_timer_func then return end -- already armed
     self._status_timer_func = function()
-        if self._hero_mode == "micro" and not self._expanded then
+        local mfs = self._micro_fullscreen
+        if mfs and UIManager:isWidgetShown(mfs) then
+            -- The full-screen micro-modules view is on top: its clock cells
+            -- (it took over the clock-cell list when it opened) and its own
+            -- status line are what is on screen, not the shelf underneath.
+            require("lib/bookshelf_hero_modules").tickClocks(self)
+            _device_state_expires_at = 0   -- a fresh battery / wifi read
+            if mfs.refreshStatus then mfs:refreshStatus() end
+        elseif self._hero_mode == "micro" and not self._expanded then
             -- Micro grid is the hero: advance its clock cells in place
             -- (scoped, no re-roll of the other modules). No-op if the grid
             -- has no clock.
