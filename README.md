@@ -175,9 +175,18 @@ Ready-made ornament packs, drawn to sit on the plank at the right size on colour
 
 How often they appear is per shelf, next to **Author on spine** in the shelf's style dialog: **None**, **Rarely**, **Often** or **Always**. Above None, every so often a page is promised a piece whether or not a wide enough gap happens to fall there, so a densely packed shelf still gets some.
 
-Shape is up to you. A row end offers as much width as the row can spare once it has kept room for one book, so a broad ornament stands at full height rather than being shrunk away, and a row that cannot fit a book beside one simply carries the ornament alone. Pieces take turns, so everything in the folder gets its share rather than the same two recurring.
+Shape is up to you. A piece stands at 80% of the books' height and no wider than the books are tall; a wider one is scaled down to fit, never left out, and the books move over to make room for it. Pieces are dealt like a shuffled deck: with ten ornaments switched on, the first ten you see are one of each. A gesture set to **Bookshelf: shuffle ornaments** deals a fresh layout.
 
-For a PNG, the bottom edge of the image is the plank surface and the whole image is scaled to one fixed height against the books, so transparent space above the picture makes it stand smaller, and space at the sides keeps it off the books. `template.svg` carries the SVG conventions in its comments: the bottom of the viewBox is the plank surface, `bookshelf:overhang=N` lets part of the shape hang over the front edge, and the renderer is small, so bold solid shapes work and text, filters and masks do not.
+**Long-press an ornament** on the shelf to adjust it where it stands: its size (up to the whole row), the padding either side of it, and its height (the arrows raise and lower it), whether it hangs from the shelf above, whether it is mirrored (always, or every other time it comes round), and an action to run when you tap it. The shelf redraws under the menu as you go; tap a value to reset it. Your changes follow the ornament onto every shelf, and are kept in an `ornaments.json` in the ornaments folder.
+
+**For pack makers:** a pack can carry its own `ornaments.json`, keyed by file name, to arrive placed. Fields: `scale` (1 = the default size), `lift` (in the piece's own height, + up, - sinks it over the plank's front edge), `pad` (in the books' height, each side, - tightens), `hang` (true or false), `night` (`"invert"` to draw it in chalk in dark mode), `mirror` (`"off"`, `"always"` or `"alternate"`). A reader's own changes are kept separately and win.
+
+```json
+{ "owl.png": { "scale": 1.2, "lift": -0.05 },
+  "bunting.png": { "hang": true } }
+```
+
+For a PNG, the bottom edge of the image is the plank surface and the whole image is scaled to one fixed height against the books, so transparent space above the picture makes it stand smaller, and space at the sides keeps it off the books. `template.svg` carries the SVG conventions in its comments: the bottom of the viewBox is the plank surface, and the renderer is small, so bold solid shapes work and text, filters and masks do not.
 
 **Shelf plank colour** is under **menu -> Wallpaper, ornaments and colours -> Accent colours**. The lit top surface and the shaded front edge are both tinted from that one colour; the default is light oak.
 
