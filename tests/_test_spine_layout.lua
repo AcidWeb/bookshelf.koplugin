@@ -404,21 +404,28 @@ t.test("fill: a reserved row with no room for a book stands empty", function()
     eq(rows[2].first, 1); eq(rows[2].last, 3)
 end)
 
-t.test("fill: never two empty rows running", function()
+t.test("fill: empty rows run at most MAX_EMPTY_RUN deep", function()
     -- The retry has to stop somewhere: a book wider than any row would push
-    -- an empty row in front of it forever. One empty row, then the book is
-    -- seated and clipped exactly as it always was.
+    -- empty rows in front of it forever. A few are allowed (two full-row
+    -- ornaments one above the other are fine: "it can even have no books"),
+    -- then the book is seated and clipped exactly as it always was.
     local rows = SL.fillRows({ 500, 500 }, 10, 0, function() return true end)
-    for i = 2, #rows do
-        assert(not (rows[i].empty and rows[i - 1].empty),
-            "rows " .. (i - 1) .. " and " .. i .. " are both empty")
+    local run, worst = 0, 0
+    for i = 1, #rows do
+        run = rows[i].empty and run + 1 or 0
+        worst = math.max(worst, run)
     end
-    eq(rows[1].last, 0, "the first row took the offer")
-    eq(rows[2].first, 1); eq(rows[2].last, 1, "then the book was seated anyway")
-    -- Every book still lands somewhere.
+    eq(worst, SL.MAX_EMPTY_RUN, "the empty run is not bounded where it says")
+    eq(rows[SL.MAX_EMPTY_RUN + 1].first, 1)
+    eq(rows[SL.MAX_EMPTY_RUN + 1].last, 1, "then the book was seated anyway")
     local seated = 0
     for i = 1, #rows do seated = seated + (rows[i].last - rows[i].first + 1) end
     eq(seated, 2, "a book went missing")
+    -- Two full-row pieces in a row: both rows stand empty, no book is squeezed.
+    local avail = function(r) return r <= 2 and 5 or 1000 end
+    local two = SL.fillRows({ 200, 200 }, avail, 0, function(r) return r <= 2 end)
+    assert(two[1].empty and two[2].empty, "the second full-row piece had a book forced beside it")
+    eq(two[3].first, 1); eq(two[3].last, 2)
 end)
 
 t.test("fill: an empty row is only offered where the caller allows it", function()

@@ -982,119 +982,123 @@ function M.hash(s)
     return bxor(h, math.floor(h / 65536))
 end
 
+
+-- THE DECK: which ornament a slot gets.
+--
+-- Every enabled ornament is a card in a shuffled deck, dealt in order: with
+-- ten ornaments, the first ten a reader sees are one of each, then the deck
+-- is shuffled again (maintainer: "if you have 10 ornaments and see 10
+-- ornaments you must see exactly one of each").
+--
+-- The rotation this replaces handed each slot a place in a cycle over the
+-- pieces that FITTED that slot, so every gap cycled over a different subset
+-- and pieces came round again before the rest had been seen. Now a slot does
+-- not choose: it takes the top card. A slot that cannot take it (a section
+-- gap too narrow for it, the first row of a page for a piece that hangs from
+-- the shelf above, packing slack too small) stays plain and the card waits on
+-- top for the next slot that can, so the order is never broken. Row ends and
+-- bare planks make room: a piece gets its natural width there, up to the
+-- whole row, and the books move over (maintainer: "each ornament makes space
+-- for itself ... max width for an ornament is a full row, it can even have no
+-- books").
+--
+-- Dealt once per seed and remembered (M._dealt), because pick() runs again on
+-- every repaint and in both planning passes, and they must agree. Bounded:
+-- page turns mint seeds forever, and on overflow the memory is dropped, which
+-- at worst re-deals pieces the reader has paged away from.
+M._deck, M._deck_pos, M._deck_key = nil, 1, nil
+M._dealt, M._dealt_n = {}, 0
+M.DEAL_MAX = 2048
+M.PASS_LIMIT = 6
+M._passes = 0
+-- Shuffled with its own generator, so nothing else that draws math.random is
+-- disturbed, and seeded from the clock, so each session starts somewhere new.
+M._shuffle_state = nil
+local function nextRand(n)
+    local s = M._shuffle_state or (os.time() % 2147483647)
+    s = (s * 48271) % 2147483647
+    M._shuffle_state = s
+    return (s % n) + 1
+end
+local function entryName(e) return e.name or e.path end
+
+-- deck(entries) -> the deck for this pool, rebuilt when the pool changes.
+function M.deck(entries)
+    local names = {}
+    for i = 1, #entries do names[i] = entryName(entries[i]) end
+    local key = table.concat(names, "\0")
+    if M._deck_key ~= key then
+        M._deck, M._deck_pos, M._deck_key = {}, 1, key
+        M.reshuffle(entries)
+    end
+    return M._deck
+end
+
+-- reshuffle(entries): a new order for the next round. Pieces already standing
+-- on this screen go to the back, so a small deck does not show the same piece
+-- twice across the seam.
+function M.reshuffle(entries)
+    local fresh, standing = {}, {}
+    local order = {}
+    for i = 1, #entries do order[i] = entries[i] end
+    for i = #order, 2, -1 do
+        local j = nextRand(i)
+        order[i], order[j] = order[j], order[i]
+    end
+    for i = 1, #order do
+        if M._used[entryName(order[i])] then standing[#standing + 1] = order[i]
+        else fresh[#fresh + 1] = order[i] end
+    end
+    for i = 1, #standing do fresh[#fresh + 1] = standing[i] end
+    M._deck, M._deck_pos = fresh, 1
+end
+
+local function topCard(entries)
+    local deck = M.deck(entries)
+    if M._deck_pos > #deck then M.reshuffle(entries); deck = M._deck end
+    return deck[M._deck_pos]
+end
+
 -- pick(seed, gap_px, stand_h, entries, o) -> placement or nil.
---   gap_px  : free width at the row's end, already net of margins/padding
+--   gap_px  : the width this slot can give, net of margins and padding
 --   stand_h : the books' stand height (feet at y = stand_h in row coords)
 --   entries : pool (default M.list())
 --   o.min_gap, o.min_h : px floors; o.min_h_frac : floor as a share of
 --   stand_h (default M.MIN_H_FRAC); o.max_below : how far below the feet the
 --   overhang may reach (the plank's surface strip + front face); o.no_hang :
---   leave out pieces that hang from the shelf above (no shelf above here)
--- rotationFor(seed, count) -> which ornament this seed gets.
---
--- A ROTATION rather than a hash of the seed. With two or three files in the
--- folder a hashed choice clusters badly -- the same one turns up several
--- times running while another goes unseen for pages (user report: "I've not
--- seen the cacti for a while") -- because the hash is spread over gaps, not
--- over the handful of ornaments it indexes. Handing them out in turn gives
--- every file an equal share by construction.
---
--- Stable per seed, because pick() runs again on every repaint of the same row
--- and an ornament that changed between repaints would flicker: a seed keeps
--- the place it was given, and only a seed never seen before advances the
--- rotation. Bounded, because page turns mint new seeds forever; on overflow
--- the map is dropped, which at worst re-rolls ornaments the reader has
--- paged away from.
-M._rot   = {}
-M._rot_n = 0
-M.ROT_MAX = 512
--- Where in the folder the rotation begins.
---
--- It used to begin at the first file every time, so the first piece a reader
--- saw after every restart was whichever name sorts first, and a folder of
--- many ornaments always introduced itself in the same order. The rotation
--- still hands them out in turn -- that is what gives every file an equal
--- share -- it just no longer starts from the same end (maintainer: "it should
--- cycle through them all, starting at a random position in the file list").
---
--- os.time() rather than math.random: no reseeding, so nothing else that draws
--- random numbers is disturbed by when ornaments happen to be first asked for.
-M._rot_start = nil
--- How far the rotation JUMPS between one turn and the next.
---
--- Taking turns in file order gives every piece an equal share, which is the
--- point, but it also means two turns handed out together land side by side in
--- the folder -- so the two rows of one page showed neighbouring files, and the
--- next page carried on from there ("png's 2 and 3 appear on page 2 and on
--- page 3"). Stepping by a number COPRIME to the set size still visits every
--- piece exactly once per cycle; it just does not visit them in folder order.
--- The first candidate coprime to the count wins, so the step adapts to
--- however many pieces happen to fit.
-M.ROT_STRIDES = { 7, 5, 3, 2 }
-local function gcd(a, b) while b ~= 0 do a, b = b, a % b end return a end
-function M.rotationStride(count)
-    for _i = 1, #M.ROT_STRIDES do
-        local st = M.ROT_STRIDES[_i]
-        if st < count and gcd(st, count) == 1 then return st end
-    end
-    return 1
-end
-
-function M.rotationFor(seed, count)
-    if not count or count <= 1 then return 1 end
-    if not M._rot_start then M._rot_start = os.time() end
-    local key = tostring(seed)
-    local had = M._rot[key]
-    if had then return ((had - 1) % count) + 1 end
-    if M._rot_n >= M.ROT_MAX then M._rot, M._rot_n = {}, 0 end
-    local idx = ((M._rot_n * M.rotationStride(count) + M._rot_start) % count) + 1
-    M._rot[key] = idx
-    M._rot_n = M._rot_n + 1
-    return idx
-end
-
--- Deterministic for a seed. placement = { entry, w, h, above, below, side }.
--- o.chance overrides M.CHANCE (the between-sections gaps use lower odds).
+--   a hanging piece cannot go here (no shelf above); o.makes_room : the slot
+--   is sized to the piece (a row end, a bare plank), so gap_px is the whole
+--   row and a piece wider than that is scaled to it rather than passed over.
 function M.pick(seed, gap_px, stand_h, entries, o)
     o = o or {}
     entries = entries or M.list()
     if #entries == 0 then return nil end
     if (gap_px or 0) < (o.min_gap or 0) then return nil end
     local h = M.hash(tostring(seed))
-    -- Scaled here rather than at each call site, so every placement -- the
-    -- gaps on a plain shelf, the breaks between sections, the bare plank under
-    -- a half-filled page -- moves together with one setting.
-    -- o.level lets a channel use its own curve instead of the raw level; see
-    -- M.GROUP_LEVEL for why the section breaks need one.
     -- A budgeted channel stops once the screen has its fill. Checked before
     -- the odds so a full screen costs nothing.
     if o.budgeted and M.budgetLeft() <= 0 then return nil end
+    -- Scaled here rather than at each call site, so every placement moves
+    -- together with one setting; o.level lets a channel use its own curve
+    -- (see M.GROUP_LEVEL).
     local level = o.level or M.frequency()
     local chance = (o.chance or M.CHANCE) * level
     if chance <= 0 then return nil end
     if chance < 1 and (h % 100) >= math.floor(chance * 100) then return nil end
-    -- SIZE IS PART OF THE CHOICE, not a test applied after it.
-    --
-    -- This used to pick one entry -- the next in the rotation that was not
-    -- already standing on this screen -- work out its size, and give up if it
-    -- came out too small. With a folder of similar pieces that is invisible.
-    -- With a mixed folder it means the WIDE ones never appear and, worse, the
-    -- gaps they were chosen for stay empty: a reader who adds a dozen
-    -- ornaments sees the same two over and over, because those two are the
-    -- ones that happen to fit a row end (reported with twelve test pieces in
-    -- the folder: "I still have cacti and the template plant on the same ends
-    -- of the shelfs on pages 2 and 3").
-    --
-    -- So the walk keeps going until it finds one that FITS. The rotation still
-    -- decides where the walk starts, which is what gives every file its turn;
-    -- what changed is that an entry which cannot fit this particular gap steps
-    -- aside instead of taking the slot and leaving it empty.
+
+    -- sizeFor(entry) -> w, h at this slot, or nil when it cannot stand here.
     local function sizeFor(entry)
+        if o.no_hang and entry.hang then return nil end
         local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC)
         local width  = math.floor(height * entry.aspect)
+        local shrunk = false
         if width > gap_px then
+            -- Only a slot that makes room scales a piece, and only to the
+            -- whole row; anywhere else the piece waits for one that can.
+            if not o.makes_room then return nil end
             width  = gap_px
             height = math.floor(width / entry.aspect)
+            shrunk = true
         end
         if entry.overhang > 0 and o.max_below and not entry.hang then
             -- Shrink so the overhang never reaches past the plank's front.
@@ -1104,62 +1108,59 @@ function M.pick(seed, gap_px, stand_h, entries, o)
                 width  = math.floor(height * entry.aspect)
             end
         end
-        local frac  = o.min_h_frac or M.MIN_H_FRAC
-        local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
-        if height < min_h or width < 1 then return nil end
+        if width < 1 or height < 1 then return nil end
+        -- The height floor guards against a piece shrunk to a speck; a piece
+        -- as wide as the whole row is shown however low that makes it.
+        if not shrunk or not o.makes_room then
+            local frac  = o.min_h_frac or M.MIN_H_FRAC
+            local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
+            if height < min_h then return nil end
+        end
         return width, height
     end
-    -- WHICH PIECES CAN STAND HERE, before the rotation gets a say.
-    --
-    -- The rotation used to index the WHOLE folder and the fit test came
-    -- afterwards: a turn that landed on a piece too wide for this gap walked
-    -- forward to the next one that fitted. That sounds harmless and is not.
-    -- The walk always steps the same way, so a piece that never fits hands its
-    -- turn to the same successor every time, for good. Measured on the
-    -- device with a fourteen-file folder: the two widest files (8:1 and 9:1,
-    -- which come out 121px against a 124px floor) donated every one of their
-    -- turns to entries 1 and 2, so those two stood three times as often as
-    -- anything else and turned up on page after page -- "I still have cacti
-    -- and the template plant on the same ends of the shelfs on pages 2 and 3".
-    --
-    -- Sizing everything first and rotating through what FITS gives every
-    -- eligible piece exactly one turn in the cycle and takes the walk
-    -- direction out of it. The fit set is a function of gap_px and stand_h,
-    -- both of which the two planning passes agree on for a given seed, so the
-    -- count behind the rotation is stable and the passes still match.
-    local fits = {}
-    for _i = 1, #entries do
-        local cand = entries[_i]
-        if not (o.no_hang and cand.hang) then
-            local w, h = sizeFor(cand)
-            if w then fits[#fits + 1] = { entry = cand, w = w, h = h } end
-        end
+
+    local byName
+    local entry
+    local dealt = M._dealt[tostring(seed)]
+    if dealt == false then return nil end
+    if dealt then
+        byName = {}
+        for i = 1, #entries do byName[entryName(entries[i])] = entries[i] end
+        entry = byName[dealt]
     end
-    if #fits == 0 then return nil end
-    -- Seeded choice first, then walk on within the fitting set. Walking
-    -- (rather than re-hashing) keeps the seed's influence: the same screen
-    -- composed the same way still lands the same way.
-    local idx = M.rotationFor(seed, #fits)
-    local entry, width, height
-    for step = 0, #fits - 1 do
-        local cand = fits[((idx - 1 + step) % #fits) + 1]
-        if not M._used[cand.entry.name or cand.entry.path] then
-            entry, width, height = cand.entry, cand.w, cand.h
-            break
+    local width, height
+    if entry then
+        width, height = sizeFor(entry)
+        if not width then return nil end
+    else
+        -- A seed never dealt (or its piece was switched off): the top card.
+        local card = topCard(entries)
+        if not card then return nil end
+        if M._dealt_n >= M.DEAL_MAX then M._dealt, M._dealt_n = {}, 0 end
+        M._dealt_n = M._dealt_n + 1
+        width, height = sizeFor(card)
+        if not width then
+            -- Passed over, remembered as such so a repaint does not deal it
+            -- after all; the card stays on top. A card that keeps being
+            -- passed over (a hanging piece on a one-row shelf, a piece too
+            -- wide for any section gap on a shelf that reserves no row ends)
+            -- would block the deck for good, so after PASS_LIMIT slots it goes
+            -- to the back of this round.
+            M._dealt[tostring(seed)] = false
+            M._passes = (M._passes or 0) + 1
+            if M._passes >= M.PASS_LIMIT then
+                table.insert(M._deck, table.remove(M._deck, M._deck_pos))
+                M._passes = 0
+            end
+            return nil
         end
-    end
-    if not entry then
-        -- Every fitting piece is already standing on this screen. A repeat
-        -- still reads better than a hole, so take the turn's own piece.
-        local cand = fits[idx]
-        entry, width, height = cand.entry, cand.w, cand.h
+        entry = card
+        M._passes = 0
+        M._deck_pos = M._deck_pos + 1
+        M._dealt[tostring(seed)] = entryName(card)
     end
     local below = entry.hang and 0 or math.floor(height * entry.overhang)
-    -- Marked only now: pick bails out above on several paths (too short, too
-    -- narrow, the odds), and an entry that never stood must not be counted as
-    -- standing -- that would push the next gap onto a different file for no
-    -- reason and, with a small folder, exhaust the pool.
-    M._used[entry.name or entry.path] = true
+    M._used[entryName(entry)] = true
     return {
         entry = entry, w = width, h = height,
         above = height - below, below = below,

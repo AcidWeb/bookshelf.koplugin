@@ -3442,34 +3442,19 @@ function SpineShelf.plan(items, opts)
             -- down to the budget by pick itself.
             if (Orn.frequency and Orn.frequency() > 0)
                     or (Orn.reservesRowEnds and Orn.reservesRowEnds()) then
-                -- The most a row-end piece may be OFFERED: all but one
-                -- book's width. Not a share of the row and not a
-                -- stand-height square -- a piece drawn to span the shelf
-                -- spans the shelf, and the row it stands on simply carries
-                -- no books ("I have no issue with a png taking a full shelf,
-                -- we don't always need to have a book").
-                --
-                -- One book's width is still held back, and the book it is
-                -- measured for is the WIDEST a row can hold: a face-out
-                -- cover, not an average spine. Holding back four average
-                -- spines was not enough -- a face-out is wider than all four
-                -- -- so the row seated one anyway and painted it past the end
-                -- of the plank. With a cover's width kept, no row is ever
-                -- forced to overflow; a row that still cannot fit its book
-                -- stands empty instead (SpineLayout.fillRows, empty_ok).
+                -- The most a row-end piece may be OFFERED: the whole row. The
+                -- piece is the next card in the deck (Orn.pick) at its own
+                -- natural width, and the books make room for it; one wider
+                -- than the row is scaled to it, and the row it stands on
+                -- carries no books (maintainer: "max width for an ornament is
+                -- a full row, it can even have no books"). A row left too
+                -- narrow for its next book stands empty rather than
+                -- overflowing (SpineLayout.fillRows, empty_ok).
                 --
                 -- Derived from opts alone: the ACTUAL widths on a row are
                 -- not something the two planning passes can agree on, since
                 -- one plans a page and the other the whole library.
-                local face_h = SpineLayout.spineHeight(opts.row_h,
-                                                       SpineLayout.DEFAULT_ASPECT)
-                orn.keep = SpineLayout.faceOutWidth(face_h,
-                                                    SpineLayout.DEFAULT_ASPECT)
-                           + book_gap
-                local square = math.floor(orn.stand_h * Orn.HEIGHT_FRAC)
-                local room   = (opts.content_w or 0) - orn.keep - 2 * orn.pad
-                -- Never offered less than it was before the widening.
-                orn.row_end = math.max(square, room) + 2 * orn.pad
+                orn.row_end = (opts.content_w or 0)
             end
             pcall(Orn.ensureTemplate)
             -- One page, one set: plan() runs once per page and before any row
@@ -3487,10 +3472,6 @@ function SpineShelf.plan(items, opts)
     -- stand-height floor above pushed it past that -- tall rows on a narrow
     -- screen, where a reservation would cost books to gain decoration.
     local content_w_books = opts.content_w or 0
-    if orn and orn.row_end and orn.row_end > 0
-            and content_w_books - orn.row_end < (orn.keep or 0) then
-        orn.row_end = nil
-    end
 
     -- ── Flatten ─────────────────────────────────────────────────────────
     -- A group that carries its member records (series stack, author /
@@ -3927,7 +3908,7 @@ function SpineShelf.plan(items, opts)
         -- a face-out lifts anything smaller to FACE_GAP (see the constant),
         -- except against its own run's spines.
         local gap_before = 0
-        local ornament_here = nil
+        local orn_seed = nil
         if j > 1 then
             local prev   = flat[j - 1]
             local prev_e = entries[#entries]
@@ -3949,31 +3930,15 @@ function SpineShelf.plan(items, opts)
                 if prev.in_group or f.in_group then
                     gap_before = group_gap
                     -- Now and then the break between two sections widens
-                    -- enough for something to stand in it.
+                    -- enough for something to stand in it. Only the seed is
+                    -- noted here: the piece is dealt when the row fill
+                    -- reaches this gap (see `gaps` below), so a gap further
+                    -- down the list than the page never takes a card.
                     if orn then
-                        local seed = "grp|"
+                        orn_seed = "grp|"
                             .. tostring(prev_e and prev_e.book
                                         and prev_e.book.filepath or prev.item_idx)
                             .. "|" .. tostring(src.filepath or label or f.item_idx)
-                        local pl = orn.mod.pick(seed, orn.budget, orn.stand_h, nil, {
-                            min_gap   = Screen:scaleBySize(orn.mod.MIN_GAP_DP),
-                            min_h     = Screen:scaleBySize(orn.mod.MIN_H_DP),
-                            max_below = orn.max_below,
-                            chance    = orn.mod.GROUP_CHANCE,
-                            -- Chosen before rows exist, so it cannot know
-                            -- whether a shelf will be above it.
-                            no_hang   = true,
-                            -- Damped at the lower levels: this is the most
-                            -- numerous channel on a grouping chip, so the raw
-                            -- level puts several on a page the reader asked to
-                            -- keep sparse. See M.GROUP_LEVEL.
-                            level     = orn.mod.groupLevel
-                                        and orn.mod.groupLevel() or nil,
-                        })
-                        if pl then
-                            ornament_here = pl
-                            gap_before = gap_before + 2 * orn.pad + pl.w
-                        end
                     end
                 else
                     gap_before = book_gap
@@ -3991,10 +3956,8 @@ function SpineShelf.plan(items, opts)
             face_out = face_out, favourite = fav, label = label,
             author = src.author or (src.authors and src.authors[1]) or nil,
             series_num = series_num, gap_before = gap_before,
+            gap_base = gap_before, orn_seed = orn_seed,
             in_group = f.in_group or nil,
-            -- An ornament standing in the gap this spine carries (see the
-            -- reservation above); rowWidget paints it.
-            ornament = ornament_here,
         }
         -- Gated on the flag, not on logger.dbg: a disabled logger.dbg is a
         -- no-op, but its ARGUMENTS are still built, and this is a ten-field
@@ -4021,11 +3984,44 @@ function SpineShelf.plan(items, opts)
         for j = skip + 1, #entries do sliced[#sliced + 1] = entries[j] end
         entries = sliced
     end
-    local widths, gaps = {}, {}
-    for i = 1, #entries do
-        widths[i] = entries[i].w
-        gaps[i]   = entries[i].gap_before
+    -- Rows the fill has started (availAt below keeps it), and whether cards
+    -- may still be dealt: the render plans one page but fills on past it, and
+    -- a piece dealt to a row or gap it then throws away is gone from the
+    -- round unseen. The pagination pass plans every row, all of them seen on
+    -- some page, so it deals throughout, in reading order like the render.
+    local paginating_all = not (opts.n_rows and opts.n_rows < math.huge)
+    local fill_row, dealing = 0, true
+    local function mayDeal(r)
+        return dealing and (paginating_all or (r or fill_row) <= (opts.n_rows or 1))
     end
+    local widths = {}
+    for i = 1, #entries do widths[i] = entries[i].w end
+    -- A section gap's width, worked out when the fill first asks for it. The
+    -- entries are cached across plans, so the answer is written onto them for
+    -- the painter (gap_before, ornament) from gap_base each time.
+    local gaps = setmetatable({}, { __index = function(t, i)
+        local e = entries[i]
+        if not e then return nil end
+        local g = e.gap_base or e.gap_before or 0
+        local pl
+        if e.orn_seed and orn and mayDeal() then
+            pl = orn.mod.pick(e.orn_seed, orn.budget, orn.stand_h, nil, {
+                min_gap   = Screen:scaleBySize(orn.mod.MIN_GAP_DP),
+                min_h     = Screen:scaleBySize(orn.mod.MIN_H_DP),
+                max_below = orn.max_below,
+                chance    = orn.mod.GROUP_CHANCE,
+                -- Nothing above a section break is known to be a shelf.
+                no_hang   = true,
+                -- Damped at the lower levels: this is the most numerous
+                -- channel on a grouping chip. See M.GROUP_LEVEL.
+                level     = orn.mod.groupLevel and orn.mod.groupLevel() or nil,
+            })
+            if pl then g = g + 2 * orn.pad + pl.w end
+        end
+        e.gap_before, e.ornament = g, pl
+        rawset(t, i, g)
+        return g
+    end })
     -- Row-end ornaments, decided HERE and per row. The piece that will stand
     -- at a row's end is picked before the row is packed, so the row gives up
     -- exactly that piece's width -- and a row that gets none keeps the whole
@@ -4102,6 +4098,9 @@ function SpineShelf.plan(items, opts)
     local row_orn, row_seen, placed_on = {}, {}, {}
     local function rowPiece(r, i)
         if row_seen[r] then return row_orn[r] end
+        -- Past the page: no card (see mayDeal). Not remembered, so it cannot
+        -- stick if this plan is ever asked about the row again.
+        if not mayDeal(r) then return nil end
         row_seen[r] = true
         local key = pageKey(r, i)
         if not (orn and orn.row_end and orn.row_end > 0) then return nil end
@@ -4125,6 +4124,8 @@ function SpineShelf.plan(items, opts)
                 -- nothing above it for that to look wrong against.
                 min_h_frac = Orn.ROW_END_MIN_H_FRAC,
                 max_below = orn.max_below,
+                -- The books move over for it, up to the whole row.
+                makes_room = true,
                 chance    = owed and Orn.CHANCE_CERTAIN or Orn.ROW_END_CHANCE,
                 -- A page's first row has no shelf above it to hang from.
                 no_hang   = within == 1,
@@ -4147,6 +4148,7 @@ function SpineShelf.plan(items, opts)
         return row_orn[r]
     end
     local function availAt(r, i)
+        if r and r > fill_row then fill_row = r end
         local pl = r and rowPiece(r, i)
         if pl then return content_w_books - (pl.w + 2 * orn.pad) end
         return content_w_books
@@ -4158,6 +4160,9 @@ function SpineShelf.plan(items, opts)
         return rowPiece(r) ~= nil
     end)
     while #rows > (opts.n_rows or 1) do table.remove(rows) end
+    -- The balancer re-breaks the same books: anything it asks about that the
+    -- fill never did stands plain rather than taking a card now.
+    dealing = false
     -- Even the shelves out. The fill has decided WHICH books are on this page
     -- -- greedy packs the most it can, and the cursor step, the page map and
     -- the footer range are all built on that -- so this re-breaks the SAME
@@ -4301,6 +4306,8 @@ function SpineShelf.rowWidget(opts)
                 max_below = SpineShelf.overhangReach(opts.height),
                 -- Nothing above the first row to hang from.
                 no_hang   = (opts.row_index or 1) <= 1,
+                -- A bare plank is the whole row.
+                makes_room = true,
             })
             if not pl then return end
             local span = math.max(0, opts.width - 2 * margin - pl.w)

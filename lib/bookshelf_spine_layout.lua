@@ -169,8 +169,9 @@ end
 -- seating a face-out cover in what was left put the cover past the end of the
 -- plank (device report, "a face out book appearing off the edge of the
 -- shelf"). A row may stand as its ornament alone -- "we don't always need to
--- have a book" -- but never two empty rows running, so a book wider than any
--- row still lands somewhere instead of looping.
+-- have a book" -- and two or three such rows may run together (full-row
+-- pieces one above another), but never more than MAX_EMPTY_RUN, so a book
+-- wider than any row still lands somewhere instead of looping.
 --
 -- gap is either one number, or an array where gap[i] is the gap painted
 -- BEFORE book i (so a group boundary can be wider than the gap inside a
@@ -185,6 +186,7 @@ local function availFn(avail_w)
 end
 SpineLayout.availFn = availFn
 
+SpineLayout.MAX_EMPTY_RUN = 3
 function SpineLayout.fillRows(widths, avail_w, gap, empty_ok)
     gap = gap or 0
     local gaps = type(gap) == "table" and gap or nil
@@ -192,20 +194,21 @@ function SpineLayout.fillRows(widths, avail_w, gap, empty_ok)
     local avail = availFn(avail_w)
     local rows = {}
     local x, first
-    local n, i, was_empty = #widths, 1, false
+    local n, i, empty_run = #widths, 1, 0
     local limit = avail(1, 1)
     while i <= n do
         local w = widths[i]
         if not first then
-            if w > limit and empty_ok and not was_empty and empty_ok(#rows + 1) then
+            if w > limit and empty_ok and empty_run < SpineLayout.MAX_EMPTY_RUN
+                    and empty_ok(#rows + 1) then
                 -- No room for even one book beside whatever this row reserved.
                 -- Let the row stand on that alone and try this book again on
-                -- the next one; `was_empty` stops the retry repeating.
+                -- the next one; `empty_run` stops the retry repeating.
                 rows[#rows + 1] = { first = i, last = i - 1, empty = true }
-                was_empty = true
+                empty_run = empty_run + 1
                 limit = avail(#rows + 1, i)
             else
-                first, x, was_empty = i, w, false
+                first, x, empty_run = i, w, 0
                 i = i + 1
             end
         else

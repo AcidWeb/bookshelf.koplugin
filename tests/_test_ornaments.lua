@@ -111,26 +111,19 @@ t.test("a narrow gap stays empty; a fitting one sizes to the stand height", func
     eq(p.below, 0); eq(p.above, 240)
 end)
 
-t.test("a wide ornament shrinks to the gap", function()
+t.test("a piece too wide for a gap waits; a slot that makes room scales it only to the whole row", function()
     local O = fresh()
     O.CHANCE = 1.0
-    local p = O.pick("s", 120, 300, { POOL[2] }, { min_gap = 48, min_h = 10, min_h_frac = 0 })
-    assert(p, "expected a placement")
-    eq(p.w, 120, "capped at the gap")
-    eq(p.h, 80,  "height follows the cap through the aspect")
-end)
-
-t.test("a gap that would shrink the ornament to a speck stays bare", function()
-    -- Ornaments scale with the shelf: shrunk to fit a narrow gap, an 80px
-    -- plant beside 300px books read as a toy (device report). Below 45% of
-    -- the stand height the shelf stays empty instead.
-    local O = fresh()
-    O.CHANCE = 1.0
-    assert(O.pick("s", 120, 300, { POOL[2] }, { min_gap = 48, min_h = 10 }) == nil,
-        "80px against a 300px stand is under the 45% floor")
-    -- A gap that holds it at 45% or more is fine.
-    local p = O.pick("s", 210, 300, { POOL[2] }, { min_gap = 48, min_h = 10 })
-    assert(p and p.h >= 135, "210px wide at aspect 1.5 is 140px tall: placed")
+    -- POOL[2] is 1.5:1, so 360px wide at its natural 240px.
+    eq(O.pick("g", 120, 300, { POOL[2] }, { min_gap = 48, min_h = 10, min_h_frac = 0 }), nil,
+        "a plain gap does not shrink a piece to fit")
+    local p = O.pick("r", 1000, 300, { POOL[2] }, { min_gap = 48, min_h = 10, makes_room = true })
+    assert(p, "a row end takes it")
+    eq(p.w, 360, "at its own width, not a share of the row")
+    eq(p.h, 240)
+    local q = O.pick("r2", 120, 300, { POOL[2] }, { min_gap = 48, min_h = 10, makes_room = true })
+    assert(q, "wider than the whole row: scaled to it, however low that makes it")
+    eq(q.w, 120); eq(q.h, 80)
 end)
 
 t.test("the overhang never reaches past the plank's front", function()
@@ -488,13 +481,13 @@ t.test("svg: bookshelf:hang is read like the other directives", function()
     eq(hang, false)
 end)
 
-t.test("pick: no_hang leaves hanging pieces out; a hanging piece ignores overhang", function()
+t.test("pick: a hanging piece waits for a row with a shelf above; it ignores overhang", function()
     local O = fresh()
     local bat  = { path = "/o/bat.png", name = "bat.png", aspect = 1, overhang = 0.5, hang = true }
     local vase = { path = "/o/vase.png", name = "vase.png", aspect = 1, overhang = 0 }
     for i = 1, 40 do
         local p = O.pick("nh" .. i, 400, 300, { bat, vase }, { min_gap = 48, min_h = 10, chance = 1, no_hang = true })
-        assert(p and p.entry == vase, "a first row must never be given the bat")
+        assert(not (p and p.entry == bat), "a first row must never be given the bat")
     end
     local p = O.pick("h", 400, 300, { bat }, { min_gap = 48, min_h = 10, chance = 1, max_below = 5 })
     assert(p and p.entry == bat, "the bat is fine where there is a shelf above")
@@ -585,51 +578,85 @@ t.test("png: rendering routes to the raster path, SVG keeps the vector one", fun
         .. " back functions instead of a blitbuffer")
 end)
 
--- ── which ornament: a rotation, not a hash ─────────────────────────────────
+-- ── which ornament: a shuffled deck ────────────────────────────────────────
 
-t.test("the rotation hands every ornament an equal share", function()
-    -- A hashed choice clusters over a handful of files -- the same one turns
-    -- up several times running while another goes unseen for pages (device
-    -- report: "I've not seen the cacti for a while"). Turn-taking makes the
-    -- share equal by construction.
+local function deckPool(n)
+    local out = {}
+    for i = 1, n do out[i] = { name = "o" .. i .. ".svg", aspect = 1, overhang = 0 } end
+    return out
+end
+local ANY = { min_gap = 0, min_h = 1, chance = 1 }
+
+t.test("with N ornaments, N placements are one of each, and the next N again", function()
+    -- "If you have 10 ornaments and see 10 ornaments you must see exactly one
+    -- of each" (maintainer).
     local O = fresh()
-    O._rot, O._rot_n = {}, 0
-    local seen = {}
-    for i = 1, 12 do
-        local idx = O.rotationFor("seed" .. i, 3)
-        seen[idx] = (seen[idx] or 0) + 1
+    local pool = deckPool(10)
+    for round = 1, 3 do
+        O.beginScreen()
+        local seen = {}
+        for i = 1, 10 do
+            local pl = O.pick("r" .. round .. "s" .. i, 10000, 400, pool, ANY)
+            assert(pl, "slot " .. i .. " was left empty")
+            assert(not seen[pl.entry.name], pl.entry.name .. " came round twice in round " .. round)
+            seen[pl.entry.name] = true
+        end
     end
-    eq(seen[1], 4, "first ornament")
-    eq(seen[2], 4, "second")
-    eq(seen[3], 4, "third")
 end)
 
-t.test("a seed keeps the ornament it was given", function()
-    -- pick() runs again on every repaint of the same row; an ornament that
-    -- changed between repaints would flicker.
+t.test("a seed keeps the piece it was dealt, and a repaint deals nothing new", function()
     local O = fresh()
-    O._rot, O._rot_n = {}, 0
-    local first = O.rotationFor("a", 2)
-    O.rotationFor("b", 2)
-    O.rotationFor("c", 2)
-    eq(O.rotationFor("a", 2), first, "same seed, same ornament")
+    local pool = deckPool(4)
+    local first = O.pick("a", 10000, 400, pool, ANY).entry.name
+    O.pick("b", 10000, 400, pool, ANY)
+    eq(O.pick("a", 10000, 400, pool, ANY).entry.name, first, "same seed, same piece")
+    local pos = O._deck_pos
+    O.pick("b", 10000, 400, pool, ANY)
+    eq(O._deck_pos, pos, "a repaint advanced the deck")
 end)
 
-t.test("the rotation map is bounded", function()
-    -- Page turns mint new seeds forever.
+t.test("a card that cannot stand in a slot waits on top for the next one that can", function()
     local O = fresh()
-    O._rot, O._rot_n = {}, 0
-    local was = O.ROT_MAX
-    O.ROT_MAX = 4
-    for i = 1, 6 do O.rotationFor("s" .. i, 2) end
-    assert(O._rot_n <= 4, "the map was dropped rather than growing without end")
-    O.ROT_MAX = was
+    local wide  = { name = "wide.svg",  aspect = 4, overhang = 0 }
+    local small = { name = "small.svg", aspect = 1, overhang = 0 }
+    local pool = { wide, small }
+    O.deck(pool)
+    O._deck = { wide, small }        -- a known order
+    eq(O.pick("gap", 400, 400, pool, ANY), nil, "the wide piece does not fit a 400px gap")
+    eq(O.pick("gap", 400, 400, pool, ANY), nil, "and the passed slot stays passed on a repaint")
+    local r = O.pick("rowend", 2000, 400, pool, { min_gap = 0, min_h = 1, chance = 1, makes_room = true })
+    eq(r.entry.name, "wide.svg", "the next slot that can take it gets it: the order holds")
+    eq(O.pick("gap2", 400, 400, pool, ANY).entry.name, "small.svg")
 end)
 
-t.test("one ornament in the folder needs no rotation", function()
+t.test("a card passed over PASS_LIMIT times goes to the back instead of blocking the deck", function()
     local O = fresh()
-    eq(O.rotationFor("anything", 1), 1)
-    eq(O.rotationFor("anything", 0), 1, "and an empty folder does not divide by zero")
+    local bat  = { name = "bat.svg",  aspect = 1, overhang = 0, hang = true }
+    local vase = { name = "vase.svg", aspect = 1, overhang = 0 }
+    local pool = { bat, vase }
+    O.deck(pool)
+    O._deck = { bat, vase }
+    local got
+    for i = 1, O.PASS_LIMIT do
+        got = O.pick("row1_" .. i, 10000, 400, pool, { min_gap = 0, min_h = 1, chance = 1, no_hang = true })
+    end
+    eq(got, nil, "the last pass is still a pass")
+    local nxt = O.pick("row1_next", 10000, 400, pool, { min_gap = 0, min_h = 1, chance = 1, no_hang = true })
+    assert(nxt and nxt.entry == vase, "the bat still blocks the deck")
+end)
+
+t.test("the dealt memory is bounded", function()
+    local O = fresh()
+    O.DEAL_MAX = 4
+    local pool = deckPool(2)
+    for i = 1, 9 do O.pick("s" .. i, 10000, 400, pool, ANY) end
+    assert(O._dealt_n <= 4, "the memory grows without end")
+end)
+
+t.test("one ornament in the folder stands in every slot", function()
+    local O = fresh()
+    local pool = deckPool(1)
+    for i = 1, 3 do assert(O.pick("x" .. i, 10000, 400, pool, ANY), "slot " .. i .. " was empty") end
 end)
 
 t.test("pick takes a per-call chance", function()
@@ -1262,6 +1289,33 @@ t.test("PNG ornaments are unpremultiplied after decoding (not SVGs NanoSVG alrea
     local dr = src:match("local function defaultRender%(.-\nend\n")
     assert(dr and dr:find("unpremultiply(", 1, true), "decoded PNGs are blended premultiplied as straight alpha")
     assert(dr:find("is_straight", 1, true), "an SVG MuPDF rendered is premultiplied too")
+end)
+
+t.test("device geometry: every piece of a mixed folder stands, in equal shares", function()
+    -- Twelve-to-fourteen test ornaments of every shape, reported twice as
+    -- "the same two over and over". PW5 row end: a 1135px row, books 280px.
+    local O = fresh()
+    local pool = {}
+    local aspects = { 0.57, 0.57, 0.48, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 9.0 }
+    for i, a in ipairs(aspects) do pool[i] = { name = "f" .. i, aspect = a, overhang = 0 } end
+    local seen = {}
+    for page = 1, 140 do
+        O.beginScreen()
+        for within = 1, 2 do
+            local pl = O.pick("page" .. page .. "|rowend|" .. within, 1135, 280, pool,
+                              { chance = math.huge, min_h_frac = O.ROW_END_MIN_H_FRAC, makes_room = true })
+            assert(pl, "a row end was left empty")
+            assert(pl.w <= 1135, "a piece is wider than the row")
+            seen[pl.entry.name] = (seen[pl.entry.name] or 0) + 1
+        end
+    end
+    local lo, hi = math.huge, 0
+    for i = 1, #pool do
+        local c = seen[pool[i].name] or 0
+        lo, hi = math.min(lo, c), math.max(hi, c)
+    end
+    assert(lo > 0, "a piece never stood")
+    eq(hi - lo, 0, "280 slots over 14 pieces: exactly 20 each")
 end)
 
 t.done()

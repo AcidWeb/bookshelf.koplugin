@@ -223,7 +223,7 @@ t.test("only the channels that cannot move a book are capped", function()
     -- different answers. The row-end reserve is the same. Both must stay
     -- pure functions of the level.
     local plan = shelf:match("\nfunction SpineShelf%.plan%(items, opts%)\n(.-)\nfunction SpineShelf%.")
-    local grp = plan:match("(local pl = orn.mod.pick%(seed, orn.budget.-%})")
+    local grp = plan:match("(pl = orn.mod.pick%(e.orn_seed, orn.budget.-%})")
     assert(grp, "the section-break pick moved")
     assert(not grp:find("budgeted", 1, true),
         "the section-break pick is budgeted; it changes packing, so that "
@@ -252,263 +252,58 @@ t.test("Rarely is exactly its promise, with no channel adding to it", function()
         .. "cancel it at Rarely")
 end)
 
-t.test("the rotation starts somewhere in the folder, and still cycles", function()
-    -- "It should cycle through them all, starting at a random position in the
-    -- file list." It began at the first file every time, so a folder always
-    -- introduced itself in the same order after every restart.
-    local body = orn:match("\nfunction M.rotationFor%(seed, count%)\n(.-)\nend\n")
-    assert(body, "rotationFor missing")
-    assert(body:find("M._rot_start", 1, true), "the start is not offset")
-    assert(body:find("+ M._rot_start) % count) + 1", 1, true),
-        "the offset does not reach the index, so it still starts at file one")
-    -- Handing them out in TURN is what gives every file an equal share; an
-    -- offset must not become a random pick per seed.
-    assert(body:find("M._rot_n + 1", 1, true) or orn:find("M._rot_n = M._rot_n + 1", 1, true),
-        "the rotation no longer advances one at a time")
-    assert(not body:find("math.random", 1, true),
-        "reseeding here would disturb anything else drawing random numbers")
-end)
-
-t.test("consecutive turns land apart in the folder, and still cover it", function()
-    -- "png's 2 and 3 appear on page 2 and on page 3." Turns handed out one
-    -- after another went to files one after another, so the two rows of a
-    -- page showed neighbours and the next page carried straight on -- a slow
-    -- march through the folder that reads as the same few pieces recurring.
-    -- A stride coprime to the set size visits every piece exactly once per
-    -- cycle without visiting them in order.
-    local fn = orn:match("\nfunction M.rotationStride%(count%)\n(.-)\nend\n")
-    assert(fn, "M.rotationStride missing")
-    assert(orn:find("M._rot_n * M.rotationStride(count)", 1, true),
-        "the stride is not applied to the turn counter")
-    local STRIDES = load("return " .. orn:match("M.ROT_STRIDES = (%b{})"))()
-    local function gcd(a, b) while b ~= 0 do a, b = b, a % b end return a end
-    local function stride(count)
-        for _i = 1, #STRIDES do
-            local st = STRIDES[_i]
-            if st < count and gcd(st, count) == 1 then return st end
-        end
-        return 1
-    end
-    for count = 2, 40 do
-        local st = stride(count)
-        eq(gcd(st, count), 1, "stride " .. st .. " shares a factor with "
-            .. count .. ", so the cycle would skip pieces")
-        -- Full coverage: n turns must visit all n pieces.
-        local hit = {}
-        for n = 0, count - 1 do hit[(n * st) % count] = true end
-        local n_hit = 0
-        for _k in pairs(hit) do n_hit = n_hit + 1 end
-        eq(n_hit, count, "a cycle of " .. count .. " only reached " .. n_hit)
-        if count > 3 then
-            assert(st > 1, "count " .. count .. " fell back to file order")
-        end
-    end
-end)
-
-t.test("the rotation turns over the pieces that FIT, in equal shares", function()
-    -- Reported twice, with twelve test ornaments in the folder: "I still have
-    -- cacti and the template plant on the same ends of the shelfs on pages 2
-    -- and 3", and again after the first attempt at a fix.
-    --
-    -- The first attempt sized a candidate and, if it came out too small,
-    -- walked on to the next. That removed the empty gaps but not the bias:
-    -- the walk always steps the same way, so a piece that can NEVER fit hands
-    -- its turn to the same successor every single time. On the maintainer's
-    -- device the two widest files came out 121px against a 124px floor and
-    -- donated all of their turns to entries 1 and 2 -- cactus and template --
-    -- which then stood three times as often as anything else.
-    --
-    -- Deciding the fit set FIRST and rotating inside it gives every eligible
-    -- piece exactly one turn.
-    local body = orn:match("\nfunction M%.pick%(seed, gap_px, stand_h, entries, o%)\n(.-)\nend\n")
-    assert(body, "pick not found")
-    assert(body:find("local fits = {}", 1, true),
-        "the fit set is not worked out before the rotation")
-    local rot = body:match("local idx = M.rotationFor%(seed, ([^)]+)%)")
-    eq(rot, "#fits",
-        "the rotation still indexes the whole folder, so a piece that cannot "
-        .. "fit keeps donating its turn to whatever follows it")
-
-    -- And the property itself, through the real pick() at the geometry the
-    -- device reported: a 974px row end, books standing 415px.
-    local M = {
-        HEIGHT_FRAC = tonumber(orn:match("M.HEIGHT_FRAC%s*=%s*([%d.]+)")),
-        MIN_H_FRAC  = tonumber(orn:match("M.MIN_H_FRAC%s*=%s*([%d.]+)")),
-        CHANCE = 0.5, _used = {}, _rot = {}, _rot_n = 0, _rot_start = 0,
-        frequency = function() return 1 end,
-        hash = function() return 0 end,
-        budgetLeft = function() return 99 end,
-    }
-    M.rotationFor = function(seed, count)
-        if not count or count <= 1 then return 1 end
-        local had = M._rot[seed]
-        if had then return ((had - 1) % count) + 1 end
-        local idx = ((M._rot_n + M._rot_start) % count) + 1
-        M._rot[seed] = idx
-        M._rot_n = M._rot_n + 1
-        return idx
-    end
-    local pick = assert(load("return function(seed, gap_px, stand_h, entries, o)\n"
-        .. body .. "\nend", "pick", "t",
-        { M = M, math = math, tostring = tostring, type = type,
-          pairs = pairs, ipairs = ipairs }))()
-    local pool, aspects = {}, { 0.57, 0.57, 0.48, 0.75, 1.0, 1.5, 2.0, 2.5,
-                                3.0, 4.0, 5.0, 6.5, 8.0, 9.0 }
-    for i, a in ipairs(aspects) do
-        pool[i] = { name = "f" .. i, aspect = a, overhang = 0 }
-    end
-    local GAP, STAND, PAGES = 974, 415, 120
-    local seen = {}
-    for page = 1, PAGES do
-        for within = 1, 2 do
-            M._used = {}                       -- beginScreen, once per page
-            local pl = pick("page" .. page .. "|rowend|" .. within, GAP, STAND,
-                            pool, { chance = math.huge, min_h_frac = 0.3 })
-            assert(pl, "the gap was left empty although something fits")
-            seen[pl.entry.name] = (seen[pl.entry.name] or 0) + 1
-        end
-    end
-    local lo, hi, standing = math.huge, 0, 0
-    for i = 1, #pool do
-        local c = seen[pool[i].name] or 0
-        if c > 0 then
-            standing = standing + 1
-            lo, hi = math.min(lo, c), math.max(hi, c)
-        end
-    end
-    assert(standing >= 10, "only " .. standing .. " of the folder ever stood")
-    -- Perfectly even is what the rotation gives; allow one for rounding when
-    -- the page count is not a multiple of the fit-set size.
-    assert(hi - lo <= 1, string.format(
-        "shares run %d..%d across the %d files that can stand; the rotation "
-        .. "is favouring some of them", lo, hi, standing))
-end)
-
-t.test("a wide ornament is given room instead of being dropped", function()
-    -- "Can we make space for wider ornaments, instead of discarding them?
-    -- Otherwise users will wonder why their ornament never appears if it's
-    -- just over some hidden limit ..." and then, of the quarter-row cap that
-    -- first replaced it: "I don't think there's any downside to allowing
-    -- ornaments that stretch the full width of the shelf?" (maintainer).
-    --
-    -- There is one, and it is not about taste. The row-end width comes off
-    -- the row BEFORE the books are packed, and fillRows seats at least one
-    -- book however little is left -- so a row that gave up everything would
-    -- show a single spine with the ornament over it. That is the only limit:
-    -- the row keeps room for a few average books and the piece has the rest.
-    local FRAC  = tonumber(orn:match("M.ROW_END_MIN_H_FRAC%s*=%s*([%d.]+)"))
-    local HFRAC = tonumber(orn:match("M.HEIGHT_FRAC%s*=%s*([%d.]+)"))
-    local MFRAC = tonumber(orn:match("M.MIN_H_FRAC%s*=%s*([%d.]+)"))
-    assert(FRAC, "the row-end constants are gone")
-    assert(FRAC < MFRAC, "a row end must allow a lower piece than a gap does")
-
-    -- The slot: everything but `keep`, floored at the old square so no shelf
-    -- is offered less than it was before.
-    local keep_expr = shelf:match("(local face_h = SpineLayout.-)\n%s*local square")
-    local room_expr = shelf:match("local room%s*=%s*([^\n]+)")
-    local slot = shelf:match("local room%s*=.-\n%s*[^\n]*\n%s*orn.row_end = ([^\n]+)")
-    assert(room_expr and room_expr:find("content_w", 1, true)
-           and room_expr:find("orn.keep", 1, true),
-        "the slot is not what the row can spare once the books have their "
-        .. "room; it is a fixed share again (" .. tostring(room_expr) .. ")")
-    assert(keep_expr, "the books-kept-back floor is gone")
-    assert(slot and slot:find("math.max(square, room)", 1, true),
-        "the row-end slot is no longer max(stand-height square, what the row can spare)")
+t.test("a wide ornament makes room for itself, up to the whole row", function()
+    -- "Can we make space for wider ornaments, instead of discarding them?",
+    -- then "each ornament makes space for itself", "max width for an ornament
+    -- is a full row, it can even have no books" (maintainer). The row-end slot
+    -- is the whole row and the pick is told it makes room; the books move over
+    -- and a row too narrow for its next book stands empty (fillRows empty_ok).
+    assert(shelf:find("orn.row_end = (opts.content_w or 0)", 1, true),
+        "the row-end slot is not the whole row")
+    assert(not shelf:find("orn.keep", 1, true),
+        "a book's width is still held back from every row-end piece")
+    local n = select(2, shelf:gsub("makes_room = true", ""))
+    eq(n, 2, "the row end and the bare plank must both make room (and only they)")
     assert(shelf:find("min_h_frac = Orn.ROW_END_MIN_H_FRAC", 1, true),
         "the row-end pick does not pass its own minimum height")
-    -- THE TWO-PASS TRAP. The floor must come from opts, never from the row's
-    -- actual books: one pass plans a page and the other the whole library, so
-    -- a statistic over `widths` would put them out of step and repeat page
-    -- numbers again.
-    assert(keep_expr:find("faceOutWidth", 1, true),
-        "the width held back is not a face-out cover, which is the widest "
-        .. "single thing a row can hold and the one that overflowed")
-    assert(keep_expr:find("opts.row_h", 1, true),
-        "the floor is not derived from opts")
-    assert(not keep_expr:find("widths", 1, true)
-           and not keep_expr:find("entries", 1, true),
-        "the floor reads the actual books, which the two planning passes "
-        .. "cannot agree on")
-    -- And the narrow-shelf guard drops the reservation by the same measure,
-    -- not by the old fixed third.
-    assert(shelf:find("content_w_books - orn.row_end < (orn.keep or 0)", 1, true),
-        "the guard no longer asks whether the books still have their room")
-    assert(not shelf:find("content_w_books <= orn.row_end * 3", 1, true),
-        "the fixed one-third guard is back; it fires on every shelf now")
 
     -- Both planning passes have to arrive at the same slot, and they do only
-    -- because both build content_w by the same subtraction. That used to be
-    -- checked by comparing the two copies of it; there is one copy now, in
-    -- _spinePlanBase, which both passes take their options from -- so the
-    -- property holds by construction, and what is pinned is that it stays so.
+    -- because both build content_w by the same subtraction, in _spinePlanBase,
+    -- which both passes take their options from.
     local base = widget:match("\nfunction BookshelfWidget:_spinePlanBase%(content_w, shelf_h, all_items%)\n(.-)\nend\n")
     assert(base and base:find("content_w       = content_w - 2 * SpineShelf.endMargin(shelf_h)", 1, true),
         "_spinePlanBase no longer computes the one content width")
-    local n = select(2, widget:gsub("SpineShelf%.endMargin%(", ""))
-    assert(n >= 1, "nothing subtracts the end margins")
     for _i, fname in ipairs({ "_buildSpineRows", "_spinePageFirsts" }) do
         local b = widget:match("\nfunction BookshelfWidget:" .. fname .. "%(.-%)\n(.-)\nend\n")
         assert(b and b:find("self:_spinePlanBase(", 1, true),
             fname .. " builds its content width outside _spinePlanBase again, "
             .. "so the two passes can disagree about the row-end slot")
     end
-    -- The pagination pass reads the stashed dims, the render the locals they
-    -- were stashed FROM: the same subtraction, as long as the stash is them.
     local pg = widget:match("\nfunction BookshelfWidget:_spinePageFirsts%(build%)\n(.-)\nend\n")
     assert(pg and pg:find("self:_spinePlanBase(d.content_w, d.shelf_h, items)", 1, true),
         "pagination no longer plans from the stashed dims")
-    -- ...and the stash really is those locals, not a second measurement.
     local stash = widget:match("self._shelf_dims = {\n(.-)\n%s*}")
     assert(stash and stash:find("content_w%s*=%s*content_w")
            and stash:find("shelf_h%s*=%s*shelf_h"),
         "the pagination pass reads dims that are no longer the render's own")
+end)
 
-    -- And the behaviour, run through the real pick(). PW5 geometry, measured
-    -- off a device screenshot: books stand 280px on a 1135px row, and an
-    -- average spine is 44px wide beside a 6px gap.
-    local body = orn:match("\nfunction M%.pick%(seed, gap_px, stand_h, entries, o%)\n(.-)\nend\n")
-    assert(body, "pick not found")
-    local env = {
-        M = { HEIGHT_FRAC = HFRAC, MIN_H_FRAC = MFRAC, CHANCE = 0.5, _used = {},
-              frequency = function() return 1 end,
-              rotationFor = function() return 1 end,
-              hash = function() return 0 end,
-              budgetLeft = function() return 99 end },
-        math = math, tostring = tostring, type = type, pairs = pairs,
-    }
-    local pick = assert(load("return function(seed, gap_px, stand_h, entries, o)\n"
-        .. body .. "\nend", "pick", "t", env))()
-    -- PW5 home tab, measured off a device screenshot and confirmed by an
-    -- on-device probe: a 1135px row, books standing 280px, one face-out
-    -- cover about 200px wide.
-    local STAND, CONTENT, COVER_W, GAP = 280, 1135, 200, 6
-    local square = math.floor(STAND * HFRAC)
-    local slot_w = math.max(square, CONTENT - (COVER_W + GAP) - 2 * GAP)
-    assert(slot_w > CONTENT / 2,
-        "the slot came out at " .. slot_w .. "px of " .. CONTENT
-        .. "; a piece that spans the shelf still cannot")
-    local function stands(gap, aspect, frac)
-        env.M._used = {}
-        return pick("s", gap, STAND, { { name = "w", aspect = aspect, overhang = 0 } },
-                    { chance = math.huge, min_h_frac = frac })
-    end
-    -- Two to one: dropped by the old square, stands in the wider slot. This
-    -- is the slot's doing alone -- it clears the gap's own floor.
-    assert(not stands(square, 2.0, MFRAC), "the old slot took a 2:1 piece; this test proves nothing")
-    local wide = stands(slot_w, 2.0, MFRAC)
-    assert(wide, "a 2:1 ornament is still dropped at a row end")
-    assert(wide.w <= slot_w, "the piece overflowed the slot it was offered")
-    -- A four-to-one banner keeps its FULL height: it is not being squeezed
-    -- into a corner, it is standing along the shelf.
-    local banner = stands(slot_w, 4.0, FRAC)
-    assert(banner and banner.h == math.floor(STAND * HFRAC),
-        "a 4:1 ornament no longer stands at full height")
-    -- And something genuinely panoramic still stands, low and long, rather
-    -- than vanishing: the lower row-end floor is what buys this.
-    assert(not stands(slot_w, 9.0, MFRAC),
-        "a 9:1 piece already cleared the gap's floor; the lower row-end floor "
-        .. "proves nothing")
-    assert(stands(slot_w, 9.0, FRAC), "a 9:1 ornament is still dropped")
+t.test("cards are dealt only to rows and gaps the page shows", function()
+    -- The render plans one page but hands plan() the list from the cursor on,
+    -- and the fill runs past the page's rows; a card dealt to a gap or row it
+    -- then throws away is gone from the round unseen, so pieces came round
+    -- again before the rest had been shown (rig: 7 dealt, 5 on screen).
+    local plan = shelf:match("\nfunction SpineShelf%.plan%(items, opts%)\n(.-)\nfunction SpineShelf%.")
+    assert(plan, "plan not found")
+    assert(not plan:find("ornament_here", 1, true),
+        "the section-break piece is dealt in the flatten again, for every gap in the list")
+    local gaps = plan:match("local gaps = setmetatable%(.-\n    end }%)")
+    assert(gaps and gaps:find("mayDeal()", 1, true),
+        "a section gap past the page can still take a card")
+    local rp = plan:match("local function rowPiece%(r, i%)(.-)\n    end\n")
+    assert(rp and rp:find("if not mayDeal(r) then return nil end", 1, true),
+        "a row past the page can still take a card")
+    assert(plan:find("dealing = false", 1, true), "the balancer can deal cards the fill never asked for")
 end)
 
 t.done()
