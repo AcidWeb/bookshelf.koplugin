@@ -835,6 +835,98 @@ function M.displayName(entry)
     return base ~= "" and base or f
 end
 
+-- ── ornaments.json ──────────────────────────────────────────────────────────
+-- Placement that belongs to an ornament FILE, so it follows the piece onto
+-- every shelf: one file in each pack (what the pack ships) and one in the
+-- ornaments folder (the reader's own changes, keyed "Pack/file.png" for a
+-- pack's piece, and never written into a pack's file, so updating a pack does
+-- not wipe them). Per field, the reader's file beats the old folder's, which
+-- beats the pack's, which beats a PNG/SVG directive, which beats the default.
+--
+-- Units hold at any DPI and shelf size: scale against the default size, lift
+-- in the piece's own height (+ up), pad in the books' stand height (each
+-- side, - tightens it against the books).
+M.JSON_NAME = "ornaments.json"
+M.FIELDS = {
+    scale  = { kind = "number", min = 0.5, max = 4, default = 1 },
+    lift   = { kind = "number", min = -1,  max = 1, default = 0 },
+    pad    = { kind = "number", min = -1,  max = 2, default = 0 },
+    hang   = { kind = "boolean" },
+    night  = { kind = "enum", values = { invert = true, off = true } },
+    mirror = { kind = "enum", values = { off = true, always = true, alternate = true }, default = "off" },
+    tap    = { kind = "table" },
+}
+
+-- cleanField(name, v) -> a usable value, or nil when v is not one.
+function M.cleanField(name, v)
+    local f = M.FIELDS[name]
+    if not f then return nil end
+    if f.kind == "number" then
+        if type(v) ~= "number" or v ~= v then return nil end
+        return math.max(f.min, math.min(f.max, v))
+    elseif f.kind == "boolean" then
+        if type(v) ~= "boolean" then return nil end
+        return v
+    elseif f.kind == "enum" then
+        return (type(v) == "string" and f.values[v]) and v or nil
+    elseif f.kind == "table" then
+        return type(v) == "table" and v or nil
+    end
+end
+
+local function decodeJson(text)
+    if M._decode then return M._decode(text) end
+    local ok, rj = pcall(require, "rapidjson")
+    if ok and rj and rj.decode then return rj.decode(text) end
+    return require("json").decode(text)
+end
+
+-- readJson(path) -> the file's table, or {} (absent, unreadable, not JSON:
+-- the last two logged, and the ornaments still stand on their defaults).
+function M.readJson(path)
+    local f = io.open(path, "r")
+    if not f then return {} end
+    local text = f:read("*a")
+    f:close()
+    local ok, t = pcall(decodeJson, text)
+    if not ok or type(t) ~= "table" then
+        logger.warn("[bookshelf] ornaments: could not read", path, tostring(t))
+        return {}
+    end
+    return t
+end
+
+-- applyLayers(e, layers): merge the settings layers (highest first) over the
+-- directives already on e, and derive what the painters read.
+local function applyLayers(e, layers)
+    local function get(name)
+        for _i, layer in ipairs(layers) do
+            local rec = layer and layer[e.lookup and e.lookup[_i] or e.name]
+            if type(rec) == "table" and rec[name] ~= nil then
+                local v = M.cleanField(name, rec[name])
+                if v ~= nil then return v end
+                logger.warn("[bookshelf] ornaments: ignoring", name, "=", tostring(rec[name]), "for", e.name)
+            end
+        end
+        return nil
+    end
+    e.scale  = get("scale") or 1
+    local lift = get("lift")
+    if lift == nil then lift = -(e.overhang or 0) end
+    e.lift   = lift
+    e.pad    = get("pad") or 0
+    local hang = get("hang")
+    if hang ~= nil then e.hang = hang or nil end
+    local night = get("night")
+    if night ~= nil then e.night_invert = (night == "invert") end
+    e.mirror = get("mirror") or "off"
+    e.tap    = get("tap")
+    -- What sizing and placement read: the part below the feet, and a raise.
+    e.overhang = (lift < 0) and -lift or 0
+    e.raise    = (lift > 0) and lift or 0
+    e.lookup = nil
+end
+
 -- listAll() -> every ornament in the folders and their packs, switched off
 -- or not, sorted by pack (loose ones first) then name; and the pack names.
 -- Both folders are read (see M.dir); a relative path present in both is the
@@ -869,12 +961,14 @@ function M.listAll()
             table.sort(names)
             table.sort(packs)
             key_parts[#key_parts + 1] = d .. "\3" .. tostring(mtime) .. "|" .. table.concat(names, "\0")
+                .. "\5" .. tostring(fs.attributes(d .. "/" .. M.JSON_NAME, "modification"))
             for _i, n in ipairs(names) do
                 if not loose[n] then loose[n], loose_root[n] = true, d end
             end
             for _i, pack in ipairs(packs) do
                 local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
-                key_parts[#key_parts + 1] = "\1" .. pack .. "\2" .. tostring(pk)
+                key_parts[#key_parts + 1] = "\1" .. pack .. "\2" .. tostring(pk) .. "\5"
+                    .. tostring(fs.attributes(d .. "/" .. pack .. "/" .. M.JSON_NAME, "modification"))
                 pack_set[pack] = true
                 pack_files[pack] = pack_files[pack] or {}
                 for _j, file in ipairs(pn or {}) do
@@ -910,6 +1004,25 @@ function M.listAll()
         end
     end)
     if not ok then out = {} end
+    -- The settings layers. The root files of both folders, then each pack's
+    -- own file, read from the folder its piece came from.
+    local root_json = {}
+    for _r, d in ipairs(roots) do root_json[_r] = M.readJson(d .. "/" .. M.JSON_NAME) end
+    local pack_json = {}
+    for _i, e in ipairs(out) do
+        local layers = {}
+        for _r = 1, #roots do layers[#layers + 1] = root_json[_r] end
+        local lookup = {}
+        for _r = 1, #roots do lookup[_r] = e.name end
+        if e.pack then
+            local pdir = e.path:match("^(.*)/[^/]+$")
+            if pack_json[pdir] == nil then pack_json[pdir] = M.readJson(pdir .. "/" .. M.JSON_NAME) end
+            layers[#layers + 1] = pack_json[pdir]
+            lookup[#layers] = e.file
+        end
+        e.lookup = lookup
+        pcall(applyLayers, e, layers)
+    end
     M._all_cache, M._all_key, M._all_packs = out, key, packs
     return out, packs
 end
