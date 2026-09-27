@@ -163,6 +163,9 @@ function M.show(entry, bw, piece)
         title = Orn.displayName(entry) .. (entry.pack and (" (" .. entry.pack .. ")") or ""),
         title_align = "center",
         buttons = buttons,
+        -- Rapid nudges land outside now and then; a tap there must not close
+        -- it (as every nudge dialog). Done or Back closes.
+        dismissable = false,
     }
     -- However it closes (Done, a tap outside, Back): write the reader's file
     -- once. ButtonDialog has no close callback of its own for all three.

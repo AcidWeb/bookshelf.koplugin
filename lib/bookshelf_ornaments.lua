@@ -921,9 +921,14 @@ local function applyLayers(e, layers)
     if night ~= nil then e.night_invert = (night == "invert") end
     e.mirror = get("mirror") or "off"
     e.tap    = get("tap")
-    -- What sizing and placement read: the part below the feet, and a raise.
-    e.overhang = (lift < 0) and -lift or 0
+    -- What sizing and placement read. The SIZE only ever follows the file's
+    -- own overhang (size_overhang): a height nudge moves a piece, it must not
+    -- resize it (device report). The lift then sinks it (sink, stopped at the
+    -- plank's front edge) or raises it.
+    e.size_overhang = e._dir and e._dir.overhang or (e.overhang or 0)
+    e.sink     = (lift < 0) and -lift or 0
     e.raise    = (lift > 0) and lift or 0
+    e.overhang = e.sink
 end
 
 -- The directive-only values, kept so a re-apply (a reader's nudge) starts
@@ -1417,11 +1422,13 @@ function M.pick(seed, gap_px, stand_h, entries, o)
             height = math.floor(width / entry.aspect)
             shrunk = true
         end
-        if entry.overhang > 0 and o.max_below and not entry.hang then
+        -- The file's own overhang sizes the piece (a nudged lift does not).
+        local size_over = entry.size_overhang or entry.overhang or 0
+        if size_over > 0 and o.max_below and not entry.hang then
             -- Shrink so the overhang never reaches past the plank's front.
-            local below = height * entry.overhang
+            local below = height * size_over
             if below > o.max_below then
-                height = math.floor(o.max_below / entry.overhang)
+                height = math.floor(o.max_below / size_over)
                 width  = math.floor(height * entry.aspect)
             end
         end
@@ -1452,7 +1459,6 @@ function M.pick(seed, gap_px, stand_h, entries, o)
     if entry then
         width, height = sizeFor(entry)
         if not width then return nil end
-        mirror = M._dealt_mirror[tostring(seed)]
     else
         -- A seed never dealt (or its piece was switched off): the top card.
         local card = topCard(entries)
@@ -1485,11 +1491,18 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         -- repeat reads as a variation (maintainer).
         local n = (M._deal_count[entryName(card)] or 0) + 1
         M._deal_count[entryName(card)] = n
-        mirror = card.mirror == "always" or (card.mirror == "alternate" and n % 2 == 0)
-        M._dealt_mirror[tostring(seed)] = mirror
+        M._dealt_mirror[tostring(seed)] = n        -- this slot's deal number
     end
-    local below = entry.hang and 0 or math.floor(height * entry.overhang)
+    local sink = entry.sink or entry.overhang or 0
+    local below = entry.hang and 0 or math.floor(height * sink)
+    -- A sink stops at the plank's front edge.
+    if o.max_below and below > o.max_below then below = o.max_below end
     M._used[entryName(entry)] = true
+    -- Mirror from the piece's CURRENT setting, every time: a change in its
+    -- menu must reach slots already dealt (device report: "mirror does
+    -- nothing"). The slot's deal number decides "every other time".
+    local deal_n = M._dealt_mirror[tostring(seed)] or 1
+    mirror = entry.mirror == "always" or (entry.mirror == "alternate" and deal_n % 2 == 0)
     return {
         entry = entry, w = width, h = height,
         above = height - below, below = below,

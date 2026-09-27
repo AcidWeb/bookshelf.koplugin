@@ -231,4 +231,10 @@ t.test("the menu opens clear of the piece it adjusts", function()
     assert(src:find("dialog:reinit(); place()", 1, true), "a redraw loses the offset")
 end)
 
+t.test("menu fix: rapid nudges cannot dismiss the menu by missing it", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    local show = src:match("dialog = ButtonDialog:new{(.-)\n    }")
+    assert(show and show:find("dismissable = false", 1, true), "a tap outside still closes the nudge menu")
+end)
+
 t.done()

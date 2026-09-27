@@ -1403,4 +1403,32 @@ t.test("json: the shelf honours padding everywhere it reserves or paints the gap
     eq(select(2, sh:gsub("max_room   = ", "")), 3, "every slot that makes room gives its whole-row ceiling")
 end)
 
+t.test("menu fix: a height nudge moves a piece, it never changes its size", function()
+    -- Device report: "Height changes the size instead of lifting the ornament".
+    -- A piece whose file overhangs was shrunk to keep its overhang on the
+    -- plank, so moving its lift moved its size.
+    local O = fresh()
+    local function at(lift)
+        local e = { name = "pot.png", aspect = 1, overhang = 0.05, size_overhang = 0.05,
+                    sink = lift < 0 and -lift or 0, raise = lift > 0 and lift or 0 }
+        return O.pick("s" .. lift, 1000, 300, { e }, { min_gap = 0, min_h = 1, chance = 1, max_below = 20, makes_room = true })
+    end
+    local a, b, c = at(-0.25), at(0), at(0.1)
+    eq(a.h, b.h, "sinking changed the size"); eq(b.h, c.h, "raising changed the size")
+    eq(b.below, 0, "at lift 0 it stands on the plank")
+    eq(a.below, 20, "a sink stops at the plank's front edge")
+    assert(c.raise > 0, "not raised")
+end)
+
+t.test("menu fix: a mirror change reaches a piece already dealt", function()
+    -- Device report: "Mirror option does nothing".
+    local O = fresh()
+    local e = { name = "m.svg", aspect = 1, overhang = 0, mirror = "off" }
+    eq(O.pick("slot", 1000, 300, { e }, ANY).mirror, false)
+    e.mirror = "always"
+    eq(O.pick("slot", 1000, 300, { e }, ANY).mirror, true, "the slot kept its old flip")
+    e.mirror = "alternate"
+    eq(O.pick("slot", 1000, 300, { e }, ANY).mirror, false, "first deal of the piece: unflipped")
+end)
+
 t.done()
