@@ -668,11 +668,26 @@ local function readSet(key)
     return (ok and type(v) == "table") and v or {}
 end
 
+-- While the ornaments browser is open (beginDeferred .. endDeferred), switches
+-- are written in memory only and flushed once at the end: a save flushes the
+-- whole settings file, and a reader tapping through a pack paid that per tap.
+M._defer = false
+function M.beginDeferred() M._defer = true end
+function M.endDeferred()
+    M._defer = false
+    local st = store()
+    if st and st.flush then pcall(st.flush) end
+end
+
 local function saveSet(key, set)
     local st = store()
     if not st then return end
-    local empty = next(set) == nil
-    pcall(function() st.save(key, (not empty) and set or nil) end)
+    local v = (next(set) ~= nil) and set or nil
+    if M._defer and st.saveDeferred then
+        pcall(function() st.saveDeferred(key, v) end)
+    else
+        pcall(function() st.save(key, v) end)
+    end
     M._list_cache, M._list_key = nil, nil   -- the next list() re-filters
 end
 

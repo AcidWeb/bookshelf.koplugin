@@ -170,4 +170,25 @@ t.test("contentBox finds the opaque part of an ornament", function()
     os.execute("rm -rf '" .. d .. "'")
 end)
 
+t.test("while deferred, switches are kept in memory and written once at the end", function()
+    local O = fresh()
+    local deferred, flushed = 0, 0
+    O._store.saveDeferred = function(k, v) deferred = deferred + 1; mem[k] = v end
+    O._store.flush = function() flushed = flushed + 1 end
+    local saved = 0
+    local real_save = O._store.save
+    O._store.save = function(k, v) saved = saved + 1; real_save(k, v) end
+    O.beginDeferred()
+    for i = 1, 5 do O.setOff("a" .. i .. ".svg", true) end
+    O.setPackOff("Autumn", true)
+    eq(saved, 0, "no flushing save while deferred")
+    eq(deferred, 6)
+    eq(flushed, 0)
+    assert(O.isOff("a3.svg") and O.isPackOff("Autumn"), "the switches read back at once")
+    O.endDeferred()
+    eq(flushed, 1, "one flush at the end")
+    O.setOff("b.svg", true)
+    eq(saved, 1, "after the end, saves are ordinary again")
+end)
+
 t.done()

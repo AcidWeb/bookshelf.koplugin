@@ -145,7 +145,7 @@ function Browser:_items()
             if self.chip == ALL or self.chip == pack then
                 for _j, e in ipairs(TP.plankEntries(pack)) do
                     out[#out + 1] = { entry = e, off = not (shown and shown.id == e.name),
-                                      pack_off = Orn.isPackOff(pack) }
+                                      pack = pack, pack_off = Orn.isPackOff(pack) }
                 end
             end
         end
@@ -154,27 +154,35 @@ function Browser:_items()
 end
 
 -- _toggle(item): switch an ornament, or a pack's plank design, on or off.
+-- A plank in a switched-off pack switches the pack on too: otherwise the tap
+-- changed nothing anyone could see (maintainer).
 function Browser:_toggle(item)
     if item.entry.is_plank then
+        if item.off and item.pack_off then O().setPackOff(item.pack, false) end
         require("lib/bookshelf_theme_pack").setPlankOn(item.entry.name, item.off)
-        -- The design's lower band hangs below the last row, into the strip a
-        -- page-turn refresh stops short of: repaint the whole panel.
-        UIManager:setDirty("all", "full")
     else
         O().setOff(item.entry.name, not item.off)
     end
     self:_changed()
 end
 
-function Browser:_changed()
-    O().invalidate()
-    -- The theme module caches which pack's plank shows; a pack switch or a
-    -- plank switch must be seen at once, not after the scan interval.
-    pcall(function() require("lib/bookshelf_theme_pack").invalidate() end)
+-- _changed(rescan): redraw the browser after a switch. The shelf behind is
+-- rebuilt once, when the browser closes (see show): it is almost all covered,
+-- and rebuilding it per tap made tapping through a pack slow. rescan (after a
+-- delete) re-lists the folders; a switch only changes what is filtered out.
+function Browser:_changed(rescan)
+    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if rescan then
+        O().invalidate()
+        if ok_t and TP then TP.invalidate() end
+    elseif ok_t and TP then
+        -- Which plank shows is memoised; a switch must be seen at once.
+        TP.forgetChoice()
+    end
+    self._dirty = true
     self.items = self:_items()
     if self._config then self._config.footer_rows = self:_footerRows() end
     if self.modal then self.modal:refresh() end
-    if self.on_change then pcall(self.on_change) end
 end
 
 function Browser:_chips()
@@ -206,7 +214,7 @@ function Browser:_confirmDelete(item)
             if not O().delete(item.entry) then
                 UIManager:show(InfoMessage:new{ text = _("Could not delete the file."), timeout = 3 })
             end
-            self:_changed()
+            self:_changed(true)
         end,
     })
 end
@@ -288,8 +296,8 @@ function Browser:_footerRows()
                 end,
                 on_tap = function()
                     TP.setWallpaperPack(TP.activeWallpaperPack() ~= pack and pack or nil)
+                    self._full = true
                     self:_changed()
-                    UIManager:setDirty("all", "full")
                 end }
         end
         if th.colours then
@@ -299,8 +307,8 @@ function Browser:_footerRows()
                 end,
                 on_tap = function()
                     TP.setColoursPack(TP.activeColoursPack() ~= pack and pack or nil)
+                    self._full = true
                     self:_changed()
-                    UIManager:setDirty("all", "full")
                 end }
         end
         if #row > 0 then rows[#rows + 1] = row end
@@ -309,14 +317,34 @@ function Browser:_footerRows()
     return rows
 end
 
--- show(on_change): on_change() runs after anything changed, so the caller can
--- redraw the shelf.
+-- show(on_change): on_change() runs once when the browser closes, if anything
+-- changed, so the caller can redraw the shelf.
 function Browser.show(on_change)
     local self = setmetatable({ chip = ALL, on_change = on_change }, { __index = Browser })
+    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+    local function plankId()
+        local pl = ok_t and TP and TP.activePlank()
+        return pl and pl.id or nil
+    end
+    local plank_before = plankId()
+    O().beginDeferred()
     self.items = self:_items()
     local function cols() return Screen:getWidth() > Screen:getHeight() and 4 or 3 end
     local function close()
         if self.modal then UIManager:close(self.modal); self.modal = nil end
+    end
+    -- However it closes (Close, the title's X, Back): write the switches,
+    -- rebuild the shelf once, and repaint the whole screen only if what shows
+    -- changed there: a plank design's lower band hangs below the last row,
+    -- into the strip a shelf refresh stops short of, and a wallpaper or a
+    -- colour theme is the whole screen.
+    local function closed()
+        O().endDeferred()
+        if not self._dirty then return end
+        if self.on_change then pcall(self.on_change) end
+        if self._full or plankId() ~= plank_before then
+            UIManager:setDirty("all", "full")
+        end
     end
     local config = {
         title = _("Ornaments"),
@@ -348,6 +376,7 @@ function Browser.show(on_change)
             }
         end,
         footer_rows = {},
+        on_closed = closed,
     }
     self._close, self._config = close, config
     config.footer_rows = self:_footerRows()

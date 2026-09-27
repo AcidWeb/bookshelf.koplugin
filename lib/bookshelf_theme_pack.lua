@@ -86,6 +86,9 @@ local function read(k)
 end
 local function save(k, v)
     local s = store(); if not s then return end
+    -- Deferred with the ornaments while the browser is open (Orn.beginDeferred).
+    local O = M._orn or package.loaded["lib/bookshelf_ornaments"]
+    if O and O._defer and s.saveDeferred then s.saveDeferred(k, v) return end
     s.save(k, v); if s.flush then pcall(s.flush) end
 end
 local function fs() return M._lfs or require("libs/libkoreader-lfs") end
@@ -195,6 +198,9 @@ function M.theme(pack)
 end
 
 function M.invalidate() M._cache = {}; M._plank_memo = nil end
+-- forgetChoice(): after a switch, work out which plank shows again, without
+-- re-listing every pack's theme folder the way invalidate() does.
+function M.forgetChoice() M._plank_memo = nil end
 
 -- wallpaperFile(w, is_full, is_dark) -> file name, and whether it is a dark
 -- variant (shown as drawn: the reader's invert-at-night does not apply).

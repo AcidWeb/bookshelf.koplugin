@@ -312,14 +312,22 @@ t.test("borrowed colours cost no file checks per read within the scan TTL", func
 end)
 
 
-t.test("the browser drops the cached plank choice on any change, and a plank switch repaints fully", function()
+t.test("the browser: a tap redraws only itself; the shelf and a full repaint wait for close", function()
     local b = io.open("lib/bookshelf_ornament_browser.lua"):read("*a")
-    local changed = b:match("function Browser:_changed%(%).-\nend")
-    assert(changed and changed:find("invalidate()", 1, true) and changed:find("theme_pack", 1, true),
-        "a pack switch must drop the cached plank choice")
+    local changed = b:match("function Browser:_changed%(.-\nend")
+    assert(changed and changed:find("forgetChoice", 1, true),
+        "a switch must drop the cached plank choice")
+    assert(not changed:find("on_change", 1, true), "every tap still rebuilds the shelf behind")
+    assert(changed:find("if rescan then", 1, true), "every tap still rescans the ornament folders")
     local toggle = b:match("function Browser:_toggle%(item%).-\nend")
-    assert(toggle and toggle:find('setDirty("all", "full")', 1, true),
-        "a plank switch changes the band under the last row: needs a full repaint")
+    assert(toggle and not toggle:find('setDirty("all", "full")', 1, true),
+        "a plank tap still flashes the whole screen")
+    assert(toggle:find("setPackOff(item.pack, false)", 1, true),
+        "a plank tap in a switched-off pack does not switch the pack on")
+    local closed = b:match("local function closed%(%).-\n    end")
+    assert(closed and closed:find("endDeferred", 1, true) and closed:find("on_change", 1, true)
+        and closed:find('setDirty("all", "full")', 1, true),
+        "closing must flush, rebuild the shelf once, and repaint fully when the plank or wallpaper changed")
     local st = io.open("lib/bookshelf_settings.lua"):read("*a")
     local row = st:match("TP%.setPlankOn%(p%.id, false%).-return")
     assert(row and row:find('setDirty("all", "full")', 1, true),

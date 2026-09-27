@@ -144,6 +144,9 @@ end
 -- removal), so we don't paint a corpse.
 function LibraryModal:onCloseWidget()
     UIManager:setDirty("all", "ui")
+    -- config.on_closed: the caller's once-per-close hook, however the modal
+    -- was closed (a footer button, the title's X, Back).
+    if self.config and self.config.on_closed then pcall(self.config.on_closed) end
 end
 
 -- Stub for InputText's parent contract. Upstream inputtext.lua:157 calls
