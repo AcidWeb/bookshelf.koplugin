@@ -21,6 +21,7 @@ row of taller cells reads better than stacking — multiple rows only kick in
 when there are more modules than fit one row.
 ]]
 local Blitbuffer      = require("ffi/blitbuffer")
+local Gestures = require("lib/bookshelf_gestures")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local ClipContainer   = require("lib/bookshelf_clip_container")
 local Device          = require("device")
@@ -213,6 +214,8 @@ end
 -- taps outside every region, and modules that declare none all pass nil, so
 -- on_tap must treat nil as the ordinary whole-card tap.
 function HeroModules._tap(bw, entry, refresh, tapped_region)
+    -- Settings > Behavior > Bookshelf gestures.
+    if not Gestures.on("module_tap") then return end
     local def = Modules.get(entry.module)
     if not def or type(def.on_tap) ~= "function" then return end
     local ctx = HeroModules._ctx(bw, refresh, entry)
@@ -229,6 +232,7 @@ function HeroModules._tap(bw, entry, refresh, tapped_region)
 end
 
 function HeroModules._hold(bw, entry)
+    if not Gestures.on("module_hold") then return end
     local ok, Edit = pcall(require, "lib/bookshelf_hero_modules_edit")
     -- pcall the show too: in the reader overlay bw is a minimal context shim, so
     -- an edit path that reaches for a widget-only method must fail safe, not

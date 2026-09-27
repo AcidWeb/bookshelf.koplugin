@@ -3824,24 +3824,18 @@ function Settings:_behaviourSubItems()
             }
         end,
     }
+    -- Every one of Bookshelf's own gestures, each switchable: to find out
+    -- what there is, and to lock a device down (maintainer: "for kids").
+    -- Absorbs issue 366's "Swipe down leaves full screen shelves" row (same
+    -- setting). Tapping a book and swiping pages are not in it: without them
+    -- the shelf cannot be used.
     items[#items + 1] = {
-        -- Issue 366: for readers who live in full screen and kept landing
-        -- back in the top panel by accident.
-        text = _("Swipe down leaves full screen shelves"),
-        help_text = _("When enabled, swiping down in full screen shelves brings"
-            .. " the top panel back. Turn off to stay in full screen: the"
-            .. " swipe then refreshes the library, as it does with the top"
-            .. " panel showing, and the top panel comes back when you tap the"
-            .. " book icon at the start of the shelf bar, or with a gesture"
-            .. " set to Bookshelf: full screen shelves on or off."),
-        checked_func   = function()
-            return BookshelfSettings.nilOrTrue("expanded_swipe_back")
-        end,
-        keep_menu_open = true,
-        callback = function()
-            BookshelfSettings.save("expanded_swipe_back",
-                not BookshelfSettings.nilOrTrue("expanded_swipe_back"))
-            BookshelfSettings.flush()
+        text = _("Bookshelf gestures"),
+        help_text = _("Switch off any of Bookshelf's own gestures. A gesture"
+            .. " switched off does nothing on the shelf. Tapping a book and"
+            .. " swiping between pages always work."),
+        sub_item_table_func = function()
+            return require("lib/bookshelf_gestures").menuItems()
         end,
     }
     items[#items + 1] = {

@@ -133,6 +133,7 @@ end)
 -- The globals below are what the extracted bodies reference as upvalues in
 -- the real module.
 _G.UIManager          = { setDirty = function() end }
+_G.Gestures           = { on = function() return true end }
 _G.logger             = { dbg = function() end }
 _G._gettime           = function() return 0 end
 _G.BookshelfSettings  = { saved = {},

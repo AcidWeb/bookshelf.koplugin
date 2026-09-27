@@ -84,7 +84,7 @@ t.test("the swipes are wired on the top panel only, and down stays clear of KORe
     assert(i_row and down:find("self:_isHeroSwipe(ges)", 1, true), "a swipe down on the top panel does not take a row")
     -- The top 1/8 is left out of the range (KOReader's menu swipe starts there).
     assert(src:find("SwipeShelvesDown = {", 1, true), "the swipe-down range moved")
-    assert(src:find('gesture_top_panel_rows', 1, true), "no switch to turn the gesture off")
+    assert(src:find('Gestures.on("top_panel_rows")', 1, true), "no switch to turn the gesture off")
 end)
 
 t.done()

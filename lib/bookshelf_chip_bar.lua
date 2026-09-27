@@ -28,6 +28,7 @@
 -- double-border rather than a seamless join — still readable.
 
 local FrameContainer = require("ui/widget/container/framecontainer")
+local Gestures = require("lib/bookshelf_gestures")
 local BookshelfSettings = require("lib/bookshelf_settings_store")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local HorizontalGroup= require("ui/widget/horizontalgroup")
@@ -2032,6 +2033,7 @@ function ChipBar:onTapStrip(_, ges)
 end
 
 function ChipBar:onSwipeStrip(_, ges)
+    if not Gestures.on("shelf_buttons_swipe") then return false end
     -- Only intercept swipes when there is more than one page of chips.
     if not (self._pages and self._pages.multi) then return false end
     local dir = ges.direction

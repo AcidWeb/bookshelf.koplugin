@@ -5,6 +5,7 @@ above the footer, plus at most one cascade-flyout panel for an open folder.
 Rebuilt fresh from the model on every open and after every edit.
 ]]
 local Blitbuffer      = require("ffi/blitbuffer")
+local Gestures = require("lib/bookshelf_gestures")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local Device          = require("device")
 local Fonts           = require("lib/bookshelf_fonts")
@@ -692,7 +693,7 @@ function StartMenu:_buildRow(entry, w, focused, in_flyout)
     end
     function row:onHold(_a, ges)
         if flyoutOwns(ges) then return false end
-        sm:_editEntry(entry); return true
+        if Gestures.on("start_menu_hold") then sm:_editEntry(entry) end; return true
     end
     return row
 end
@@ -914,7 +915,7 @@ function StartMenu:_buildModuleRow(entry, w, focused, in_flyout)
     end
     function row:onHold(_a, ges)
         if flyoutOwns(ges) then return false end
-        sm:_editEntry(entry); return true
+        if Gestures.on("start_menu_hold") then sm:_editEntry(entry) end; return true
     end
     return row
 end
@@ -950,7 +951,7 @@ function StartMenu:_buildDividerRow(entry, w)
         }
     end
     function row:onHold()
-        sm:_editEntry(entry); return true
+        if Gestures.on("start_menu_hold") then sm:_editEntry(entry) end; return true
     end
     return row
 end

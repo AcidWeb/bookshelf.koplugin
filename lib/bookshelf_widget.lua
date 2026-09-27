@@ -37,6 +37,9 @@ local ChipBar   = require("lib/bookshelf_chip_bar")
 local BandMetrics = require("lib/bookshelf_band_metrics")
 local ShelfRow    = require("lib/bookshelf_shelf_row")
 local SpineWidget = require("lib/bookshelf_spine_widget")
+-- Which of Bookshelf's own gestures the reader has switched off (Settings >
+-- Behavior > Bookshelf gestures).
+local Gestures    = require("lib/bookshelf_gestures")
 -- Covers-or-list, and the two setting keys that decide it. At file scope
 -- because _viewMode()/_isListMode() are on the hot path -- several calls per
 -- geometry pass, dozens per rebuild -- and a per-call require() of a
@@ -1844,6 +1847,7 @@ function BookshelfWidget:_rebuild()
             self:_drillBackTo(depth)
         end,
         on_hold = function(key)
+            if not Gestures.on("edit_shelf") then return end
             -- The modules chip isn't an editable tab; its long-press opens the
             -- micro-module options menu instead of the tab editor.
             if key == "modules" then
@@ -4754,15 +4758,25 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         -- A genuine double tap opens directly, skipping the stage-then-open
         -- confirmation (#271). Inert unless the user enabled KOReader's
         -- global double tap.
-        on_double_tap = function(b) self:_openOnDoubleTap(b) end,
+        on_double_tap = function(b)
+            if not Gestures.on("double_tap") then return end
+            self:_openOnDoubleTap(b)
+        end,
         on_hold      = function(b)
             if self._selection:isActive() then
                 return true  -- suppress: no per-book menu in select mode
             end
+            if not Gestures.on("top_panel_hold") then return true end
             self:_showBookDetail(b, { active = "edit" })
         end,
-        on_description_tap = function(b) self:_showFullDescription(b) end,
-        on_rating_change   = function(b, r) self:_setBookRating(b, r) end,
+        on_description_tap = function(b)
+            if not Gestures.on("description") then return end
+            self:_showFullDescription(b)
+        end,
+        on_rating_change   = function(b, r)
+            if not Gestures.on("rate") then return end
+            self:_setBookRating(b, r)
+        end,
         -- Left tappable even when the Hardcover plugin is disabled: reviews
         -- are served cache-first (fetchReviews returns within-TTL cached
         -- reviews without touching the API), so a book whose reviews were
@@ -5729,27 +5743,31 @@ function BookshelfWidget:_shelfCallbacks()
         -- Double tap on a shelf cover opens directly (#271), whether the
         -- cover is a bare SpineWidget (collapsed) or wrapped in a titled
         -- slot (expanded).
-        on_book_open      = function(b) bw:_openOnDoubleTap(b) end,
+        on_book_open      = function(b)
+            if not Gestures.on("double_tap") then return end
+            bw:_openOnDoubleTap(b)
+        end,
         on_book_hold      = function(b)
             if bw._selection:isActive() then
                 return true  -- suppress: no per-book menu in select mode
             end
+            if not Gestures.on("book_hold") then return true end
             bw:_showBookDetail(b, { active = "edit" })
         end,
         on_series_tap     = function(s) bw:_expandSeries(s) end,
-        on_series_hold    = function(s) bw:_openGroupMenu(s, "series") end,
+        on_series_hold    = function(s) if Gestures.on("group_hold") then bw:_openGroupMenu(s, "series") end end,
         on_author_tap     = function(g) bw:_expandAuthor(g) end,
-        on_author_hold    = function(g) bw:_openGroupMenu(g, "author") end,
+        on_author_hold    = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "author") end end,
         on_genre_tap      = function(g) bw:_expandGenre(g) end,
-        on_genre_hold     = function(g) bw:_openGroupMenu(g, "genre") end,
+        on_genre_hold     = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "genre") end end,
         on_tag_tap        = function(g) bw:_expandTag(g) end,
-        on_tag_hold       = function(g) bw:_openGroupMenu(g, "tag") end,
+        on_tag_hold       = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "tag") end end,
         on_language_tap   = function(g) bw:_expandLanguage(g) end,
-        on_language_hold  = function(g) bw:_openGroupMenu(g, "language") end,
+        on_language_hold  = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "language") end end,
         on_folder_tap     = function(f) bw:_expandFolder(f) end,
-        on_folder_hold    = function(f) bw:_openGroupMenu(f, "folder") end,
+        on_folder_hold    = function(f) if Gestures.on("group_hold") then bw:_openGroupMenu(f, "folder") end end,
         on_opds_nav_tap   = function(n) bw:_expandOpdsNav(n) end,
-        on_opds_nav_hold  = function(n) bw:_openOpdsNavMenu(n) end,
+        on_opds_nav_hold  = function(n) if Gestures.on("group_hold") then bw:_openOpdsNavMenu(n) end end,
     }
 end
 
@@ -6668,7 +6686,10 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
         if target < 1            then target = 1 end
         if target > total_pages  then target = total_pages end
         if target == self.page then return nil end
-        return go_page(target)
+        local go = go_page(target)
+        -- Asked on each hold, not when the footer is built, so the switch
+        -- takes effect without a rebuild.
+        return function() if Gestures.on("skip_ten") then go() end end
     end
     -- margin/bordersize swap: every button allocates the same outer footprint
     -- (margin + bordersize = focus_border) so moving focus never shifts layout.
@@ -6801,11 +6822,15 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
         text_font_face = BFont.getUIFontFace() or "cfont",
         text_font_size = 15,
         width         = slots.page,
-        callback      = function() bw:_openPageJump() end,
+        callback      = function()
+            if Gestures.on("page_jump") then bw:_openPageJump() end
+        end,
         -- Long-press: flip covers <-> list. The only footer button that
         -- reached this file without a hold -- prev/next already spend theirs
         -- on skip-ten-pages.
-        hold_callback = function() bw:_flipViewMode() end,
+        hold_callback = function()
+            if Gestures.on("style_cycle") then bw:_flipViewMode() end
+        end,
         margin        = bm("page"), bordersize = bs("page"), radius = br("page"),
         show_parent = self,
     })
@@ -14133,6 +14158,7 @@ function BookshelfWidget:onSwipeNextPage(_, ges)
     -- the preview to the next book as before (pages flip automatically when the
     -- next book lives on a different shelf page).
     if self:_isHeroSwipe(ges) then
+        if not Gestures.on("top_panel_swipe") then return false end
         if self._hero_mode == "micro" then
             if (self._hero_pages or 1) > 1 then
                 require("lib/bookshelf_hero_modules")._gotoPage(self, 1)
@@ -14148,6 +14174,7 @@ end
 
 function BookshelfWidget:onSwipePrevPage(_, ges)
     if self:_isHeroSwipe(ges) then
+        if not Gestures.on("top_panel_swipe") then return false end
         if self._hero_mode == "micro" then
             if (self._hero_pages or 1) > 1 then
                 require("lib/bookshelf_hero_modules")._gotoPage(self, -1)
@@ -14618,9 +14645,15 @@ function BookshelfWidget:_nudgeSpineRows(delta)
     return true
 end
 
-function BookshelfWidget:onShelfSpread() return self:_nudgeColumns(-1) end
+function BookshelfWidget:onShelfSpread()
+    if not Gestures.on("density") then return false end
+    return self:_nudgeColumns(-1)
+end
 -- Pinch (fingers together) = zoom out = smaller covers = more columns.
-function BookshelfWidget:onShelfPinch() return self:_nudgeColumns(1) end
+function BookshelfWidget:onShelfPinch()
+    if not Gestures.on("density") then return false end
+    return self:_nudgeColumns(1)
+end
 
 -- Set the expand/collapse state AND remember it (home_expanded), so the home
 -- screen comes back the way the user last left it. Only the deliberate
@@ -14732,10 +14765,11 @@ function BookshelfWidget:onSwipeShelvesUp(_, ges)
     -- hides the module grid (swipe-down / modules-chip restores it).
     if self._expanded then return false end
     -- Started on the top panel with rows owed: give one back instead.
-    if self:_isHeroSwipe(ges) and BookshelfSettings.nilOrTrue("gesture_top_panel_rows")
+    if self:_isHeroSwipe(ges) and Gestures.on("top_panel_rows")
             and self:_topPanelRowStep(1) then
         return true
     end
+    if not Gestures.on("full_screen_up") then return false end
     local _diag_t0 = _gettime()
     self:_setExpanded(true)
     self:_rebuild()
@@ -14789,13 +14823,14 @@ function BookshelfWidget:onSwipeShelvesDown(_, ges)
     -- Started on the top panel: one row fewer, the panel grows (issue 465).
     -- The range already leaves out the top 1/8, where KOReader's own menu
     -- swipe starts, so that still reaches KOReader.
-    if self:_isHeroSwipe(ges) and BookshelfSettings.nilOrTrue("gesture_top_panel_rows") then
+    if self:_isHeroSwipe(ges) and Gestures.on("top_panel_rows") then
         return self:_topPanelRowStep(-1)
     end
     -- Only claim the gesture for a refresh when it started in the shelf
     -- area. Returning false elsewhere (top edge, chip strip) lets
     -- KOReader's top-of-screen menu swipe-down through to its handler.
     if not self:_isShelfSwipe(ges) then return false end
+    if not Gestures.on("refresh") then return false end
     self:_refreshLibrary()
     return true
 end

@@ -17,6 +17,7 @@ local store = {}
 local function handler()
     local env = {
         BookshelfSettings = { nilOrTrue = function(k) local v = store[k]; return v == nil or v == true end },
+        Gestures = { on = function() return true end },
         _gettime = function() return 0 end,
         UIManager = { setDirty = function() end },
         logger = { dbg = function() end },
