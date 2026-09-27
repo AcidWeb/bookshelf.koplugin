@@ -19,23 +19,18 @@ local function extract(name)
     return body
 end
 
--- A widget stub: n rows on screen, between lo and hi; nudging moves n.
-local function stubWidget(n, lo, hi, mode)
+-- A widget stub: n cover rows, between lo and hi; nudging moves n.
+local function stubWidget(n, lo, hi)
     local store = {}
     local settings = {
         read = function(k) return store[k] end,
         saveDeferred = function(k, v) store[k] = v end,
-        nilOrTrue = function(k) return store[k] ~= false end,
     }
-    local self = { chip = "c1", rows = n, store = store }
-    function self:_isListMode() return mode == "list" end
-    function self:_isSpineMode() return mode == "spine" end
-    function self:_nShelves() return self.rows end
-    function self:_nudgeRows(d) self.rows = math.max(lo, math.min(hi, self.rows + d)) end
-    local key = load("return function(self)\n" .. extract("BookshelfWidget:_topPanelRowsKey()") .. "\nend")()
-    self._topPanelRowsKey = key
+    local self = { rows = n, store = store }
+    function self:_coverRows() return self.rows end
+    function self:_nudgeCoverRows(d) self.rows = math.max(lo, math.min(hi, self.rows + d)) end
     local step = load("return function(self, dir)\n" .. extract("BookshelfWidget:_topPanelRowStep(dir)") .. "\nend",
-        "step", "t", { BookshelfSettings = settings, next = next, pairs = pairs, tostring = tostring, type = type, tonumber = tonumber })()
+        "step", "t", { BookshelfSettings = settings, tonumber = tonumber })()
     self._topPanelRowStep = step
     return self
 end
@@ -47,6 +42,7 @@ t.test("down takes a row; up gives it back; then up is full screen's again", fun
     assert(w:_topPanelRowStep(-1)); eq(w.rows, 1)
     assert(w:_topPanelRowStep(-1), "at one row the swipe is still consumed")
     eq(w.rows, 1, "no fewer than the minimum")
+    eq(w.store.top_panel_rows_taken, 2, "the minimum was counted as a row taken")
     assert(w:_topPanelRowStep(1)); eq(w.rows, 2)
     assert(w:_topPanelRowStep(1)); eq(w.rows, 3)
     eq(w:_topPanelRowStep(1), false, "with nothing taken, swipe up goes to full screen")
@@ -67,16 +63,16 @@ t.test("a row count that can no longer grow forgets what it owed", function()
     eq(w:_topPanelRowStep(1), false, "and it stays forgotten")
 end)
 
-t.test("each view keeps its own count: covers, and each shelf's spines or list", function()
-    local a = stubWidget(3, 1, 4, "spine")
-    a:_topPanelRowStep(-1)
-    eq(a:_topPanelRowsKey(), "spine:c1")
-    local taken = a.store.top_panel_rows_taken
-    eq(taken["spine:c1"], 1)
-    local b = stubWidget(3, 1, 4)
-    eq(b:_topPanelRowsKey(), "covers")
-    local c = stubWidget(3, 1, 4, "list")
-    eq(c:_topPanelRowsKey(), "list:c1")
+t.test("every view steps the cover grid's count, which sizes the panel in all of them", function()
+    -- "All other shelf styles are sized based on the number of cover rows"
+    -- (maintainer): the panel must not change size on a view switch.
+    local cr = extract("BookshelfWidget:_coverRows()")
+    assert(cr:find("_asCoverGrid(", 1, true), "the count is not the cover grid's in every view")
+    local nc = extract("BookshelfWidget:_nudgeCoverRows(delta)")
+    assert(nc:find('saveDeferred("bookshelf_rows"', 1, true), "the step does not move the Rows editor's count")
+    assert(not src:find("spine:\" .. tostring(self.chip)", 1, true)
+           and not src:find("list:\" .. tostring(self.chip)", 1, true),
+        "a view keeps its own count again")
 end)
 
 t.test("the swipes are wired on the top panel only, and down stays clear of KOReader's edge", function()

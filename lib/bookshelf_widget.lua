@@ -14676,20 +14676,38 @@ end
 -- into the space; a swipe up there gives back the rows taken that way, and
 -- once there are none to give back it goes to full screen shelves as it always
 -- did (maintainer: "add a row only if you previously removed a row").
--- What is owed is remembered per view, since each keeps its own count: the
--- cover grid's is global, spines and lists keep one per shelf.
-function BookshelfWidget:_topPanelRowsKey()
-    if self:_isListMode() then return "list:" .. tostring(self.chip) end
-    if self:_isSpineMode() then return "spine:" .. tostring(self.chip) end
-    return "covers"
+--
+-- Always the COVER GRID's row count (bookshelf_rows, the Rows editor's), in
+-- every view: the top panel is the cover grid's in all of them, so it keeps
+-- its size across a view switch, and spines and lists fit their rows into
+-- whatever the panel leaves, as they always have (maintainer: "all other shelf
+-- styles are sized based on the number of cover rows").
+function BookshelfWidget:_coverRows()
+    return _asCoverGrid(function() return self:_baseShelves() end) or 1
 end
 
--- _nudgeRows(delta): one row more (+1) or fewer (-1) in the collapsed view,
--- through each view's own setter.
-function BookshelfWidget:_nudgeRows(delta)
-    if self:_isListMode() then return self:_nudgeListRows(delta) end
-    if self:_isSpineMode() then return self:_nudgeSpineRows(delta) end
-    return self:_nudgeCoverRows(delta)
+-- _nudgeCoverRows(delta): the cover grid's collapsed row count, a step.
+function BookshelfWidget:_nudgeCoverRows(delta)
+    local cur = self:_coverRows()
+    local max = _asCoverGrid(function() return self:_maxShelfRows() end) or cur
+    local new = math.max(ROWS_MIN, math.min(max, cur + delta))
+    if new == cur then return true end
+    BookshelfSettings.saveDeferred("bookshelf_rows", new)
+    self._nav_dirty = true
+    self:_scheduleNavFlush()
+    self:_clearDpadFocus()
+    if self:_isListMode() or self:_isSpineMode() then
+        self:_rebuild()
+        UIManager:setDirty(self, "ui")
+        return true
+    end
+    -- Covers resize: the draft regrid and its settle, as the pinch does.
+    self:_draftRebuild()
+    UIManager:setDirty(self, "ui")
+    if not SpineWidget.draftWasLossless() then
+        self:_scheduleCoverSettle()
+    end
+    return true
 end
 
 -- _topPanelRowStep(dir) -> handled. dir -1: take a row (consumed even at the
@@ -14698,37 +14716,14 @@ end
 -- that cannot grow any more (the reader set it in the Rows editor meanwhile)
 -- forgets what it owed.
 function BookshelfWidget:_topPanelRowStep(dir)
-    local key = self:_topPanelRowsKey()
-    local taken = BookshelfSettings.read("top_panel_rows_taken")
-    taken = type(taken) == "table" and taken or {}
-    local n = tonumber(taken[key]) or 0
+    local n = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
     if dir > 0 and n <= 0 then return false end
-    local before = self:_nShelves()
-    self:_nudgeRows(dir)
-    local moved = self:_nShelves() ~= before
-    if dir > 0 and not moved then n = 0
-    elseif moved then n = n - dir end
-    taken[key] = n > 0 and n or nil
-    BookshelfSettings.saveDeferred("top_panel_rows_taken", next(taken) and taken or nil)
+    local before = self:_coverRows()
+    self:_nudgeCoverRows(dir)
+    local moved = self:_coverRows() ~= before
+    if moved then n = n - dir elseif dir > 0 then n = 0 end
+    BookshelfSettings.saveDeferred("top_panel_rows_taken", n > 0 and n or nil)
     if dir > 0 then return moved end
-    return true
-end
-
--- _nudgeCoverRows(delta): the cover grid's collapsed row count (the Rows
--- editor's bookshelf_rows), a step at a time; the top panel takes up the rest.
-function BookshelfWidget:_nudgeCoverRows(delta)
-    local cur = self:_baseShelves()
-    local new = math.max(ROWS_MIN, math.min(self:_maxShelfRows(), cur + delta))
-    if new == cur then return true end
-    BookshelfSettings.saveDeferred("bookshelf_rows", new)
-    self._nav_dirty = true
-    self:_scheduleNavFlush()
-    self:_clearDpadFocus()
-    self:_draftRebuild()
-    UIManager:setDirty(self, "ui")
-    if not SpineWidget.draftWasLossless() then
-        self:_scheduleCoverSettle()
-    end
     return true
 end
 
