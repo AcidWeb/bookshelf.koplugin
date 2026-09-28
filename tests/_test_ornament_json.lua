@@ -313,4 +313,27 @@ t.test("size goes down to 5%, not stopping at half", function()
     eq(O.cleanField("scale", 0), 0.05)
 end)
 
+t.test("menu: a picture of the piece under its name, even while it is switched off", function()
+    package.loaded["lib/bookshelf_ornaments"] = nil
+    local O = dofile("lib/bookshelf_ornaments.lua")
+    local e = { name = "fox.png", path = "/o/fox.png", aspect = 2, overhang = 0.1,
+                scale = 3, raise = 0.5, sink = 0, lift = 0.5, mirror = "always", hang = true }
+    local pl = O.previewPlacement(e, 60, 1000)
+    eq(pl.h, 60, "the preview is not the fixed height")
+    eq(pl.w, 120, "the preview lost the piece's shape")
+    eq(pl.mirror, true, "the preview ignores the mirror setting")
+    eq(pl.hang, false); eq(pl.raise, 0); eq(pl.below, 0)
+    assert(pl.entry == e, "the preview does not render the piece itself")
+    eq(O.previewPlacement(e, 60, 50).w, 50, "a wide piece overflows the dialog")
+    local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
+    local paint = src:match("function M%.Ornament:paintTo%(bb, x, y%)(.-)\nend\n")
+    assert(paint and paint:find("M.paintPlacement(", 1, true), "the shelf and the preview paint differently")
+    local menu = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(menu:find("dialog:addWidget(previewWidget())", 1, true), "no picture in the menu")
+    local rd = menu:match("local function redraw%(%)(.-)\n    end\n")
+    assert(rd and rd:find("previewWidget()", 1, true), "the picture is not redrawn with the piece")
+    local pw = menu:match("local function previewWidget%(%)(.-)\n    end\n")
+    assert(pw and not pw:find("Orn.Ornament:new", 1, true), "the picture is a live ornament (a hold would open another menu)")
+end)
+
 t.done()

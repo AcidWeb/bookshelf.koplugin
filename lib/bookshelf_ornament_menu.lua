@@ -20,6 +20,9 @@ local M = {}
 local CHEV_UP   = "\xEE\xA1\x82"   -- U+E842 mdi-chevron-up
 local CHEV_DOWN = "\xEE\xA0\xBF"   -- U+E83F mdi-chevron-down
 local GLYPH_SIZE = 28
+-- The piece's picture under its name: what is being edited, even while it is
+-- switched off and gone from the shelf (maintainer).
+local PREVIEW_DP = 56
 
 -- Steps (small, big). Size in its own multiple; padding in the books' stand
 -- height; height (lift) in the piece's own height. The big step is the
@@ -71,6 +74,25 @@ function M.show(entry, bw, piece)
             dialog.movable:setMovedOffset({ x = 0, y = dy })
         end
     end
+    -- previewWidget(): a plain picture of the piece (not a live ornament, so
+    -- a hold on it cannot open a second menu), centred under the title.
+    -- parent = the dialog: ButtonDialog keeps added widgets that have one
+    -- across a reinit.
+    local function previewWidget()
+        local Widget          = require("ui/widget/widget")
+        local CenterContainer = require("ui/widget/container/centercontainer")
+        local Geom            = require("ui/geometry")
+        local h = Screen:scaleBySize(PREVIEW_DP)
+        local avail = dialog:getAddedWidgetAvailableWidth()
+        local pl = Orn.previewPlacement(entry, h, avail)
+        local night = false
+        pcall(function() night = require("lib/bookshelf_night_mode_sync").active() and true or false end)
+        local pic = Widget:new{ dimen = Geom:new{ w = pl.w, h = pl.h } }
+        function pic:paintTo(bb, x, y) Orn.paintPlacement(bb, x, y, pl, night) end
+        local box = CenterContainer:new{ dimen = Geom:new{ w = avail, h = h }, pic }
+        box.parent, box.not_focusable = dialog, true
+        return box
+    end
     local function redraw()
         if bw and bw._rebuild then
             -- The piece's size moves where rows, and so pages, break later
@@ -79,8 +101,12 @@ function M.show(entry, bw, piece)
             bw:_rebuild()
             UIManager:setDirty(bw, "ui")
         end
-        -- reinit builds a new MovableContainer: put the offset back.
-        if dialog then dialog:reinit(); place() end
+        -- reinit builds a new MovableContainer: put the offset back. The
+        -- picture follows the piece (its mirroring).
+        if dialog then
+            dialog._added_widgets = { previewWidget() }
+            dialog:reinit(); place()
+        end
     end
     local function set(field, value)
         Orn.readerSet(entry, field, value)
@@ -211,6 +237,7 @@ function M.show(entry, bw, piece)
     }
     -- However it closes (Done, a tap outside, Back): write the reader's file
     -- once. ButtonDialog has no close callback of its own for all three.
+    dialog:addWidget(previewWidget())
     place()
     local closeWidget = dialog.onCloseWidget
     function dialog:onCloseWidget(...)

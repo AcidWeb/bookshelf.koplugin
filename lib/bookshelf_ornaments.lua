@@ -1447,12 +1447,29 @@ end
 
 function M.Ornament:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
-    local p = self.placement
-    local img = M.render(p.entry, p.w, p.h, self.night, p.mirror)
+    M.paintPlacement(bb, x, y, self.placement, self.night)
+end
+
+-- paintPlacement(bb, x, y, p, night): a placement's picture at x, y. The
+-- shelf's pieces and the long-press menu's preview both paint through here.
+function M.paintPlacement(bb, x, y, p, night)
+    local img = M.render(p.entry, p.w, p.h, night, p.mirror)
     if not img then return end
     pcall(function()
         bb:alphablitFrom(img, x, y, 0, 0, p.w, p.h)
     end)
+end
+
+-- previewPlacement(entry, h, max_w) -> the piece at a fixed height, as its
+-- long-press menu shows it: its own shape and mirroring, not its size, lift
+-- or hang on the shelf (those are what the menu is changing), and no wider
+-- than the dialog.
+function M.previewPlacement(entry, h, max_w)
+    local proxy = setmetatable({ scale = 1, sink = 0, raise = 0, pad = 0, lift = 0, hang = false },
+                               { __index = entry })
+    local pl = M.place(proxy, max_w, h / M.HEIGHT_FRAC, {}, 1)
+    pl.entry = entry
+    return pl
 end
 
 return M
