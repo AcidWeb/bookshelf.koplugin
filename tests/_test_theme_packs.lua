@@ -380,4 +380,39 @@ t.test("the plank colour dialogs carry the Oak switch (palette tile and greyscal
     assert(pal:find("special_tile", 1, true), "the palette cannot show a custom tile")
 end)
 
+t.test("Performance tweaks can switch plank designs off; choosing a plank switches them back on", function()
+    -- Maintainer: optional things turned on by default get a switch in
+    -- Performance tweaks (a plank design costs ~35ms a spine tap on a PW5),
+    -- and it must not stop a reader choosing a plank.
+    local TP, d, settings = setup()
+    TP._plugin_root = "."
+    touch(d .. "/Woods/theme/plank.birch.middle.png")
+    TP.invalidate()
+    TP.setPlankOn("Woods/theme/plank.birch", true)
+    eq(TP.activePlank().id, "Woods/theme/plank.birch")
+    TP.setDesignsOn(false)
+    eq(TP.activePlank(), nil, "designs off: none drawn")
+    eq(TP.chosenPlank().id, "Woods/theme/plank.birch", "but the menu still knows which is chosen")
+    eq(TP.designsOn(), false)
+    TP.setPlankOn("Woods/theme/plank.birch", true)
+    eq(TP.designsOn(), true, "choosing a pack plank switches designs back on")
+    eq(TP.activePlank().id, "Woods/theme/plank.birch")
+    TP.setDesignsOn(false)
+    TP.setWood(true)
+    eq(TP.designsOn(), true, "choosing Oak switches designs back on")
+    TP.setDesignsOn(false)
+    TP.setWood(false)
+    eq(TP.designsOn(), false, "switching Oak OFF is not a choice of plank")
+    eq(settings[TP.DESIGNS_OFF_SETTING], true)
+    TP.setDesignsOn(true)
+    eq(settings[TP.DESIGNS_OFF_SETTING], nil, "on is the default, stored as nothing")
+end)
+
+t.test("the Performance tweaks row names the design in use", function()
+    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
+    local perf = st:match("function Settings:_performanceSubItems%(%)(.-)\nend\n")
+    assert(perf and perf:find("TP.chosenPlank()", 1, true), "the row does not say which plank is in use")
+    assert(perf:find("TP.setDesignsOn(", 1, true), "the row does not switch designs")
+end)
+
 t.done()

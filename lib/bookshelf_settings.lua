@@ -3555,6 +3555,37 @@ function Settings:_performanceSubItems()
             end,
         },
         {
+            -- Plank designs (the built-in Oak, on by default, or a pack's) are
+            -- optional and cost a black and white Kindle ~35ms per spine-shelf
+            -- tap, so they can be switched off here (maintainer). The row says
+            -- which one is in use; choosing a plank elsewhere switches them
+            -- back on (bookshelf_theme_pack.setDesignsOn).
+            text_func = function()
+                local TP = require("lib/bookshelf_theme_pack")
+                local p = TP.chosenPlank()
+                if not p then return _("Plank designs: none in use") end
+                local label = TP.plankLabel(p) or ""
+                if p.pack and p.name then label = T("%1 (%2)", p.name, p.pack) end
+                return T(_("Plank designs: %1"), label)
+            end,
+            help_text = _("Draw the plank design you have chosen (Oak, or one "
+                .. "from an ornament pack) on spine shelves. Drawing it is slow "
+                .. "on some black and white e-readers; turn this off to use the "
+                .. "plain plank colour instead. Choosing a plank again, in the "
+                .. "plank colour dialog or the ornaments browser, turns this back on."),
+            checked_func = function()
+                return require("lib/bookshelf_theme_pack").designsOn()
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local TP = require("lib/bookshelf_theme_pack")
+                TP.setDesignsOn(not TP.designsOn())
+                if self._bw and self._bw._rebuild then self._bw:_rebuild() end
+                UIManager:setDirty("all", "full")   -- the band under the last row
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+        {
             text = _("Instant book close (beta)"),
             help_text = _("Show Bookshelf immediately when leaving a "
                 .. "book. The book finishes closing at the next quiet "

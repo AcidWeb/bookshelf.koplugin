@@ -268,6 +268,8 @@ function M.woodOn()
 end
 function M.setWood(on)
     save(M.WOOD_SETTING, on and "oak" or false)
+    -- Choosing Oak is choosing a plank: it shows, even with designs off.
+    if on and not M.designsOn() then M.setDesignsOn(true) end
     M._plank_memo = nil
 end
 
@@ -288,12 +290,32 @@ function M.plankLabel(p) return p and (p.name or p.pack) or nil end
 -- holds the chosen plank's id.
 M._plank_memo = nil
 function M.activePlank()
+    if not M.designsOn() then return nil end
+    return M.chosenPlank()
+end
+
+-- chosenPlank() -> the plank design the reader has chosen (a pack's, or the
+-- built-in Oak), whether or not designs are switched on: what Performance
+-- tweaks names.
+function M.chosenPlank()
     local now = M._clock()
     local memo = M._plank_memo
     if memo and M.SCAN_TTL > 0 and (now - memo.at) < M.SCAN_TTL then return memo.v end
     local v = M._activePlank() or (M.woodOn() and M.builtinPlank()) or nil
     M._plank_memo = { at = now, v = v }
     return v
+end
+
+-- Plank designs on or off (Settings > Advanced > Performance tweaks): a
+-- design costs a black and white Kindle ~35ms on each spine-shelf tap (its
+-- shadow is blended onto the screen), and Oak is on by default, so it gets a
+-- switch there (maintainer). Off draws Bookshelf's own plank colour. It never
+-- stops a reader choosing a plank: choosing one switches designs back on.
+M.DESIGNS_OFF_SETTING = "plank_designs_off"
+function M.designsOn() return read(M.DESIGNS_OFF_SETTING) ~= true end
+function M.setDesignsOn(on)
+    save(M.DESIGNS_OFF_SETTING, (not on) and true or nil)
+    M._plank_memo = nil
 end
 
 function M._activePlank()
@@ -321,6 +343,8 @@ function M.setPlankOn(id, on)
     O.setOff(id, not on)
     if on then
         save(M.PLANK_SETTING, id)
+        -- Choosing a plank shows it, even with designs off (Performance tweaks).
+        if not M.designsOn() then M.setDesignsOn(true) end
     elseif cur and cur.id == id then
         save(M.PLANK_SETTING, false)        -- none, not the next in line
     end
