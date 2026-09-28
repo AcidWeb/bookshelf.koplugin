@@ -28,6 +28,9 @@ local function widget()
         local tip = self._drilldown_path[#self._drilldown_path]
         return { tip and tip.label or "top" }
     end
+    -- The list's signature (the ornament page states ride on it); not what
+    -- this suite is about.
+    function w:_spineItemsSig(items) return tostring(#items) end
     return w
 end
 local function drill(w, kind, name)

@@ -6330,8 +6330,29 @@ function BookshelfWidget:_spineCachedFetch(n)
     if type(items) == "table" and items.opds_open_ended then
         return items, hint
     end
-    self._spine_fetch_cache = { key = key, items = items, at = os.time() }
+    -- The ornament deal states (see _ornStartState) depend only on the list:
+    -- a refetch that brings back the same list keeps them, or every page
+    -- turn after the TTL would rebuild the whole page map to find its start.
+    local sig = self:_spineItemsSig(items)
+    local keep = (c and c.key == key and c.items_sig == sig) and c or nil
+    self._spine_fetch_cache = { key = key, items = items, at = os.time(), items_sig = sig,
+                                page_orn = keep and keep.page_orn or nil,
+                                orn_sig = keep and keep.orn_sig or nil,
+                                orn_epoch = keep and keep.orn_epoch or nil }
     return items, nil
+end
+
+-- _spineItemsSig(items) -> a string naming the list: its books (or groups,
+-- by first path and size) in order. Cheap next to the map build it saves.
+function BookshelfWidget:_spineItemsSig(items)
+    local parts = {}
+    for i = 1, #(items or {}) do
+        local it = items[i]
+        local id = type(it) == "table" and (it.filepath or it.path or it.name or it.text) or it
+        local n = type(it) == "table" and it.books and #it.books or 0
+        parts[i] = tostring(id) .. "#" .. n
+    end
+    return table.concat(parts, "\0")
 end
 
 -- _spineUpdateBookCounts(all_items, total_hint) — the footer's range reads

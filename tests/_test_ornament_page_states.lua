@@ -94,4 +94,26 @@ t.test("shuffle ornaments reshuffles the saved order and forgets every page", fu
     assert(b:find("self:_dropOrnPages(false)", 1, true))
 end)
 
+t.test("a refetch of the same list keeps the page states; a changed list drops them", function()
+    -- The fetch cache lives 30s. Dropping the states with it made every page
+    -- turn after half a minute's reading rebuild the whole page map.
+    local fetch = method("_spineCachedFetch")
+    local list = { { filepath = "/a" }, { filepath = "/b" }, { filepath = "/c" } }
+    local self = { chip = "all", _drilldown_path = nil }
+    self._fetchChipItems = function() local o = {} for i, x in ipairs(list) do o[i] = x end return o end
+    self._spineItemsSig = method("_spineItemsSig")
+    fetch(self, 400)
+    local c = self._spine_fetch_cache
+    c.page_orn, c.orn_sig, c.orn_epoch = { ["2:0"] = { n = 5, shelf = 2, bnd = 0, owed = {} } }, "s", 0
+    c.at = 0                                     -- expired
+    fetch(self, 400)
+    assert(self._spine_fetch_cache ~= c, "test premise: the cache was not refetched")
+    eq(self._spine_fetch_cache.page_orn["2:0"].n, 5, "the same list lost its page states")
+    eq(self._spine_fetch_cache.orn_sig, "s")
+    self._spine_fetch_cache.at = 0
+    table.remove(list, 2)
+    fetch(self, 400)
+    eq(self._spine_fetch_cache.page_orn, nil, "a changed list kept stale page states")
+end)
+
 t.done()
