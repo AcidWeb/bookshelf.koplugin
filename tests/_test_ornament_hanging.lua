@@ -167,4 +167,34 @@ t.test("a height is corrected to the real gap between rows before anything is ha
     eq(crop.y, 54, "its own-row copy's crop did not follow"); eq(crop.h, 146)
 end)
 
+t.test("a piece dangling into the row below is painted in front of that row's books", function()
+    -- Device: glasses on row 1 lowered to -10% hung behind the books of row
+    -- 2, which paints later. The row below now paints the part below its own
+    -- top AFTER its books; the piece's own row keeps the rest (cropped, so
+    -- no part is painted twice).
+    local made = {}
+    local Orn = { Ornament = { new = function(_s, t) made[#made + 1] = t; return t end } }
+    local hang = load("return function(self, rows, pitch)\n"
+        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch)") .. "\nend",
+        "hang", "t", { ipairs = ipairs, table = table, math = math, setmetatable = setmetatable,
+                       require = function(m) if m == "lib/bookshelf_ornaments" then return Orn end return require(m) end })()
+    local pl = { w = 300, h = 120, entry = {} }
+    local glasses = { name = "glasses", placement = pl, overlap_offset = { 50, 300 } }
+    local books2 = { name = "books2" }
+    local rows = { { { name = "plank1" }, glasses, _orn_list = { { w = glasses, t = -0.1, gap = 40, rh = 340 } } },
+                   { { name = "plank2" }, books2 } }
+    hang({}, rows, 380)                      -- row 2 starts 380 below row 1's top
+    local below = rows[2][#rows[2]]
+    assert(below ~= books2 and below.placement, "the row below does not paint the dangling part after its books")
+    eq(below.overlap_offset[1], 50); eq(below.overlap_offset[2], 0)
+    eq(below.placement.crop.y, 80, "the part below row 2's top does not start there")
+    eq(below.placement.crop.h, 40)
+    eq(glasses.placement.crop.h, 80, "the own row still paints the part the row below does")
+    assert(pl.crop == nil, "the shared placement was changed")
+    local within = { name = "w", placement = { w = 10, h = 10 }, overlap_offset = { 0, 100 } }
+    local rows2 = { { within, _orn_list = { { w = within, t = -0.1, gap = 40, rh = 340 } } }, { { name = "p" } } }
+    hang({}, rows2, 380)
+    eq(#rows2[2], 1, "a piece that stays in its row was copied into the row below")
+end)
+
 t.done()

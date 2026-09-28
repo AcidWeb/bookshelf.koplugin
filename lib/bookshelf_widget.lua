@@ -6088,8 +6088,31 @@ function BookshelfWidget:_hangUnder(rows, pitch)
                 end
             end
         end
-        if rows[r] then rows[r]._orn_list = nil end
     end
+    -- A piece lowered to dangle past the next row's top would be covered by
+    -- that row's books, which paint later (device report). The row below
+    -- paints the part past its top AFTER its books, and this row keeps only
+    -- the rest, so no part is painted twice.
+    local Orn
+    for r = 1, #rows - 1 do
+        for _i, n in ipairs(rows[r] and rows[r]._orn_list or {}) do
+            local pl = n.w.placement
+            local y = (n.w.overlap_offset or { 0, 0 })[2] or 0
+            if n.t < 0 and pl and pl.h and y + pl.h > pitch and y < pitch and rows[r + 1] then
+                Orn = Orn or require("lib/bookshelf_ornaments")
+                local keep = pitch - y
+                n.w.placement = setmetatable({ crop = { x = 0, y = 0, w = pl.w, h = keep } }, { __index = pl })
+                local below = Orn.Ornament:new{
+                    placement = setmetatable({ crop = { x = 0, y = keep, w = pl.w, h = pl.h - keep } },
+                                             { __index = pl }),
+                    night = n.w.night,
+                }
+                below.overlap_offset = { (n.w.overlap_offset or { 0 })[1], 0 }
+                table.insert(rows[r + 1], below)
+            end
+        end
+    end
+    for r = 1, #rows do if rows[r] then rows[r]._orn_list = nil end end
     for r = 2, #rows do
         local hang = rows[r] and rows[r]._hanging
         local above = rows[r - 1]
