@@ -187,11 +187,13 @@ end
 SpineLayout.availFn = availFn
 
 SpineLayout.MAX_EMPTY_RUN = 3
-function SpineLayout.fillRows(widths, avail_w, gap, empty_ok)
+function SpineLayout.fillRows(widths, avail_w, gap, empty_ok, hooks)
     gap = gap or 0
     local gaps = type(gap) == "table" and gap or nil
     local flat = gaps and 0 or gap
     local avail = availFn(avail_w)
+    local leadAt = hooks and hooks.lead or function() return 0 end
+    local placed = hooks and hooks.placed
     local rows = {}
     local x, first
     local n, i, empty_run = #widths, 1, 0
@@ -199,16 +201,17 @@ function SpineLayout.fillRows(widths, avail_w, gap, empty_ok)
     while i <= n do
         local w = widths[i]
         if not first then
-            if w > limit and empty_ok and empty_run < SpineLayout.MAX_EMPTY_RUN
+            -- A lead piece (a section's ornament whose boundary fell at this
+            -- row's start) stands before the book and takes its width here.
+            local lw = leadAt(i) or 0
+            if w + lw > limit and empty_ok and empty_run < SpineLayout.MAX_EMPTY_RUN
                     and empty_ok(#rows + 1) then
-                -- No room for even one book beside whatever this row reserved.
-                -- Let the row stand on that alone and try this book again on
-                -- the next one; `empty_run` stops the retry repeating.
                 rows[#rows + 1] = { first = i, last = i - 1, empty = true }
                 empty_run = empty_run + 1
                 limit = avail(#rows + 1, i)
             else
-                first, x, empty_run = i, w, 0
+                first, x, empty_run = i, lw + w, 0
+                if placed then placed(i, #rows + 1, true) end
                 i = i + 1
             end
         else
@@ -220,6 +223,7 @@ function SpineLayout.fillRows(widths, avail_w, gap, empty_ok)
                 limit = avail(#rows + 1, i)
             else
                 x = need
+                if placed then placed(i, #rows + 1, false) end
                 i = i + 1
             end
         end
@@ -289,6 +293,18 @@ function SpineLayout.balanceRows(widths, avail_w, gap, count, n_rows, opts)
         return run_w[b] - run_w[a - 1] - gapAt(a)
     end
 
+    local lead     = opts and opts.lead or {}
+    local no_break = opts and opts.no_break or {}
+    local fixed    = opts and opts.fixed or {}
+    -- A row a..b also carries book a's lead piece, when it has one.
+    local function rowWidth(a, b) return sliceWidth(a, b) + (lead[a] or 0) end
+    -- crossesFixed(a, b): a row a..b would swallow a fixed break (a lead
+    -- piece's book that must start its own row).
+    local function crossesFixed(a, b)
+        for k = a + 1, b do if fixed[k] then return true end end
+        return false
+    end
+
     -- The section penalty, and the sections already past defending.
     local runs, penalty, exempt = opts and opts.runs, 0, nil
     if runs then
@@ -320,18 +336,15 @@ function SpineLayout.balanceRows(widths, avail_w, gap, count, n_rows, opts)
         for i = r, count do
             local best, best_j
             for j = i - 1, r - 1, -1 do
-                local w = sliceWidth(j + 1, i)
-                -- One book alone always gets its row however wide it is (the
-                -- fill's contract); beyond that, an overfull row is no row,
-                -- and every j below this one is wider still.
-                if w > avail_r and j + 1 ~= i then break end
+                local a = j + 1
+                if crossesFixed(a, i) then break end   -- and every j below crosses it too
+                local w = rowWidth(a, i)
+                if w > avail_r and a ~= i then break end
                 local prev = cost[r - 1][j]
-                if prev then
+                if prev and not no_break[a] then
                     local slack = avail_r - w
                     if slack < 0 then slack = 0 end
-                    local c = prev + slack * slack + breakCost(j + 1)
-                    -- Strict, and j walks downward, so a tie keeps the
-                    -- fullest early rows -- what the greedy fill would do.
+                    local c = prev + slack * slack + breakCost(a)
                     if not best or c < best then best, best_j = c, j end
                 end
             end

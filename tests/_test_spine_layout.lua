@@ -435,4 +435,49 @@ t.test("fill: an empty row is only offered where the caller allows it", function
     for i = 1, #rows do assert(not rows[i].empty, "row " .. i .. " came back empty") end
 end)
 
+t.test("fillRows: a lead piece's width counts at a row start, and placed() reports each book", function()
+    local widths = { 50, 50, 50, 50 }
+    local placed = {}
+    local rows = SL.fillRows(widths, 120, 10, nil, {
+        lead = function(i) return i == 3 and 30 or 0 end,
+        placed = function(i, r, starts) placed[#placed + 1] = i .. ":" .. r .. (starts and "s" or "") end,
+    })
+    -- row 1: 50+10+50 = 110; book 3 starts row 2 with 30 lead: 30+50+10+50 = 140 > 120,
+    -- so book 4 goes to row 3.
+    eq(#rows, 3)
+    eq(rows[2].first, 3); eq(rows[2].last, 3)
+    eq(table.concat(placed, " "), "1:1s 2:1 3:2s 4:3s")
+end)
+
+t.test("balanceRows: no_break keeps a row from starting at a mid-row piece", function()
+    local widths = { 40, 40, 40, 40 }
+    local rows = SL.balanceRows(widths, 140, 5, 4, 2, { no_break = { [3] = true } })
+    assert(rows, "a legal partition exists")
+    assert(rows[2].first ~= 3, "a row starts at the boundary carrying a mid-row piece")
+end)
+
+t.test("balanceRows: fixed keeps a lead piece's break and counts its width", function()
+    local widths = { 40, 40, 40, 40 }
+    local rows = SL.balanceRows(widths, 140, 5, 4, 2,
+        { fixed = { [4] = true }, lead = { [4] = 50 } })
+    assert(rows, "a legal partition exists")
+    eq(rows[2].first, 4, "the lead piece's break moved")
+end)
+
+t.test("balanceRows: fixed breaks that need more rows than it has give nil, keeping the fill's rows", function()
+    local rows = SL.balanceRows({ 40, 40, 40 }, 200, 5, 3, 2,
+        { fixed = { [2] = true, [3] = true }, lead = { [2] = 10, [3] = 10 } })
+    eq(rows, nil)
+end)
+
+t.test("balanceRows: a lead piece's width counts against the row", function()
+    -- Four 40px books, 200px rows: the even split starts row 2 at book 3.
+    -- A 150px lead piece in front of book 3 makes that row 235px, so the
+    -- break has to go elsewhere.
+    local plain = SL.balanceRows({ 40, 40, 40, 40 }, 200, 5, 4, 2)
+    eq(plain[2].first, 3, "test premise: without the lead the break is at book 3")
+    local rows = SL.balanceRows({ 40, 40, 40, 40 }, 200, 5, 4, 2, { lead = { [3] = 150 } })
+    assert(rows and rows[2].first ~= 3, "the lead piece's width was not counted")
+end)
+
 t.done()
