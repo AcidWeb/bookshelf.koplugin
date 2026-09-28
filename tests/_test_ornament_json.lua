@@ -397,4 +397,16 @@ t.test("the menu picture is sized by the drawing, not by the file's transparent 
     assert(paint and paint:find("p.crop", 1, true), "the crop is not painted")
 end)
 
+t.test("menu: the piece's place in the order, with Earlier and Later, and Shuffle all asks first", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(src:find('_("Earlier")', 1, true) and src:find('_("Later")', 1, true), "no Earlier / Later")
+    assert(src:find('_("Place: %1 of %2")', 1, true), "the place in the order is not shown")
+    assert(src:find("Deck.move(entry.name, delta, onNames())", 1, true)
+           and src:find('{ text = _("Earlier"), callback = function() step(-1) end }', 1, true)
+           and src:find('{ text = _("Later"), callback = function() step(1) end }', 1, true),
+        "Earlier / Later do not move the piece")
+    local shuffle = src:match('{ text = _%("Shuffle all"%)(.-)end },')
+    assert(shuffle and shuffle:find("ConfirmBox", 1, true), "Shuffle all does not ask first")
+end)
+
 t.done()

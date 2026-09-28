@@ -225,6 +225,18 @@ function M.show(entry, bw, piece)
         }
     end
 
+    -- The pieces that are on, in the saved order: what "place" counts and
+    -- what Earlier / Later step through.
+    local function onNames()
+        Deck.sync(Orn.listAll())
+        local names = {}
+        for i, e in ipairs(Deck.order(Orn.list())) do names[i] = e.name end
+        return names
+    end
+    local function step(delta)
+        if Deck.move(entry.name, delta, onNames()) then redraw() end
+    end
+
     local MIRROR_NEXT = { off = "always", always = "alternate", alternate = "off" }
     local MIRROR_LABEL = {
         off       = _("Mirror: off"),
@@ -274,6 +286,15 @@ function M.show(entry, bw, piece)
             callback = function() M.chooseTap(entry, redraw) end,
         }},
         {
+            { text = _("Earlier"), callback = function() step(-1) end },
+            { text_func = function()
+                local i, n = Deck.position(entry.name, onNames())
+                if not i then return _("Place: off") end
+                return T(_("Place: %1 of %2"), i, n)
+            end, callback = function() end },
+            { text = _("Later"), callback = function() step(1) end },
+        },
+        {
             { text = _("Swap"), callback = closeAnd(function()
                 -- The browser in pick mode: the chosen piece takes this one's
                 -- place in the order, and this one takes the chosen piece's.
@@ -287,9 +308,19 @@ function M.show(entry, bw, piece)
             end) },
             -- A new order for every piece on every shelf (the "Bookshelf:
             -- shuffle ornaments" action), which also clears every swap.
-            { text = _("Shuffle all"), callback = closeAnd(function()
-                if bw and bw.onBookshelfShuffleOrnaments then bw:onBookshelfShuffleOrnaments() end
-            end) },
+            -- Asks first: an arrangement may have had a lot of care put into it
+            -- (maintainer).
+            { text = _("Shuffle all"), callback = function()
+                local ConfirmBox = require("ui/widget/confirmbox")
+                UIManager:show(ConfirmBox:new{
+                    text = _("Shuffle every ornament into a new order? Your swaps and moves are lost."),
+                    ok_text = _("Shuffle"),
+                    ok_callback = function()
+                        UIManager:close(dialog)
+                        if bw and bw.onBookshelfShuffleOrnaments then bw:onBookshelfShuffleOrnaments() end
+                    end,
+                })
+            end },
             -- Out of the deck and back, with the menu still open: a piece
             -- switched off keeps its place in the saved order, so switching
             -- it back on puts it where it stood (maintainer).

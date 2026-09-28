@@ -142,6 +142,26 @@ function M.swap(a, b)
     return true
 end
 
+-- position(name, on) -> its place (1-based) among the pieces that are on,
+-- and how many there are; nil for a piece not among them (switched off).
+-- `on` is those pieces' names in saved order (Deck.order's names).
+function M.position(name, on)
+    for i, n in ipairs(on or {}) do
+        if n == name then return i, #on end
+    end
+    return nil
+end
+
+-- move(name, delta, on) -> true when the piece traded places with the piece
+-- `delta` (-1 earlier, +1 later) away among the ones that are on: the long-
+-- press menu's Earlier and Later, a gentler Swap.
+function M.move(name, delta, on)
+    local i = M.position(name, on)
+    local j = i and (i + delta)
+    if not (j and j >= 1 and j <= #on) then return false end
+    return M.swap(name, on[j])
+end
+
 -- ── Patterns ────────────────────────────────────────────────────────────
 -- Which slots hold a piece, per level (maintainer's table):
 --   Rarely  shelf ends 1 in 4   group gaps never

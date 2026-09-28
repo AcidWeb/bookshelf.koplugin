@@ -382,4 +382,19 @@ t.test("sync reconciles the order with every piece on disk, once per scan", func
     eq(D.swap("a", "off1"), true, "a piece that was off cannot be swapped to")
 end)
 
+t.test("place and move: a piece's place among the pieces that are on, and one step either way", function()
+    local D, mem = fresh()
+    mem["ornament_deck"] = { "a", "off1", "b", "c" }
+    local on = { "a", "b", "c" }                      -- off1 is switched off
+    local i, n = D.position("b", on)
+    eq(i, 2); eq(n, 3)
+    eq(D.position("off1", on), nil, "a switched-off piece has no place")
+    eq(D.move("b", -1, on), true)
+    eq(table.concat(mem["ornament_deck"], ","), "b,off1,a,c", "Earlier did not swap with the piece before it that is on")
+    eq(D.move("b", -1, on and { "b", "a", "c" }), false, "the first piece moved earlier")
+    eq(D.move("c", 1, { "b", "a", "c" }), false, "the last piece moved later")
+    eq(D.move("a", 1, { "b", "a", "c" }), true)
+    eq(table.concat(mem["ornament_deck"], ","), "b,off1,c,a")
+end)
+
 t.done()
