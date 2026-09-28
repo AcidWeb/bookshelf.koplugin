@@ -1003,7 +1003,10 @@ t.test("menu fix: a height nudge moves a piece, it never changes its size", func
     local a, b, c = at(-0.25), at(0), at(0.1)
     eq(a.h, b.h, "sinking changed the size"); eq(b.h, c.h, "raising changed the size")
     eq(b.below, 0, "at lift 0 it stands on the plank")
-    eq(a.below, 20, "a sink stops at the plank's front edge")
+    -- Past the plank's front edge: a deliberate height nudge lets a piece
+    -- dangle down in front of the plank (maintainer: "allow some extra
+    -- dangle"); the file's own overhang still sizes it to fit.
+    eq(a.below, math.floor(a.h * 0.25), "a sink stopped at the plank's front edge")
     assert(c.raise > 0, "not raised")
 end)
 

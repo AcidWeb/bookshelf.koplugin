@@ -1190,12 +1190,17 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
     if not entry then return nil end
     local width, height = M.sizeFor(entry, cap_px, stand_h, o)
     local hang = (entry.hang and not o.stand) and true or false
-    -- Below the plank's surface: the file's overhang, or the reader's sink,
-    -- stopped at the plank's front edge. A hanging piece has nothing below.
+    -- Below the plank's surface: the file's overhang, or the reader's sink.
+    -- A hanging piece has nothing below.
     local sink = entry.sink
     if sink == nil then sink = entry.overhang or 0 end
     local below = hang and 0 or math.floor(height * sink)
-    if o.max_below and below > o.max_below then below = o.max_below end
+    -- The file's own overhang stays on the plank (sizeFor sizes it to fit);
+    -- a reader's deeper height nudge may take it past the front edge, to
+    -- dangle in front of the plank (maintainer: "allow some extra dangle").
+    if o.max_below and below > o.max_below and sink <= (entry.overhang or 0) then
+        below = o.max_below
+    end
     -- Mirror from the piece's CURRENT setting, so a change in its menu
     -- reaches pieces already standing.
     local mirror = entry.mirror == "always"
