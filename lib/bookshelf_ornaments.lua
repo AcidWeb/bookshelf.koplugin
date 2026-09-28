@@ -1452,23 +1452,86 @@ end
 
 -- paintPlacement(bb, x, y, p, night): a placement's picture at x, y. The
 -- shelf's pieces and the long-press menu's preview both paint through here.
+-- A placement with a crop (the menu's picture) paints only the drawing.
 function M.paintPlacement(bb, x, y, p, night)
     local img = M.render(p.entry, p.w, p.h, night, p.mirror)
     if not img then return end
+    local c = p.crop
     pcall(function()
-        bb:alphablitFrom(img, x, y, 0, 0, p.w, p.h)
+        if c then bb:alphablitFrom(img, x, y, c.x, c.y, c.w, c.h)
+        else bb:alphablitFrom(img, x, y, 0, 0, p.w, p.h) end
     end)
+end
+
+-- silhouette(src, v, frac, BB) -> a copy of src in one flat grey v, at frac
+-- of its alpha: the drawing's shape as a shadow (the long-press menu's
+-- picture casts one). Pre-inverted like everything painted: v = 255 at night
+-- shows dark on an inverting panel. Per pixel, so the caller caches it.
+function M.silhouette(src, v, frac, BB)
+    BB = BB or require("ffi/blitbuffer")
+    local w, h = src:getWidth(), src:getHeight()
+    local dst = BB.new(w, h, BB.TYPE_BBRGB32)
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local c = src:getPixel(x, y):getColorRGB32()
+            local a = math.floor((c.alpha or 255) * frac)
+            if a > 0 then dst:setPixel(x, y, BB.ColorRGB32(v, v, v, a)) end
+        end
+    end
+    return dst
+end
+
+-- shadowFor(pl, night) -> the silhouette of a placement's picture, cached per
+-- file, size, flip and night (a nudge redraws the menu; the picture's size
+-- does not change with it).
+M.SHADOW_ALPHA = 0.35
+M._shadows, M._shadow_order = {}, {}
+function M.shadowFor(pl, night)
+    local key = table.concat({ pl.entry.path or pl.entry.name, pl.w, pl.h,
+                               tostring(pl.mirror), tostring(night) }, "|")
+    if M._shadows[key] then return M._shadows[key] end
+    local img = M.render(pl.entry, pl.w, pl.h, night, pl.mirror)
+    if not img then return nil end
+    local ok, sh = pcall(M.silhouette, img, night and 255 or 0, M.SHADOW_ALPHA)
+    if not ok or not sh then return nil end
+    M._shadows[key] = sh
+    M._shadow_order[#M._shadow_order + 1] = key
+    while #M._shadow_order > 4 do
+        local old = table.remove(M._shadow_order, 1)
+        local ob = M._shadows[old]
+        M._shadows[old] = nil
+        if ob and ob.free then pcall(function() ob:free() end) end
+    end
+    return sh
 end
 
 -- previewPlacement(entry, h, max_w) -> the piece at a fixed height, as its
 -- long-press menu shows it: its own shape and mirroring, not its size, lift
 -- or hang on the shelf (those are what the menu is changing), and no wider
 -- than the dialog.
+-- Sized by the DRAWING (contentBox), not by the file: a PNG's transparent
+-- room is right on the shelf and wasted here, as in the browser. pl.crop is
+-- the drawn part, in the rendered picture's px.
 function M.previewPlacement(entry, h, max_w)
     local proxy = setmetatable({ scale = 1, sink = 0, raise = 0, pad = 0, lift = 0, hang = false },
                                { __index = entry })
-    local pl = M.place(proxy, max_w, h / M.HEIGHT_FRAC, {}, 1)
+    local l, t, r, b
+    if entry.path then l, t, r, b = M.contentBox(entry) end
+    local fw = (l and r) and math.max(0.05, r - l) or 1
+    local fh = (t and b) and math.max(0.05, b - t) or 1
+    -- Render big enough that the drawn part comes out h tall, no wider than
+    -- max_w.
+    local H = h / fh
+    local aspect = entry.aspect or 1
+    if H * aspect * fw > max_w then H = max_w / (aspect * fw) end
+    local pl = M.place(proxy, math.floor(H * aspect + 0.5), H / M.HEIGHT_FRAC, {}, 1)
     pl.entry = entry
+    if l then
+        local cx, cy = math.floor(l * pl.w + 0.5), math.floor(t * pl.h + 0.5)
+        pl.crop = { x = cx, y = cy,
+                    w = math.max(1, math.floor(r * pl.w + 0.5) - cx),
+                    h = math.max(1, math.floor(b * pl.h + 0.5) - cy) }
+    end
     return pl
 end
 

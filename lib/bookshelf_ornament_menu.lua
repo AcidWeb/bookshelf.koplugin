@@ -20,9 +20,37 @@ local M = {}
 local CHEV_UP   = "\xEE\xA1\x82"   -- U+E842 mdi-chevron-up
 local CHEV_DOWN = "\xEE\xA0\xBF"   -- U+E83F mdi-chevron-down
 local GLYPH_SIZE = 28
--- The piece's picture under its name: what is being edited, even while it is
--- switched off and gone from the shelf (maintainer).
-local PREVIEW_DP = 56
+-- The piece's picture, top left beside its name: what is being edited, even
+-- while it is switched off and gone from the shelf. A tall piece may rise a
+-- quarter of its height above the dialog's frame, over a drop shadow cast by
+-- a flat-colour copy of itself (maintainer).
+M.HEADER_DP = 56        -- the header row inside the frame
+M.OVERHANG  = 0.25      -- how much of the picture may stand above it
+M.SHADOW_DP = 3         -- the shadow's offset, right and down
+
+-- OrnDialog: a ButtonDialog whose region reaches above its frame by
+-- self.overhang px, a strip that paints nothing (the shelf shows through)
+-- but that the dialog owns, so opening refreshes it and closing repaints
+-- what is under it. Without it the risen part of the picture would ghost.
+local OrnDialog
+local function dialogClass()
+    if OrnDialog then return OrnDialog end
+    local ButtonDialog = require("ui/widget/buttondialog")
+    OrnDialog = ButtonDialog:extend{ overhang = 0 }
+    function OrnDialog:init()
+        ButtonDialog.init(self)
+        if (self.overhang or 0) > 0 and self.movable and self.movable[1] then
+            local VerticalGroup = require("ui/widget/verticalgroup")
+            local VerticalSpan  = require("ui/widget/verticalspan")
+            self.movable[1] = VerticalGroup:new{
+                align = "left",
+                VerticalSpan:new{ width = self.overhang },
+                self.movable[1],
+            }
+        end
+    end
+    return OrnDialog
+end
 
 -- Steps (small, big). Size in its own multiple; padding in the books' stand
 -- height; height (lift) in the piece's own height. The big step is the
@@ -60,7 +88,6 @@ end
 -- on screen (its dimen), for keeping the menu clear of it.
 function M.show(entry, bw, piece)
     local UIManager    = require("ui/uimanager")
-    local ButtonDialog = require("ui/widget/buttondialog")
     local Orn = O()
     -- The LIVE entry for this piece: the shelf's own may be older than the
     -- last rescan (see Orn.current). Every label below reads this upvalue.
@@ -74,22 +101,76 @@ function M.show(entry, bw, piece)
             dialog.movable:setMovedOffset({ x = 0, y = dy })
         end
     end
-    -- previewWidget(): a plain picture of the piece (not a live ornament, so
-    -- a hold on it cannot open a second menu), centred under the title.
-    -- parent = the dialog: ButtonDialog keeps added widgets that have one
-    -- across a reinit.
-    local function previewWidget()
-        local Widget          = require("ui/widget/widget")
-        local CenterContainer = require("ui/widget/container/centercontainer")
-        local Geom            = require("ui/geometry")
-        local h = Screen:scaleBySize(PREVIEW_DP)
-        local avail = dialog:getAddedWidgetAvailableWidth()
-        local pl = Orn.previewPlacement(entry, h, avail)
+    local function nightNow()
         local night = false
         pcall(function() night = require("lib/bookshelf_night_mode_sync").active() and true or false end)
-        local pic = Widget:new{ dimen = Geom:new{ w = pl.w, h = pl.h } }
-        function pic:paintTo(bb, x, y) Orn.paintPlacement(bb, x, y, pl, night) end
-        local box = CenterContainer:new{ dimen = Geom:new{ w = avail, h = h }, pic }
+        return night
+    end
+    -- The picture's placement: a box one header row tall plus the quarter it
+    -- may rise, no wider than half again the row. Its size ignores the
+    -- piece's own size nudge, so the header holds still while you nudge.
+    local header_h = Screen:scaleBySize(M.HEADER_DP)
+    local function picture()
+        return Orn.previewPlacement(entry, math.floor(header_h * (1 + M.OVERHANG)),
+                                    math.floor(header_h * 1.6))
+    end
+    -- The drawn size: the crop when the file carries transparent room.
+    local function shown(pl)
+        if pl.crop then return pl.crop.w, pl.crop.h end
+        return pl.w, pl.h
+    end
+    local function overhangFor(pl) return math.max(0, select(2, shown(pl)) - header_h) end
+    -- headerWidget(): the picture top left (a plain picture, not a live
+    -- ornament, so a hold on it cannot open a second menu), the name and the
+    -- pack beside it. parent = the dialog: ButtonDialog keeps added widgets
+    -- that have one across a reinit.
+    local function headerWidget()
+        local Widget          = require("ui/widget/widget")
+        local HorizontalGroup = require("ui/widget/horizontalgroup")
+        local HorizontalSpan  = require("ui/widget/horizontalspan")
+        local VerticalGroup   = require("ui/widget/verticalgroup")
+        local CenterContainer = require("ui/widget/container/centercontainer")
+        local LeftContainer   = require("ui/widget/container/leftcontainer")
+        local TextWidget      = require("lib/bookshelf_colour_text")
+        local Font            = require("ui/font")
+        local Geom            = require("ui/geometry")
+        local avail = dialog:getAddedWidgetAvailableWidth()
+        local pl = picture()
+        local night = nightNow()
+        local d = Screen:scaleBySize(M.SHADOW_DP)
+        local rise = overhangFor(pl)
+        -- The slot is the header row; a taller picture stands on its foot and
+        -- rises out of the top, a shorter one is centred in it.
+        local sw, sh = shown(pl)
+        local c = pl.crop or { x = 0, y = 0, w = pl.w, h = pl.h }
+        local pic = Widget:new{ dimen = Geom:new{ w = sw + d, h = header_h } }
+        function pic:paintTo(bb, x, y)
+            local top = (rise > 0) and (y - rise) or (y + math.floor((header_h - sh) / 2))
+            local shadow = Orn.shadowFor(pl, night)
+            if shadow then
+                pcall(function() bb:alphablitFrom(shadow, x + d, top + d, c.x, c.y, c.w, c.h) end)
+            end
+            Orn.paintPlacement(bb, x, top, pl, night)
+        end
+        local gap = Screen:scaleBySize(10)
+        local text_w = math.max(1, avail - pic.dimen.w - gap)
+        local sub = entry.pack or ""
+        if Orn.isOff(entry.name) then
+            sub = (sub ~= "" and (sub .. " \xC2\xB7 ") or "") .. _("switched off")   -- U+00B7 middle dot
+        end
+        local lines = VerticalGroup:new{ align = "left",
+            TextWidget:new{ text = Orn.displayName(entry), face = Font:getFace("x_smalltfont"),
+                            bold = true, max_width = text_w },
+        }
+        if sub ~= "" then
+            lines[#lines + 1] = TextWidget:new{ text = sub, face = Font:getFace("x_smallinfofont"),
+                                                max_width = text_w }
+        end
+        local box = HorizontalGroup:new{ align = "center",
+            pic,
+            HorizontalSpan:new{ width = gap },
+            LeftContainer:new{ dimen = Geom:new{ w = text_w, h = header_h }, lines },
+        }
         box.parent, box.not_focusable = dialog, true
         return box
     end
@@ -104,7 +185,7 @@ function M.show(entry, bw, piece)
         -- reinit builds a new MovableContainer: put the offset back. The
         -- picture follows the piece (its mirroring).
         if dialog then
-            dialog._added_widgets = { previewWidget() }
+            dialog._added_widgets = { headerWidget() }
             dialog:reinit(); place()
         end
     end
@@ -227,17 +308,16 @@ function M.show(entry, bw, piece)
             { text = _("Done"), callback = closeAnd() },
         },
     }
-    dialog = ButtonDialog:new{
-        title = Orn.displayName(entry) .. (entry.pack and (" (" .. entry.pack .. ")") or ""),
-        title_align = "center",
+    dialog = dialogClass():new{
         buttons = buttons,
+        overhang = overhangFor(picture()),
         -- Rapid nudges land outside now and then; a tap there must not close
         -- it (as every nudge dialog). Done or Back closes.
         dismissable = false,
     }
     -- However it closes (Done, a tap outside, Back): write the reader's file
     -- once. ButtonDialog has no close callback of its own for all three.
-    dialog:addWidget(previewWidget())
+    dialog:addWidget(headerWidget())
     place()
     local closeWidget = dialog.onCloseWidget
     function dialog:onCloseWidget(...)

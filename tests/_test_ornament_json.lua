@@ -233,7 +233,7 @@ end)
 
 t.test("menu fix: rapid nudges cannot dismiss the menu by missing it", function()
     local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
-    local show = src:match("dialog = ButtonDialog:new{(.-)\n    }")
+    local show = src:match("dialog = dialogClass%(%):new{(.-)\n    }")
     assert(show and show:find("dismissable = false", 1, true), "a tap outside still closes the nudge menu")
 end)
 
@@ -329,11 +329,72 @@ t.test("menu: a picture of the piece under its name, even while it is switched o
     local paint = src:match("function M%.Ornament:paintTo%(bb, x, y%)(.-)\nend\n")
     assert(paint and paint:find("M.paintPlacement(", 1, true), "the shelf and the preview paint differently")
     local menu = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
-    assert(menu:find("dialog:addWidget(previewWidget())", 1, true), "no picture in the menu")
+    assert(menu:find("dialog:addWidget(headerWidget())", 1, true), "no picture in the menu")
     local rd = menu:match("local function redraw%(%)(.-)\n    end\n")
-    assert(rd and rd:find("previewWidget()", 1, true), "the picture is not redrawn with the piece")
-    local pw = menu:match("local function previewWidget%(%)(.-)\n    end\n")
+    assert(rd and rd:find("headerWidget()", 1, true), "the picture is not redrawn with the piece")
+    local pw = menu:match("local function headerWidget%(%)(.-)\n    end\n")
     assert(pw and not pw:find("Orn.Ornament:new", 1, true), "the picture is a live ornament (a hold would open another menu)")
+end)
+
+t.test("silhouette: a flat-colour copy that keeps the drawing's shape, at a fraction of its alpha", function()
+    package.loaded["lib/bookshelf_ornaments"] = nil
+    local O = dofile("lib/bookshelf_ornaments.lua")
+    local px = { [0] = { [0] = 255, [1] = 0 }, [1] = { [0] = 128, [1] = 40 } }   -- px[y][x] alpha
+    local src = {
+        getWidth = function() return 2 end, getHeight = function() return 2 end,
+        getType = function() return 5 end,
+        getPixel = function(_s, x, y)
+            return { getColorRGB32 = function() return { r = 200, g = 10, b = 90, alpha = px[y][x] } end }
+        end,
+    }
+    local set = {}
+    local BB = {
+        TYPE_BBRGB32 = 9,
+        new = function(w, h) return { w = w, h = h, setPixel = function(_d, x, y, c) set[y * 2 + x] = c end } end,
+        ColorRGB32 = function(r, g, b, a) return { r = r, g = g, b = b, alpha = a } end,
+    }
+    local dst = O.silhouette(src, 0, 0.4, BB)
+    eq(dst.w, 2); eq(dst.h, 2)
+    eq(set[0].alpha, 102, "full alpha at 40%"); eq(set[0].r, 0); eq(set[0].g, 0)
+    eq(set[1] == nil or set[1].alpha == 0, true, "a clear pixel gained a shadow")
+    eq(set[2].alpha, 51); eq(set[3].alpha, 16)
+    local white = O.silhouette(src, 255, 0.4, BB)
+    eq(set[0].r, 255, "the night shadow is not painted light (pre-inverted)")
+end)
+
+t.test("menu: the picture stands top left, may rise a quarter above the frame, with a drop shadow", function()
+    local menu = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(menu:find("OrnDialog = ButtonDialog:extend", 1, true), "no dialog that can hold an overhang")
+    local init = menu:match("function OrnDialog:init%(%)(.-)\n    end\n")
+    assert(init and init:find("ButtonDialog.init(self)", 1, true) and init:find("VerticalSpan", 1, true),
+        "the dialog does not reserve the strip the picture rises into (it would ghost on e-ink)")
+    assert(menu:find("M%.OVERHANG%s*=%s*0%.25"), "the rise is not a quarter")
+    local hdr = menu:match("local function headerWidget%(%)(.-)\n    end\n")
+    assert(hdr and hdr:find("HorizontalGroup", 1, true), "the picture is not beside the name")
+    assert(hdr:find("Orn.shadowFor(", 1, true), "no drop shadow")
+    local paint = hdr:match("function pic:paintTo%(bb, x, y%)(.-)\n        end")
+    assert(paint and paint:find("shadow", 1, true) and paint:find("Orn.paintPlacement", 1, true)
+           and paint:find("shadow", 1, true) < paint:find("Orn.paintPlacement", 1, true),
+        "the shadow is not painted under the picture")
+    assert(not menu:match("dialogClass%(%):new{%s*\n%s*title ="), "the plain text title is still there")
+end)
+
+t.test("the menu picture is sized by the drawing, not by the file's transparent room", function()
+    -- Rig: a lantern whose PNG carries room above the drawing barely rose
+    -- above the frame, because the ROOM filled the box (the browser crops
+    -- the same way, through contentBox).
+    package.loaded["lib/bookshelf_ornaments"] = nil
+    local O = dofile("lib/bookshelf_ornaments.lua")
+    local e = { name = "lan.png", path = "/o/lan.png", aspect = 0.5, overhang = 0 }
+    O._content["/o/lan.png|0.5"] = { 0.1, 0.25, 0.9, 1 }    -- the top quarter is empty
+    local pl = O.previewPlacement(e, 60, 1000)
+    assert(pl.crop, "no crop to the drawing")
+    eq(pl.crop.h, 60, "the drawing is not the box's height")
+    eq(pl.h, 80, "rendered too small to crop to 60")
+    eq(pl.crop.y, 20)
+    local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
+    local paint = src:match("function M%.paintPlacement%(bb, x, y, p, night%)(.-)\nend\n")
+    assert(paint and paint:find("p.crop", 1, true), "the crop is not painted")
 end)
 
 t.done()
