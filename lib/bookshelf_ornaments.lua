@@ -949,6 +949,28 @@ end
 
 -- readerSet(entry, field, value): one field of the reader's record (nil
 -- removes it; an empty record is dropped), applied to the piece at once.
+-- current(entry) -> the live entry for the same piece. A rescan (the reader's
+-- own save changes the file's mtime, which is in the scan key) builds new
+-- entries, and the shelf draws from those; a menu opened on a piece before it
+-- holds the old one (device report: edits that did nothing, then "reverted").
+function M.current(entry)
+    if not (entry and entry.name) then return entry end
+    local all = M.listAll()
+    for _i, e in ipairs(all or {}) do
+        if e.name == entry.name then return e end
+    end
+    return entry
+end
+
+-- reapplyAll(entry): the reader's record, applied to the given entry AND the
+-- live one(s) for the same piece.
+local function reapplyAll(entry)
+    reapply(entry)
+    for _i, e in ipairs(M._all_cache or {}) do
+        if e ~= entry and e.name == entry.name then reapply(e) end
+    end
+end
+
 function M.readerSet(entry, field, value)
     if not (entry and entry.name and M.FIELDS[field]) then return end
     local t = M.readerTable()
@@ -956,7 +978,7 @@ function M.readerSet(entry, field, value)
     rec[field] = value
     t[entry.name] = next(rec) and rec or nil
     M._reader_dirty = true
-    reapply(entry)
+    reapplyAll(entry)
 end
 
 -- readerReset(entry): the reader's record for the piece goes; the pack's
@@ -968,7 +990,7 @@ function M.readerReset(entry)
         t[entry.name] = nil
         M._reader_dirty = true
     end
-    reapply(entry)
+    reapplyAll(entry)
 end
 
 local function encodeJson(t)
@@ -1488,6 +1510,14 @@ function M.pick(seed, gap_px, stand_h, entries, o)
     -- its menu reaches slots already dealt.
     local mirror = entry.mirror == "always"
                    or (entry.mirror == "alternate" and deal_no % 2 == 0)
+    -- How far a NEGATIVE padding may tighten: the image's own transparent
+    -- margin on its narrower clear side (so the drawing, not its box, meets
+    -- the books). Probed only for a piece being tightened; cached per file.
+    local slack_px = 0
+    if (entry.pad or 0) < 0 and entry.path then
+        local l, _t, r = M.contentBox(entry)
+        if l and r then slack_px = math.max(0, math.floor(math.min(l, 1 - r) * width + 1e-6)) end
+    end
     return {
         entry = entry, w = width, h = height,
         above = height - below, below = below,
@@ -1498,6 +1528,7 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         -- Extra room each side, in px (negative: tighter against the books);
         -- the shelf adds it to its own pad, never below touching.
         pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
+        slack_px = slack_px,
     }
 end
 

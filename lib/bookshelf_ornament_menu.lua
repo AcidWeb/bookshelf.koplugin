@@ -56,6 +56,9 @@ function M.show(entry, bw, piece)
     local UIManager    = require("ui/uimanager")
     local ButtonDialog = require("ui/widget/buttondialog")
     local Orn = O()
+    -- The LIVE entry for this piece: the shelf's own may be older than the
+    -- last rescan (see Orn.current). Every label below reads this upvalue.
+    entry = Orn.current(entry)
     local dialog
 
     local Screen = require("device").screen
@@ -78,6 +81,7 @@ function M.show(entry, bw, piece)
     end
     local function set(field, value)
         Orn.readerSet(entry, field, value)
+        entry = Orn.current(entry)
         redraw()
     end
     local function nudge(field, sign, big)
@@ -154,6 +158,7 @@ function M.show(entry, bw, piece)
             end) },
             { text = _("Reset"), callback = function()
                 Orn.readerReset(entry)
+                entry = Orn.current(entry)
                 redraw()
             end },
             { text = _("Done"), callback = closeAnd() },

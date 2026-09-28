@@ -4365,9 +4365,11 @@ function SpineShelf.ornamentY(pl, stand_h, opts)
 end
 
 -- ornPad(base, pl) -> the room each side of a placed piece: the shelf's own
--- pad plus the piece's padding (ornaments.json, px), never below touching.
+-- pad plus the piece's padding (ornaments.json, px).
+-- A negative padding may go past touching the image's box, as far as its own
+-- transparent side (pl.slack_px), so the drawing meets the books.
 function SpineShelf.ornPad(base, pl)
-    return math.max(0, (base or 0) + (pl and pl.pad_px or 0))
+    return math.max(-(pl and pl.slack_px or 0), (base or 0) + (pl and pl.pad_px or 0))
 end
 
 function SpineShelf.rowWidget(opts)

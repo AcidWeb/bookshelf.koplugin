@@ -237,4 +237,25 @@ t.test("menu fix: rapid nudges cannot dismiss the menu by missing it", function(
     assert(show and show:find("dismissable = false", 1, true), "a tap outside still closes the nudge menu")
 end)
 
+t.test("an edit reaches the piece the shelf draws, even after a rescan made new entries", function()
+    -- Device report: "sometimes I'll make changes in the ornament menu and
+    -- nothing changes; if I close and reopen, it has reverted". The menu
+    -- held the entry from before a rescan (the reader's own save changes
+    -- the file's mtime, which is in the scan key), and edited that one.
+    local O, new = setup()
+    O.SCAN_TTL = 0
+    O._encode = function() return "{}" end
+    svg(new .. "/cat.svg")
+    local old = byName(O)["cat.svg"]
+    O.readerSet(old, "scale", 1.2)
+    O.saveReader()
+    os.execute("sleep 1")
+    write(new .. "/ornaments.json", '{ "cat.svg": { "scale": 1.2 } }')   -- as saved
+    local fresh = byName(O)["cat.svg"]
+    assert(fresh ~= old, "the rescan was expected to build new entries")
+    O.readerSet(old, "scale", 1.5)       -- the menu still holds the old entry
+    eq(byName(O)["cat.svg"].scale, 1.5, "the shelf's entry did not get the edit")
+    eq(O.current(old).scale, 1.5, "the menu cannot find the live entry")
+end)
+
 t.done()
