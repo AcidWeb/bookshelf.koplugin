@@ -2998,12 +2998,73 @@ end
 -- -> strip, top_h: the whole design composed across `width` (the screen, or
 -- the row alone offscreen), middle clipped to the plank with its bevels cut,
 -- ends over it. Pre-inverted for an inverting frame, like the ornaments.
+-- alphaRegions(w, h, alphaAt) -> { {x, y, w, h, solid}, ... }: the parts of
+-- a w x h image worth painting, as few rectangles as it can: rows (and runs
+-- within them) that are fully transparent left out, fully opaque runs marked
+-- solid (a plain copy), the rest to be alpha-blended. Consecutive rows with
+-- the same runs merge into one rectangle.
+--
+-- Why: a plank design strip is the full screen width by three bands, and
+-- blending all of it on every row at every paint was ~20% of a spine-shelf
+-- tap on a PW5 (profile, 2026-09-28). Its top band is usually empty (it sits
+-- behind the books) and its middle band solid wood, so most of that blend
+-- was work with no effect. A strip too fragmented to be worth splitting (more
+-- than MAX_ALPHA_REGIONS pieces) comes back as one rectangle to blend.
+SpineShelf.MAX_ALPHA_REGIONS = 64
+function SpineShelf.alphaRegions(w, h, alphaAt)
+    local function cls(a) if a == 0 then return 0 elseif a == 255 then return 1 end return 2 end
+    local rects, open, prev_sig = {}, {}, nil
+    for y = 0, h - 1 do
+        local runs, x = {}, 0
+        while x < w do
+            local c = cls(alphaAt(x, y))
+            local x0 = x
+            x = x + 1
+            while x < w and cls(alphaAt(x, y)) == c do x = x + 1 end
+            if c ~= 0 then runs[#runs + 1] = { x0, x - x0, c } end
+        end
+        local run_sig = {}
+        for i, r in ipairs(runs) do run_sig[i] = r[1] .. ":" .. r[2] .. ":" .. r[3] end
+        local sig = table.concat(run_sig, ",")
+        if sig == prev_sig then
+            for _i, rect in ipairs(open) do rect.h = rect.h + 1 end
+        else
+            open = {}
+            for _i, r in ipairs(runs) do
+                local rect = { x = r[1], y = y, w = r[2], h = 1, solid = (r[3] == 1) }
+                rects[#rects + 1] = rect
+                open[#open + 1] = rect
+            end
+            prev_sig = sig
+        end
+        if #rects > SpineShelf.MAX_ALPHA_REGIONS then
+            return { { x = 0, y = 0, w = w, h = h, solid = false } }
+        end
+    end
+    return rects
+end
+
+-- _alphaAt(bb) -> function(x, y) -> 0..255, read straight from an unrotated
+-- RGB32 buffer's bytes (r, g, b, alpha); getPixel otherwise.
+local function _alphaAt(bb)
+    local ok, ffi = pcall(require, "ffi")
+    if ok and bb.data and bb.stride and bb.getType and bb:getType() == Blitbuffer.TYPE_BBRGB32
+            and (not bb.getRotation or bb:getRotation() == 0) then
+        local p, stride = ffi.cast("uint8_t*", bb.data), tonumber(bb.stride)
+        return function(x, y) return p[y * stride + x * 4 + 3] end
+    end
+    return function(x, y)
+        local c = bb:getPixel(x, y)
+        return c and (c.alpha or c.a or 255) or 0
+    end
+end
+
 local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverting)
     local key = table.concat({ design.middle, design.left or "-", design.right or "-",
                                width, row_x, row_w, surf_h, face_h,
                                inverting and "n" or "d" }, "|")
     local hit = _strip_cache[key]
-    if hit then return hit.bb, hit.top_h end
+    if hit then return hit.bb, hit.top_h, hit.regions end
     local mid = _pngInfo(design.middle); if not mid then return nil end
     local l = SpineShelf.plankDesignLayout{
         screen_w = width, row_x = row_x, row_w = row_w, surf_h = surf_h, face_h = face_h,
@@ -3044,13 +3105,15 @@ local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverti
     place(design.left, l.left_x, l.left_w)
     place(design.right, l.right_x, l.right_w)
     if inverting then strip:invertRect(0, 0, width, total) end
-    _strip_cache[key] = { bb = strip, top_h = l.top_h }
+    local ok_r, regions = pcall(SpineShelf.alphaRegions, width, total, _alphaAt(strip))
+    if not ok_r then regions = nil end
+    _strip_cache[key] = { bb = strip, top_h = l.top_h, regions = regions }
     _strip_order[#_strip_order + 1] = key
     if #_strip_order > 6 then
         local old = table.remove(_strip_order, 1)
         if _strip_cache[old] then _strip_cache[old].bb:free(); _strip_cache[old] = nil end
     end
-    return strip, l.top_h
+    return strip, l.top_h, regions
 end
 
 local PlankDesign = Widget:extend{}
@@ -3064,11 +3127,23 @@ function PlankDesign:paintTo(bb, x, y)
     local on_screen = (bb == Screen.bb) and sw > w
     local width, row_x = w, 0
     if on_screen then width, row_x = sw, x end
-    local strip, top_h = _designStrip(self.design, width, row_x, w, surf_h, face_h, _nightMode())
+    local strip, top_h, regions = _designStrip(self.design, width, row_x, w, surf_h, face_h, _nightMode())
     if not strip then return end
     -- The middle band's surface lands on the plank's own surface top.
     local top = y + h - face_h - surf_h - top_h
-    bb:alphablitFrom(strip, on_screen and 0 or x, top, 0, 0, width, strip:getHeight())
+    local dx = on_screen and 0 or x
+    if not regions then
+        bb:alphablitFrom(strip, dx, top, 0, 0, width, strip:getHeight())
+        return
+    end
+    -- Only what has any alpha, copying what is solid (see alphaRegions).
+    for _i, r in ipairs(regions) do
+        if r.solid then
+            bb:blitFrom(strip, dx + r.x, top + r.y, r.x, r.y, r.w, r.h)
+        else
+            bb:alphablitFrom(strip, dx + r.x, top + r.y, r.x, r.y, r.w, r.h)
+        end
+    end
 end
 function SpineShelf.plankDesignWidget(w, h)
     local design = SpineShelf.activePlankDesign()

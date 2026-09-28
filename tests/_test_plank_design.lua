@@ -114,4 +114,72 @@ t.test("plank art is unpremultiplied once when loaded (MuPDF decodes it premulti
     assert(src:find("local function _unpremultiply(", 1, true))
 end)
 
+-- alphaRegions: the design strip painted as few alpha blends as it can
+-- (PW5 profile: the whole strip alpha-blended on every row, every paint, was
+-- ~20% of a spine tap). Empty rows skipped, opaque spans copied, only the
+-- rest blended.
+local rbody = src:match("(function SpineShelf%.alphaRegions%(.-\nend)\n")
+assert(rbody, "alphaRegions not found")
+local R = { MAX_ALPHA_REGIONS = 64 }
+assert(load("local SpineShelf = ...\n" .. rbody))(R)
+
+local function grid(rows)   -- rows of strings: . = 0, # = 255, + = partial
+    local h, w = #rows, #rows[1]
+    local map = { ["."] = 0, ["#"] = 255, ["+"] = 128 }
+    return w, h, function(x, y) return map[rows[y + 1]:sub(x + 1, x + 1)] end
+end
+local function covers(rects, w, h, alphaAt)
+    -- every pixel with alpha > 0 in exactly one rect, of the right kind
+    local hit = {}
+    for _i, r in ipairs(rects) do
+        for y = r.y, r.y + r.h - 1 do for x = r.x, r.x + r.w - 1 do
+            local k = y * w + x
+            assert(not hit[k], "pixel " .. x .. "," .. y .. " painted twice")
+            hit[k] = true
+            local a = alphaAt(x, y)
+            assert(a > 0, "a transparent pixel is painted")
+            if r.solid then assert(a == 255, "a partial pixel copied without blending") end
+        end end
+    end
+    for y = 0, h - 1 do for x = 0, w - 1 do
+        if alphaAt(x, y) > 0 then assert(hit[y * w + x], "pixel " .. x .. "," .. y .. " left out") end
+    end end
+end
+
+t.test("alphaRegions: transparent rows skipped, solid copied, edges blended, rows merged", function()
+    local w, h, a = grid({
+        "..........",
+        "..........",
+        "+########+",
+        "+########+",
+        "+########+",
+        "++++++++++",
+        "..++++++..",
+    })
+    local rects = R.alphaRegions(w, h, a)
+    covers(rects, w, h, a)
+    -- the three solid middle rows are ONE copy
+    local solid = 0
+    for _i, r in ipairs(rects) do if r.solid then solid = solid + 1; eq(r.h, 3, "solid rows not merged") end end
+    eq(solid, 1)
+    eq(#rects, 5, "3 regions for the middle band, 1 per shadow row")
+end)
+
+t.test("alphaRegions: an all-transparent strip paints nothing; noise falls back to one blend", function()
+    local w, h, a = grid({ "....", "...." })
+    eq(#R.alphaRegions(w, h, a), 0)
+    -- A strip too fragmented to be worth it (every pixel changes class): one blend.
+    local rows = {}
+    for y = 1, 30 do
+        local r = {}
+        for x = 1, 40 do r[x] = ((x + y) % 2 == 0) and "#" or "+" end
+        rows[y] = table.concat(r)
+    end
+    local w2, h2, a2 = grid(rows)
+    local rects = R.alphaRegions(w2, h2, a2)
+    eq(#rects, 1, "fragmented: fall back to one blend")
+    eq(rects[1].solid, false)
+    eq(rects[1].w, w2); eq(rects[1].h, h2)
+end)
+
 t.done()
