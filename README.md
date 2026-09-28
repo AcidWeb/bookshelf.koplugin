@@ -173,11 +173,11 @@ A folder of ornaments inside `ornaments` is a **pack**, which you can switch on 
 
 Ready-made ornament packs, drawn to sit on the plank at the right size on colour and black and white screens, are in the [Ko-fi shop](https://ko-fi.com/andyhazz/shop). Unzip a pack's folder into `ornaments` and it gets its own tab. Packs need Bookshelf 5.2 or later.
 
-How often they appear is per shelf, next to **Author on spine** in the shelf's style dialog: **None**, **Rarely**, **Often** or **Always**. Above None, every so often a page is promised a piece whether or not a wide enough gap happens to fall there, so a densely packed shelf still gets some.
+How often they appear is per shelf, next to **Author on spine** in the shelf's style dialog: **None**, **Rarely**, **Often** or **Always**. **Rarely** puts a piece at the end of one shelf in four, **Often** at the end of every other shelf and in one section gap in four, and **Always** at the end of every shelf and in every other section gap. The ends alternate, and the books always move over to make room.
 
-Shape is up to you. A piece stands at 80% of the books' height and no wider than the books are tall; a wider one is scaled down to fit, never left out, and the books move over to make room for it. Pieces are dealt like a shuffled deck: with ten ornaments switched on, the first ten you see are one of each. A gesture set to **Bookshelf: shuffle ornaments** deals a fresh layout.
+Shape is up to you. A piece stands at 80% of the books' height and no wider than the books are tall; a wider one is scaled down to fit, never left out. Pieces come round in a fixed order, one of each before any repeats, so a shelf looks the same every time you come back to it, even after you add books. **Shuffle all** in an ornament's long-press menu, or a gesture set to **Bookshelf: shuffle ornaments**, picks a new order. New ornaments join the end of the order.
 
-**Long-press an ornament** on the shelf to adjust it where it stands: its size (up to the whole row), the padding either side of it, and its height (the arrows raise and lower it), whether it hangs from the shelf above, whether it is mirrored (always, or every other time it comes round), and an action to run when you tap it. The shelf redraws under the menu as you go; tap a value to reset it. Your changes follow the ornament onto every shelf, and are kept in an `ornaments.json` in the ornaments folder.
+**Long-press an ornament** on the shelf to adjust it where it stands: its size (up to the whole row), the padding either side of it, and its height (the arrows raise and lower it), whether it hangs from the shelf above, whether it is mirrored (always, or every other time it comes round), and an action to run when you tap it. **Swap** opens the ornament browser so you can choose what stands there instead: the two pieces trade places in the order. The shelf redraws under the menu as you go; tap a value to reset it. Your changes follow the ornament onto every shelf, and are kept in an `ornaments.json` in the ornaments folder.
 
 **For pack makers:** a pack can carry its own `ornaments.json`, keyed by file name, to arrive placed. Fields: `scale` (1 = the default size), `lift` (in the piece's own height, + up, - sinks it over the plank's front edge), `pad` (in the books' height, each side, - tightens), `hang` (true or false), `night` (`"invert"` to draw it in chalk in dark mode), `mirror` (`"off"`, `"always"` or `"alternate"`). A reader's own changes are kept separately and win.
 
@@ -998,6 +998,7 @@ Existing v1 settings migrate automatically on first launch -- legacy keys are re
 | `micromodule_<key>_*` | Per-micro-module settings (e.g. `micromodule_clock_format`, `micromodule_random_unread_source`). Each module owns its own keys. |
 | `wallpaper_folder` | Extra folder the wallpaper list also reads from. |
 | `ornaments_off` / `ornament_packs_off` | Ornaments and packs switched off in the ornament browser, keyed by path within the ornaments folder / by pack folder name. |
+| `ornament_deck` | The order ornaments come round in, by path within the ornaments folder. **Swap** and **Shuffle all** change it. |
 | `search_include_genres` | Include genres and tags in search. Default on. |
 | `migrated` | One-shot flag; presence indicates v1 -> v2 migration has run. |
 
