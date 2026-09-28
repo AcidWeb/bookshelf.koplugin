@@ -182,4 +182,21 @@ t.test("alphaRegions: an all-transparent strip paints nothing; noise falls back 
     eq(rects[1].w, w2); eq(rects[1].h, h2)
 end)
 
+t.test("the kept composite is copied only when what lies beneath is byte for byte the same", function()
+    -- PW5: blending the design's shadow and fading ends was ~40ms per tap.
+    -- The first paint at a place keeps what it found and what it left; a
+    -- later one copies the result only if the screen beneath is unchanged.
+    local pd = src:match("function PlankDesign:paintTo%(bb, x, y%)(.-)\nend\n")
+    assert(pd, "PlankDesign:paintTo not found")
+    local i_same = pd:find("_sameRegion(bb, cx, cy, c.under, cw, ch, bpp)", 1, true)
+    local i_copy = pd:find("bb:blitFrom(c.over, cx, cy, 0, 0, cw, ch)", 1, true)
+    assert(i_same and i_copy and i_same < i_copy, "the composite is copied without checking what is beneath")
+    assert(pd:find("strip_key ..", 1, true) and not pd:find("tostring(strip)", 1, true),
+        "the composite is keyed by the strip's address, which a new strip can reuse")
+    assert(pd:find("if not painted then paintRegions() end", 1, true),
+        "a failure after the blend can blend it a second time")
+    assert(src:find("if bb.getRotation and bb:getRotation() ~= 0 then return nil end", 1, true),
+        "a rotated screen is compared as if its bytes ran in rows")
+end)
+
 t.done()
