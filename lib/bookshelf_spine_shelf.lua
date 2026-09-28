@@ -4215,6 +4215,24 @@ function SpineShelf.behindAbove(pl, y, opts)
     return (y or 0) < 0
 end
 
+-- ownRowPart(w_, Orn) -> for a STANDING piece that rises above its row (and
+-- so is painted whole by the row above, behind that shelf), a second copy
+-- cropped to its own row, which that row paints in front of its own plank
+-- as it always did. nil for a hanging piece (behind both, as it should be)
+-- or one that does not rise. Without it, growing a piece past its row's top
+-- popped it behind its own shelf too (device report).
+function SpineShelf.ownRowPart(w_, Orn)
+    local pl = w_.placement
+    if not pl or pl.hang then return nil end
+    local off = w_.overlap_offset or { 0, 0 }
+    local rise = -(off[2] or 0)
+    if rise <= 0 or rise >= (pl.h or 0) then return nil end
+    local part = setmetatable({ crop = { x = 0, y = rise, w = pl.w, h = pl.h - rise } }, { __index = pl })
+    local c = Orn.Ornament:new{ placement = part, night = w_.night }
+    c.overlap_offset = { off[1], 0 }
+    return c
+end
+
 -- ornPad(base, pl) -> the room each side of a placed piece: the shelf's own
 -- pad plus the piece's padding (ornaments.json, px).
 -- A negative padding may take the piece behind the books beside it.
@@ -4258,6 +4276,8 @@ function SpineShelf.rowWidget(opts)
         local hanging = {}
         if ornament and SpineShelf.behindAbove(ornament.placement, ornament.overlap_offset[2], opts) then
             hanging[1] = ornament
+            local part = SpineShelf.ownRowPart(ornament, require("lib/bookshelf_ornaments"))
+            if part then kids[#kids + 1] = part end
         elseif ornament then kids[#kids + 1] = ornament end
         local g = OverlapGroup:new(kids)
         g._hanging = hanging
@@ -4343,6 +4363,7 @@ function SpineShelf.rowWidget(opts)
                     w_.overlap_offset = { cursor, SpineShelf.ornamentY(lead_pl, stand_h, opts) }
                     if SpineShelf.behindAbove(lead_pl, w_.overlap_offset[2], opts) then
                         hanging[#hanging + 1] = w_
+                        gap_ornaments[#gap_ornaments + 1] = SpineShelf.ownRowPart(w_, Orn)
                     else gap_ornaments[#gap_ornaments + 1] = w_ end
                 end)
                 local lw = lead_pl.w + SpineShelf.ornPad(lead_pad, lead_pl)
@@ -4370,6 +4391,7 @@ function SpineShelf.rowWidget(opts)
                                               SpineShelf.ornamentY(pl, stand_h, opts) }
                         if SpineShelf.behindAbove(pl, w_.overlap_offset[2], opts) then
                             hanging[#hanging + 1] = w_
+                            gap_ornaments[#gap_ornaments + 1] = SpineShelf.ownRowPart(w_, Orn)
                         else gap_ornaments[#gap_ornaments + 1] = w_ end
                     end)
                 end
@@ -4686,7 +4708,9 @@ function SpineShelf.rowWidget(opts)
         x = math.max(margin, math.min(x, opts.width - margin - pl.w))
         local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
         w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
-        if SpineShelf.behindAbove(pl, w_.overlap_offset[2], opts) then hanging[#hanging + 1] = w_
+        if SpineShelf.behindAbove(pl, w_.overlap_offset[2], opts) then
+            hanging[#hanging + 1] = w_
+            ornament = SpineShelf.ownRowPart(w_, Orn)
         else ornament = w_ end
     end)
     -- ── Shelf recess ──────────────────────────────────────────────

@@ -92,4 +92,30 @@ t.test("negative padding may take a piece behind the books beside it", function(
     eq(env.SpineShelf.ornPad(10, { w = 100, pad_px = 5 }), 15)
 end)
 
+t.test("a tall standing piece stays in front of its own shelf while its top goes behind the one above", function()
+    -- Device: growing a piece until it rose above its row made it pop behind
+    -- its OWN shelf too: handed wholly to the row above, it was painted
+    -- before its own plank. Now the row above paints it whole (behind that
+    -- shelf) and its own row paints it again, cropped to the row, in front.
+    local body = shelf:match("\n(function SpineShelf%.ownRowPart%(w_, Orn%)\n.-\nend)\n")
+    assert(body, "no SpineShelf.ownRowPart")
+    local env = setmetatable({ SpineShelf = {} }, { __index = _G })
+    local f
+    if _G.setfenv then f = assert(loadstring(body)); setfenv(f, env) else f = assert(load(body, "o", "t", env)) end
+    f()
+    local made
+    local Orn = { Ornament = { new = function(_self, t) made = t; return t end } }
+    local pl = { w = 100, h = 300, entry = {}, hang = false }
+    local part = env.SpineShelf.ownRowPart({ placement = pl, night = false, overlap_offset = { 40, -120 } }, Orn)
+    eq(part.overlap_offset[1], 40); eq(part.overlap_offset[2], 0, "the own-row copy does not start at the row's top")
+    eq(part.placement.crop.y, 120, "the risen part is not cropped away")
+    eq(part.placement.crop.h, 180)
+    eq(part.placement.w, 100, "the copy lost the placement")
+    assert(pl.crop == nil, "the shared placement was changed")
+    eq(env.SpineShelf.ownRowPart({ placement = { w = 10, h = 10, hang = true }, overlap_offset = { 0, -5 } }, Orn), nil,
+       "a hanging piece got an own-row copy")
+    local rw = shelf:match("\nfunction SpineShelf%.rowWidget%(opts%)\n(.-)\nfunction SpineShelf%.")
+    eq(select(2, rw:gsub("SpineShelf%.ownRowPart%(", "")), 4, "every slot must keep its own-row part")
+end)
+
 t.done()
