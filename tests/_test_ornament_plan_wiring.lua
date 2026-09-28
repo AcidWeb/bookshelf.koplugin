@@ -62,4 +62,29 @@ t.test("plan and Swap reconcile the order with the pieces on disk", function()
     assert(menu:find("Deck.sync(Orn.listAll())", 1, true), "Swap does not reconcile before swapping")
 end)
 
+t.test("page-relative options stay out of the entries cache key, the deal state included", function()
+    -- PW5 bench: every tap and page turn rebuilt every entry (page counts
+    -- from filenames and all) because opts.orn_state, a fresh table per
+    -- render, went into the key. The cadence suite's version of this test
+    -- was deleted with the odds model.
+    local body = shelf:match("\n(local function _optsKey%(opts%)\n.-\nend)\n")
+    assert(body, "_optsKey not found")
+    local env = setmetatable({ _nightMode = function() return false end,
+                               SpineShelf = { has_wallpaper = false } }, { __index = _G })
+    local f
+    if _G.setfenv then f = assert(loadstring(body .. "\nreturn _optsKey")); setfenv(f, env)
+    else f = assert(load(body .. "\nreturn _optsKey", "optsKey", "t", env)) end
+    local key = f()
+    local base = { row_h = 280, content_w = 1100, gap = 4 }
+    local function with(extra)
+        local o = {}
+        for k, v in pairs(base) do o[k] = v end
+        for k, v in pairs(extra) do o[k] = v end
+        return key(o)
+    end
+    eq(with({ orn_state = { n = 0, shelf = 0, bnd = 0, owed = {} } }),
+       with({ orn_state = { n = 9, shelf = 4, bnd = 2, owed = { 3 } } }), "the deal state is in the key")
+    eq(with({ skip = 0, n_rows = 2, page_index = 1 }), with({ skip = 5, n_rows = math.huge, page_index = 3 }))
+end)
+
 t.done()

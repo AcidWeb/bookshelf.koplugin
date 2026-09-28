@@ -3390,12 +3390,15 @@ local function _optsKey(opts)
     table.sort(keys)
     for _i = 1, #keys do
         local k = keys[_i]
-        -- skip, n_rows, rows_per_page and page_index are page-relative and
-        -- balance only shapes rows: none of them is an entry input, and the
+        -- skip, n_rows, rows_per_page, page_index and orn_state (where the
+        -- page starts in the ornament deck) are page-relative and balance
+        -- only shapes rows: none of them is an entry input, and the
         -- pagination plan (n_rows = math.huge, balance = false) must share the
-        -- slot with the page plans.
+        -- slot with the page plans. orn_state in the key missed on every
+        -- render (PW5: every tap rebuilt every entry).
         if k ~= "skip" and k ~= "n_rows" and k ~= "balance"
-                and k ~= "rows_per_page" and k ~= "page_index" then
+                and k ~= "rows_per_page" and k ~= "page_index"
+                and k ~= "orn_state" then
             local v = opts[k]
             if type(v) == "table" then
                 local sub = {}
