@@ -292,13 +292,14 @@ function M.show(entry, bw, piece)
         plusMinus("pad", function()
             return T(_("Padding: %1"), pct(entry.pad))
         end),
+        -- Down on the left, up on the right, as - and + are on the rows above.
         {
-            bigButton("lift", 1),
-            glyph(CHEV_UP, "lift", 1),
+            bigButton("lift", -1),
+            glyph(CHEV_DOWN, "lift", -1),
             { text_func = function() return T(_("Height: %1"), pct(entry.lift)) end,
               callback = function() set("lift", nil) end },
-            glyph(CHEV_DOWN, "lift", -1),
-            bigButton("lift", -1),
+            glyph(CHEV_UP, "lift", 1),
+            bigButton("lift", 1),
         },
         -- One row, short labels: the menu has to fit a small screen whole.
         {

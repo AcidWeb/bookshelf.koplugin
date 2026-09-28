@@ -435,4 +435,12 @@ t.test("menu: hang, mirror and tap share one row, short; the place row is first"
     assert(not src:find('_("Hang from the shelf above: on")', 1, true), "the long hang label is still there")
 end)
 
+t.test("menu: the height row runs down to up, left to right, like - and +", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    local row = src:match('\n        {\n            bigButton%("lift", %-1%),(.-)\n        },')
+    assert(row, "the height row does not start with -10")
+    local d, u = row:find("CHEV_DOWN", 1, true), row:find("CHEV_UP", 1, true)
+    assert(d and u and d < u and row:find('bigButton("lift", 1)', 1, true) > u, "up is not on the right")
+end)
+
 t.done()
