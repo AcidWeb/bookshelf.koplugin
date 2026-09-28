@@ -77,13 +77,16 @@ function M.nudged(entry, field, delta)
     return math.floor(v * 100 + 0.5) / 100
 end
 
--- offsetFor(piece, screen_h) -> the vertical move that keeps the menu off the
--- piece being adjusted: a quarter screen down for a piece in the top half,
--- up for one in the bottom half, so the live preview stays in sight.
-function M.offsetFor(piece, screen_h)
+-- offsetFor(piece, screen_h, menu_h) -> the vertical move that keeps the menu
+-- off the piece being adjusted: a quarter screen down for a piece in the top
+-- half, up for one in the bottom half, so the live preview stays in sight.
+-- Never past the screen's edge: a tall menu on a short screen moves only as
+-- far as the room either side of it (device report: slightly off screen).
+function M.offsetFor(piece, screen_h, menu_h)
     if not (piece and piece.y and screen_h) then return 0 end
     local mid = piece.y + (piece.h or 0) / 2
     local q = math.floor(screen_h / 4)
+    if menu_h then q = math.max(0, math.min(q, math.floor((screen_h - menu_h) / 2))) end
     return (mid < screen_h / 2) and q or -q
 end
 
@@ -98,11 +101,14 @@ function M.show(entry, bw, piece)
     local dialog
 
     local Screen = require("device").screen
-    local dy = M.offsetFor(piece, Screen:getHeight())
+    -- Worked out against the menu's own height each time it is (re)built:
+    -- its rows can change size.
     local function place()
-        if dialog and dialog.movable and dy ~= 0 then
-            dialog.movable:setMovedOffset({ x = 0, y = dy })
-        end
+        if not (dialog and dialog.movable) then return end
+        local h
+        pcall(function() h = dialog.movable[1]:getSize().h end)
+        local dy = M.offsetFor(piece, Screen:getHeight(), h)
+        if dy ~= 0 then dialog.movable:setMovedOffset({ x = 0, y = dy }) end
     end
     local function nightNow()
         local night = false
@@ -258,7 +264,7 @@ function M.show(entry, bw, piece)
     local MIRROR_LABEL = {
         off       = _("Mirror: off"),
         always    = _("Mirror: always"),
-        alternate = _("Mirror: every other time"),
+        alternate = _("Mirror: alternate"),
     }
 
     local function closeAnd(fn)
@@ -269,6 +275,17 @@ function M.show(entry, bw, piece)
     end
 
     local buttons = {
+        -- Where it comes round, first: what a reader arranging a shelf
+        -- reaches for most.
+        {
+            placeGlyph(CHEV_LEFT, -1),
+            { text_func = function()
+                local i, n = Deck.position(entry.name, onNames())
+                if not i then return _("Place: off") end
+                return T(_("Place: %1 of %2"), i, n)
+            end, callback = function() end },
+            placeGlyph(CHEV_RIGHT, 1),
+        },
         plusMinus("scale", function()
             return T(_("Size: %1"), string.format("%d%%", math.floor((entry.scale or 1) * 100 + 0.5)))
         end),
@@ -283,33 +300,16 @@ function M.show(entry, bw, piece)
             glyph(CHEV_DOWN, "lift", -1),
             bigButton("lift", -1),
         },
-        {{
-            text_func = function()
-                return entry.hang and _("Hang from the shelf above: on")
-                                   or _("Hang from the shelf above: off")
-            end,
-            callback = function() set("hang", not entry.hang) end,
-        }},
-        {{
-            text_func = function() return MIRROR_LABEL[entry.mirror or "off"] end,
-            callback = function() set("mirror", MIRROR_NEXT[entry.mirror or "off"]) end,
-        }},
-        {{
-            text_func = function()
-                local tap = entry.tap
-                return tap and T(_("Tap action: %1"), tap.label or _("set"))
-                            or _("Tap action: none")
-            end,
-            callback = function() M.chooseTap(entry, redraw) end,
-        }},
+        -- One row, short labels: the menu has to fit a small screen whole.
         {
-            placeGlyph(CHEV_LEFT, -1),
+            { text_func = function() return entry.hang and _("Hang: on") or _("Hang: off") end,
+              callback = function() set("hang", not entry.hang) end },
+            { text_func = function() return MIRROR_LABEL[entry.mirror or "off"] end,
+              callback = function() set("mirror", MIRROR_NEXT[entry.mirror or "off"]) end },
             { text_func = function()
-                local i, n = Deck.position(entry.name, onNames())
-                if not i then return _("Place: off") end
-                return T(_("Place: %1 of %2"), i, n)
-            end, callback = function() end },
-            placeGlyph(CHEV_RIGHT, 1),
+                local tap = entry.tap
+                return tap and T(_("Tap: %1"), tap.label or _("set")) or _("Tap: none")
+            end, callback = function() M.chooseTap(entry, redraw) end },
         },
         {
             { text = _("Swap"), callback = closeAnd(function()

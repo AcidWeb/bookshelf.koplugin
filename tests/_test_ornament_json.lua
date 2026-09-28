@@ -412,4 +412,27 @@ t.test("menu: the piece's place in the order, with Earlier and Later, and Shuffl
     assert(shuffle and shuffle:find("ConfirmBox", 1, true), "Shuffle all does not ask first")
 end)
 
+t.test("the menu never moves past the screen's edge, however tall it is", function()
+    package.loaded["lib/bookshelf_ornaments"] = nil
+    local Menu = dofile("lib/bookshelf_ornament_menu.lua")
+    -- 1648px screen, a 1300px menu: centred it has 174px either side, so a
+    -- quarter-screen move (412) would push it off; it stops at the edge.
+    eq(Menu.offsetFor({ y = 700, h = 200 }, 1648, 1300), 174)
+    eq(Menu.offsetFor({ y = 1200, h = 200 }, 1648, 1300), -174)
+    eq(Menu.offsetFor({ y = 700, h = 200 }, 1648, 600), 412, "a short menu still moves the full quarter")
+    eq(Menu.offsetFor({ y = 700, h = 200 }, 1648, 1700), 0, "a menu taller than the screen stays centred")
+end)
+
+t.test("menu: hang, mirror and tap share one row, short; the place row is first", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    local b = src:match("local buttons = {(.-)\n    }\n")
+    assert(b, "no buttons table")
+    local first = b:gsub("%-%-[^\n]*", ""):match("^%s*(%b{})")
+    assert(first and first:find("placeGlyph(CHEV_LEFT, -1)", 1, true), "the place row is not the first row")
+    local row = b:match('\n        {\n(%s*{ text_func = function%(%)%s*return entry%.hang.-)\n        },')
+    assert(row and row:find("MIRROR_LABEL", 1, true) and row:find("Tap: ", 1, true), "hang, mirror and tap are not one row")
+    assert(src:find('_("Hang: on")', 1, true) and src:find('_("Hang: off")', 1, true), "the hang label is not short")
+    assert(not src:find('_("Hang from the shelf above: on")', 1, true), "the long hang label is still there")
+end)
+
 t.done()
