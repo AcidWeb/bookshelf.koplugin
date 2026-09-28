@@ -42,13 +42,33 @@ end)
 t.test("the row keeps hanging pieces out of its own children, in all three slots", function()
     local n = select(2, shelf:gsub("hanging%[#hanging %+ 1%] = w_", ""))
     eq(n, 3, "row end, section gap and a lead piece at a row's start")
-    assert(shelf:find("if ornament and ornament.placement.hang then hanging[1] = ornament", 1, true), "bare plank")
+    assert(shelf:find("if ornament and SpineShelf.behindAbove(ornament.placement, ornament.overlap_offset[2], opts) then", 1, true), "bare plank")
     assert(shelf:find("row_group._hanging = hanging", 1, true))
 end)
 
 t.test("the height nudge moves a hanging piece (+ up, into the shelf above)", function()
     assert(shelf:find("- (pl.hang_lift or 0)", 1, true), "ornamentY ignores the nudge for a hanging piece")
     assert(orn:find("hang_lift = hang and math.floor((entry.lift or 0) * height + 0.5) or 0", 1, true))
+end)
+
+t.test("a piece that rises above its row goes behind the shelf above, like a hanging one", function()
+    -- Maintainer: large pieces rose over the row above; like hanging pieces
+    -- they should go behind the shelf above. Not on a page's first row: there
+    -- is no shelf above to go behind.
+    local body = shelf:match("\n(function SpineShelf%.behindAbove%(pl, y, opts%)\n.-\nend)\n")
+    assert(body, "no SpineShelf.behindAbove")
+    local env = setmetatable({ SpineShelf = {} }, { __index = _G })
+    local f
+    if _G.setfenv then f = assert(loadstring(body)); setfenv(f, env) else f = assert(load(body, "b", "t", env)) end
+    f()
+    local ba = env.SpineShelf.behindAbove
+    eq(ba({ hang = true }, 10, { row_index = 2 }), true, "a hanging piece")
+    eq(ba({ hang = false }, -5, { row_index = 2 }), true, "a piece rising above its row")
+    eq(ba({ hang = false }, 0, { row_index = 2 }), false, "a piece within its row")
+    eq(ba({ hang = false }, -5, { row_index = 1 }), false, "the first row has no shelf above")
+    local rw = shelf:match("\nfunction SpineShelf%.rowWidget%(opts%)\n(.-)\nfunction SpineShelf%.")
+    local n = select(2, rw:gsub("SpineShelf%.behindAbove%(", ""))
+    eq(n, 4, "the row end, the section gap, the lead piece and the bare plank must all decide this way")
 end)
 
 t.done()
