@@ -224,4 +224,134 @@ function Dealer:take(top)
     return self:_card(c), math.floor(c / #self.cards) + 1, stand
 end
 
+-- ── Fill hooks ──────────────────────────────────────────────────────────
+-- fillHooks(env) -> the callbacks SpineShelf.plan hands SpineLayout.fillRows.
+-- ONE implementation for both of plan()'s passes (the render plans a page,
+-- pagination plans the whole chip), so they cannot decide differently: that
+-- disagreement is what moved page boundaries before. The slot order is the
+-- fill's own: a shelf's end piece when the fill starts the shelf, then its
+-- books' group gaps as they are placed.
+function M.fillHooks(env)
+    local d, level, es = env.dealer, env.level, env.entries
+    local per_page = math.max(1, tonumber(env.per_page) or 1)
+    local h = { row_orn = {}, page_orn = {}, dealer = d }
+    local started, dealing = 0, true
+    local page_has_book = {}
+    for _i, e in ipairs(es) do
+        e.ornament, e.lead_ornament, e.gap_before = nil, nil, e.gap_base or e.gap_before or 0
+    end
+    local function pageOf(r)
+        if env.paginating then return math.floor((r - 1) / per_page) + 1, ((r - 1) % per_page) + 1 end
+        return 1, r
+    end
+    local function allowed(r)
+        return dealing and (env.paginating or r <= (env.n_rows or 1))
+    end
+    local function startRow(r, i)
+        local _page, within = pageOf(r)
+        if env.paginating and within == 1 and i and es[i] and env.pageKey then
+            local key = env.pageKey(i)
+            if h.page_orn[key] == nil then h.page_orn[key] = M.copyState(d.st) end
+        end
+        if not allowed(r) then return end
+        d.st.shelf = d.st.shelf + 1
+        if M.shelfSlot(level, d.st.shelf) then
+            local e, no, stand = d:take(within == 1)
+            if e then
+                local pl = env.size("rowend", e, no, stand)
+                if pl then pl.side = M.side(level, d.st.shelf); h.row_orn[r] = pl end
+            end
+        end
+    end
+    function h.avail(r, i)
+        if r and r > started then
+            for k = started + 1, r do startRow(k, i) end
+            started = r
+        end
+        local pl = r and h.row_orn[r]
+        if pl then return env.content_w - env.space("rowend", pl) end
+        return env.content_w
+    end
+    -- isBoundary(i, r): a group boundary that counts. Not on the first book a
+    -- page places: the render's page starts there and has none.
+    local function isBoundary(i, r)
+        local e = es[i]
+        if not (e and e.orn_seed) then return false end
+        return page_has_book[(pageOf(r))] == true
+    end
+    local function peekPiece(kind, r)
+        if not allowed(r) then return nil end
+        if not M.gapSlot(level, d.st.bnd + 1) then return nil end
+        local _p, within = pageOf(r)
+        local e, no, stand = d:peek(within == 1)
+        return e and env.size(kind, e, no, stand) or nil
+    end
+    h.gaps = setmetatable({}, { __index = function(_t, i)
+        local e = es[i]
+        if not e then return nil end
+        local g = e.gap_base or 0
+        if isBoundary(i, started) then
+            local pl = peekPiece("gap", started)
+            if pl then g = g + env.space("gap", pl) end
+        end
+        return g
+    end })
+    function h.lead(i)
+        if not isBoundary(i, started) then return 0 end
+        local pl = peekPiece("lead", started)
+        return pl and env.space("lead", pl) or 0
+    end
+    function h.placed(i, r, starts_row)
+        if not allowed(r) then return end
+        local counts = isBoundary(i, r)
+        page_has_book[(pageOf(r))] = true
+        if not counts then return end
+        d.st.bnd = d.st.bnd + 1
+        if not M.gapSlot(level, d.st.bnd) then return end
+        local _p, within = pageOf(r)
+        local e, no, stand = d:take(within == 1)
+        if not e then return end
+        local ent = es[i]
+        if starts_row then
+            ent.lead_ornament = env.size("lead", e, no, stand)
+        else
+            local pl = env.size("gap", e, no, stand)
+            ent.ornament = pl
+            if pl then ent.gap_before = (ent.gap_base or 0) + env.space("gap", pl) end
+        end
+    end
+    function h.empty_ok(r) return h.row_orn[r] ~= nil end
+    function h.stop() dealing = false end
+    function h.state() return d.st end
+    function h.final()
+        local gaps, lead, no_break, fixed = {}, {}, {}, {}
+        for i, e in ipairs(es) do
+            gaps[i] = e.gap_before or 0
+            if e.ornament then no_break[i] = true end
+            if e.lead_ornament then
+                fixed[i] = true
+                lead[i] = env.space("lead", e.lead_ornament)
+            end
+        end
+        return gaps, lead, no_break, fixed
+    end
+    -- bare(from, to): the render's empty planks under the last books. They
+    -- come after every other slot on the chip, so they only continue the count.
+    function h.bare(from, to)
+        local out = {}
+        for r = from, to do
+            d.st.shelf = d.st.shelf + 1
+            if M.shelfSlot(level, d.st.shelf) then
+                local e, no, stand = d:take(r == 1)
+                if e then
+                    local pl = env.size("bare", e, no, stand)
+                    if pl then pl.side = M.side(level, d.st.shelf); out[r] = pl end
+                end
+            end
+        end
+        return out
+    end
+    return h
+end
+
 return M

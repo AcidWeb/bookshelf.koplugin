@@ -183,4 +183,167 @@ t.test("a copied state deals the same pieces", function()
     assert(snap.owed ~= d1.st.owed, "copyState shares the owed list")
 end)
 
+-- A synthetic shelf: n books of width w, a group boundary before every
+-- `every`-th book, driven through the REAL fillRows.
+local SpineLayout = dofile("lib/bookshelf_spine_layout.lua")
+local function shelf(n, w, every)
+    local es = {}
+    for i = 1, n do
+        es[i] = { w = w, gap_base = (i > 1) and ((every and (i - 1) % every == 0) and 20 or 4) or 0,
+                  orn_seed = (i > 1 and every and (i - 1) % every == 0) and ("b" .. i) or nil,
+                  item_idx = i }
+    end
+    return es
+end
+local function sub(es, from)
+    local o = {}
+    for i = from, #es do
+        local c = {}
+        for k, v in pairs(es[i]) do c[k] = v end
+        o[#o + 1] = c
+    end
+    o[1].orn_seed, o[1].gap_base = nil, 0      -- a render's first book has no boundary
+    return o
+end
+local function env(D, st, level, es, paginating, per_page, n_rows, pool)
+    return {
+        dealer = D.dealer(st, pool), level = level, entries = es,
+        paginating = paginating, per_page = per_page, n_rows = n_rows, content_w = 300,
+        size = function(kind, e, no, stand) return { entry = e, w = 40, kind = kind, no = no, stand = stand } end,
+        space = function(kind, pl) return pl.w + 8 end,
+        pageKey = function(i) return tostring(es[i].item_idx) end,
+    }
+end
+local function run(D, e)
+    local h = D.fillHooks(e)
+    local ws = {}
+    for i, x in ipairs(e.entries) do ws[i] = x.w end
+    local rows = SpineLayout.fillRows(ws, h.avail, h.gaps, h.empty_ok, h)
+    h.stop()
+    return rows, h
+end
+local function pieces(rows, es, h, from_row, to_row)
+    local out = {}
+    for r = from_row, to_row do
+        local row = rows[r]
+        if h.row_orn[r] then out[#out + 1] = "R" .. h.row_orn[r].entry.name end
+        if row then
+            for i = row.first, row.last do
+                local e = es[i]
+                if e.lead_ornament then out[#out + 1] = "L" .. e.lead_ornament.entry.name end
+                if e.ornament then out[#out + 1] = "G" .. e.ornament.entry.name end
+            end
+        end
+    end
+    return table.concat(out, " ")
+end
+
+t.test("agreement: every page the render plans matches the pagination pass", function()
+    local D = fresh()
+    local pool = cards("a,b,Hc,d,e")
+    for _k, level in ipairs({ "rarely", "often", "always" }) do
+        local all = shelf(60, 45, 3)
+        local prow, ph = run(D, env(D, D.newState(), level, all, true, 2, math.huge, pool))
+        local pages = SpineLayout.paginate(prow, 2)
+        for p = 1, #pages - 1 do
+            local first = pages[p].first
+            local key = tostring(all[first].item_idx)
+            local st = ph.page_orn[key]
+            assert(st, level .. ": no state recorded for page " .. p)
+            local es = sub(all, first)
+            local rrow, rh = run(D, env(D, D.copyState(st), level, es, false, 2, 2, pool))
+            eq(rrow[1].first, 1)
+            eq(rrow[2] and rrow[2].last, pages[p].last - first + 1,
+               level .. ": page " .. p .. " breaks differently")
+            eq(pieces(rrow, es, rh, 1, 2),
+               pieces(prow, all, ph, (p - 1) * 2 + 1, p * 2),
+               level .. ": page " .. p .. " got different pieces")
+            local nxt = ph.page_orn[tostring(all[pages[p + 1].first].item_idx)]
+            local mine = rh.dealer and rh.dealer.st or rh.state()
+            eq(mine.n, nxt.n, level .. ": page " .. p .. " end state n")
+            eq(mine.shelf, nxt.shelf); eq(mine.bnd, nxt.bnd)
+            eq(table.concat(mine.owed, ","), table.concat(nxt.owed, ","))
+        end
+    end
+end)
+
+t.test("the nth slot holds card n, and shelf ends follow the level", function()
+    local D = fresh()
+    local rows, h = run(D, env(D, D.newState(), "often", shelf(40, 45, nil), true, 2, math.huge, cards("a,b,c")))
+    local got = {}
+    for r = 1, 8 do got[#got + 1] = h.row_orn[r] and h.row_orn[r].entry.name or "-" end
+    eq(table.concat(got, ""), "-a-b-c-a")
+end)
+
+t.test("a boundary piece at a row start stands as a lead piece", function()
+    local D = fresh()
+    -- 6 books of 45 + gaps fill a 300 row; boundary before book 7.
+    local all = shelf(20, 45, 6)
+    local rows, h = run(D, env(D, D.newState(), "always", all, true, 99, math.huge, cards("a,b,c,d")))
+    local lead = false
+    for _i, e in ipairs(all) do if e.lead_ornament then lead = true end end
+    assert(lead, "no boundary landed at a row start in this shelf; adjust widths")
+end)
+
+t.test("a page starting with an empty row: the first book's boundary is absent in both passes", function()
+    local D = fresh()
+    -- A full-row piece: size returns w = 300, so a row-end slot row stands empty.
+    local all = shelf(30, 45, 2)
+    local e1 = env(D, D.newState(), "always", all, true, 2, math.huge, cards("a,b"))
+    e1.size = function(kind, e, no) return { entry = e, w = (kind == "rowend") and 300 or 40, no = no } end
+    local prow, ph = run(D, e1)
+    local pages = SpineLayout.paginate(prow, 2)
+    for p = 1, #pages - 1 do
+        local first = pages[p].first
+        local st = ph.page_orn[tostring(all[first].item_idx)]
+        local es = sub(all, first)
+        local e2 = env(D, D.copyState(st), "always", es, false, 2, 2, cards("a,b"))
+        e2.size = e1.size
+        local rrow, rh = run(D, e2)
+        eq(pieces(rrow, es, rh, 1, 2), pieces(prow, all, ph, (p - 1) * 2 + 1, p * 2), "page " .. p)
+    end
+end)
+
+t.test("bare planks continue the count on the last page", function()
+    local D = fresh()
+    local es = shelf(3, 45, nil)
+    local rows, h = run(D, env(D, D.newState(), "always", es, false, 4, 4, cards("a,b,c,d,e")))
+    eq(#rows, 1)
+    local bare = h.bare(2, 4)
+    eq(bare[2].entry.name, "b"); eq(bare[3].entry.name, "c"); eq(bare[4].entry.name, "d")
+end)
+
+t.test("the render deals nothing past its own rows", function()
+    local D = fresh()
+    local es = shelf(40, 45, 3)
+    local rows, h = run(D, env(D, D.newState(), "always", es, false, 2, 2, cards("a,b,c")))
+    local st = h.state()
+    eq(st.shelf, 2, "the render counted shelves past its page")
+end)
+
+t.test("no hanging piece is dealt to a page's top shelf", function()
+    local D = fresh()
+    local pool = cards("Ha,b,Hc,d")
+    for _k, level in ipairs({ "often", "always" }) do
+        local all = shelf(80, 45, 2)
+        local prow, ph = run(D, env(D, D.newState(), level, all, true, 2, math.huge, pool))
+        local hung_on_top, hung = 0, 0
+        for r = 1, #prow do
+            local top = ((r - 1) % 2) == 0
+            local function check(pl)
+                if pl and pl.entry.hang and not pl.stand then
+                    hung = hung + 1
+                    if top then hung_on_top = hung_on_top + 1 end
+                end
+            end
+            check(ph.row_orn[r])
+            for i = prow[r].first, prow[r].last do
+                check(all[i].ornament); check(all[i].lead_ornament)
+            end
+        end
+        assert(hung > 0, level .. ": test premise, no hanging piece was dealt at all")
+        eq(hung_on_top, 0, level .. ": a hanging piece was dealt to a top shelf")
+    end
+end)
+
 t.done()
