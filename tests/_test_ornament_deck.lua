@@ -391,10 +391,15 @@ t.test("place and move: a piece's place among the pieces that are on, and one st
     eq(D.position("off1", on), nil, "a switched-off piece has no place")
     eq(D.move("b", -1, on), true)
     eq(table.concat(mem["ornament_deck"], ","), "b,off1,a,c", "Earlier did not swap with the piece before it that is on")
-    eq(D.move("b", -1, on and { "b", "a", "c" }), false, "the first piece moved earlier")
-    eq(D.move("c", 1, { "b", "a", "c" }), false, "the last piece moved later")
     eq(D.move("a", 1, { "b", "a", "c" }), true)
     eq(table.concat(mem["ornament_deck"], ","), "b,off1,c,a")
+    -- The deck deals round in a loop, so the first and last are neighbours:
+    -- a step past either end wraps (maintainer).
+    eq(D.move("b", -1, { "b", "c", "a" }), true, "the first piece cannot move earlier")
+    eq(table.concat(mem["ornament_deck"], ","), "a,off1,c,b", "earlier from the first did not trade with the last")
+    eq(D.move("b", 1, { "a", "c", "b" }), true, "the last piece cannot move later")
+    eq(table.concat(mem["ornament_deck"], ","), "b,off1,c,a", "later from the last did not trade with the first")
+    eq(D.move("x", 1, { "x" }), false, "a piece alone has nowhere to go")
 end)
 
 t.done()

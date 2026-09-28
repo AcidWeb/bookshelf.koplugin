@@ -405,7 +405,8 @@ t.test("menu: the piece's place in the order, with Earlier and Later, and Shuffl
     assert(src:find("Deck.move(entry.name, delta, onNames())", 1, true)
            and src:find("placeGlyph(CHEV_LEFT, -1)", 1, true)
            and src:find("placeGlyph(CHEV_RIGHT, 1)", 1, true)
-           and src:find("enabled_func", 1, true),
+           and src:find("enabled_func", 1, true)
+           and src:find("return i ~= nil and #on > 1", 1, true),
         "Earlier / Later do not move the piece")
     local shuffle = src:match('{ text = _%("Shuffle all"%)(.-)end },')
     assert(shuffle and shuffle:find("ConfirmBox", 1, true), "Shuffle all does not ask first")

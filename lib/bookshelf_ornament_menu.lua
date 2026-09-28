@@ -239,16 +239,16 @@ function M.show(entry, bw, piece)
     local function step(delta)
         if Deck.move(entry.name, delta, onNames()) then redraw() end
     end
-    -- placeGlyph(glyph, delta): a move chevron, greyed out where the piece
-    -- cannot go that way (first, last, or switched off), as the shelf
-    -- editor's are.
+    -- placeGlyph(glyph, delta): a move chevron. Unlike the shelf editor's it
+    -- wraps round past either end (the deck is a loop), so it is greyed out
+    -- only for a piece that is switched off or alone.
     local function placeGlyph(text, delta)
         return {
             text = text, font_face = "symbols", font_size = GLYPH_SIZE, font_bold = false,
             enabled_func = function()
                 local on = onNames()
                 local i = Deck.position(entry.name, on)
-                return i ~= nil and i + delta >= 1 and i + delta <= #on
+                return i ~= nil and #on > 1
             end,
             callback = function() step(delta) end,
         }

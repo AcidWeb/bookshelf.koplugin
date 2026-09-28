@@ -154,11 +154,13 @@ end
 
 -- move(name, delta, on) -> true when the piece traded places with the piece
 -- `delta` (-1 earlier, +1 later) away among the ones that are on: the long-
--- press menu's Earlier and Later, a gentler Swap.
+-- press menu's Earlier and Later, a gentler Swap. Wraps past either end: the
+-- deck deals round in a loop, so the first and last are neighbours
+-- (maintainer).
 function M.move(name, delta, on)
     local i = M.position(name, on)
-    local j = i and (i + delta)
-    if not (j and j >= 1 and j <= #on) then return false end
+    if not i or #on < 2 then return false end
+    local j = ((i - 1 + delta) % #on) + 1
     return M.swap(name, on[j])
 end
 
