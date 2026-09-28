@@ -461,6 +461,31 @@ t.test("png: list picks PNGs up beside the SVGs, with no overhang", function()
     os.execute("rm -rf '" .. d .. "'")
 end)
 
+t.test("png: a picture too big to decode is left out, not handed to the decoder", function()
+    -- Issue 471: opening the ornaments browser killed KOReader. A ~19.5 MP
+    -- PNG asked MuPDF for a 78 MB pixmap (it decodes at full size before
+    -- scaling) and the malloc failed. The IHDR size is read anyway, so the
+    -- file is refused before anything decodes it.
+    local O = fresh()
+    local d = scratch()
+    O._data_dir = d
+    O._lfs = lfs_shim
+    O.ensureTemplate()
+    local rendered = 0
+    O._render = function() rendered = rendered + 1 end
+    local f = io.open(O.dir() .. "/huge.png", "wb")
+    f:write(png_header(4416, 4416)); f:close()
+    f = io.open(O.dir() .. "/fine.png", "wb")
+    f:write(png_header(2000, 2000)); f:close()
+    local names = {}
+    for _i, e in ipairs(O.list()) do names[#names + 1] = e.name end
+    eq(table.concat(names, ","), "cactus.svg,fine.png,template.svg")
+    eq(rendered, 0, "the huge picture was decoded")
+    eq(O.pngSize(png_header(4416, 4416)), 4416)
+    assert(4416 * 4416 > O.MAX_PNG_PX and 2000 * 2000 <= O.MAX_PNG_PX, "the cap is not between the two")
+    os.execute("rm -rf '" .. d .. "'")
+end)
+
 t.test("png: .invert.png asks for the chalk look, a plain .png does not", function()
     local O = fresh()
     local d = scratch()

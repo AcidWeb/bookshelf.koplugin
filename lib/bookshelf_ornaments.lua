@@ -566,6 +566,22 @@ function M.parsePngHeader(bytes)
     return w / h, 0, false
 end
 
+-- pngSize(bytes) -> width, height from the IHDR, or nil.
+function M.pngSize(bytes)
+    if type(bytes) ~= "string" or #bytes < 24 then return nil end
+    if bytes:sub(1, 8) ~= "\137PNG\r\n\026\n" or bytes:sub(13, 16) ~= "IHDR" then return nil end
+    local w, h = be32(bytes, 17), be32(bytes, 21)
+    if not (w and h) or w <= 0 or h <= 0 then return nil end
+    return w, h
+end
+
+-- The most pixels a PNG ornament may have. The decoder (MuPDF) builds the
+-- whole picture at full size before scaling it down to the ~300px it stands
+-- at, 4 bytes a pixel: a ~19.5 MP drawing asked for 78 MB and the failed
+-- malloc took KOReader down with it (issue 471). 8 MP (about 2800 px square,
+-- 32 MB) is far more than a shelf ornament needs.
+M.MAX_PNG_PX = 8 * 1000 * 1000
+
 -- The folder's cache key. Why it is not just an mtime -- a delete that does
 -- not move the mtime on the Kindle's fuse.fsp mount, and whole-second
 -- granularity swallowing a same-tick addition -- is written up in
@@ -652,6 +668,14 @@ local function entryFor(path, relpath, file, pack)
     f:close()
     local aspect, over, night_invert
     if is_png then
+        local pw, ph = M.pngSize(head)
+        if pw and pw * ph > M.MAX_PNG_PX then
+            logger.warn(string.format(
+                "[bookshelf] ornament skipped, too big to decode safely: %dx%d px "
+                .. "(%.1f MP, the most is %.0f MP). Save it smaller, 1000-2000 px is plenty: %s",
+                pw, ph, pw * ph / 1e6, M.MAX_PNG_PX / 1e6, tostring(relpath)))
+            return nil
+        end
         aspect, over, night_invert = M.parsePngHeader(head)
         -- A PNG has nowhere to write "bookshelf:night=invert", so the name
         -- carries it: cat.invert.png. The only channel that needs no tooling.
