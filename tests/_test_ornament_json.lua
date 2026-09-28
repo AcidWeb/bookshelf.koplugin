@@ -83,15 +83,16 @@ t.test("defaults when there is no file", function()
     svg(new .. "/cat.svg")
     local e = byName(O)["cat.svg"]
     eq(e.scale, 1); eq(e.lift, 0); eq(e.pad, 0); eq(e.mirror, "off")
-    eq(e.hang, nil); eq(e.tap, nil)
+    eq(e.reaches_above, nil); eq(e.tap, nil)
 end)
 
 t.test("a pack's file places its pieces", function()
     local O, new = setup()
     svg(new .. "/Autumn/owl.svg")
-    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "lift": -0.1, "hang": true, "mirror": "alternate" } }')
+    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "lift": 1, "mirror": "alternate" } }')
     local e = byName(O)["Autumn/owl.svg"]
-    eq(e.scale, 1.5); eq(e.lift, -0.1); eq(e.hang, true); eq(e.mirror, "alternate")
+    eq(e.scale, 1.5); eq(e.lift, 1); eq(e.mirror, "alternate")
+    eq(e.reaches_above, true, "a height of 100% does not reach the shelf above")
 end)
 
 t.test("the reader's own file wins, field by field, keyed Pack/file", function()
@@ -104,14 +105,17 @@ t.test("the reader's own file wins, field by field, keyed Pack/file", function()
     eq(e.pad, 0.1, "the pack's padding, which the reader did not change")
 end)
 
-t.test("a directive still works, below the files", function()
+t.test("a directive still works beside the files", function()
+    -- The overhang is the file's own (where its feet are); height is a place
+    -- between the shelves, set on top of it.
     local O, new = setup()
     svg(new .. "/pot.svg", "<!-- bookshelf:overhang=2 -->")
     local e = byName(O)["pot.svg"]
-    eq(e.lift, -0.2, "overhang 2 of 10 is a lift of -0.2")
-    write(new .. "/ornaments.json", '{ "pot.svg": { "lift": 0 } }')
+    eq(e.overhang, 0.2, "overhang 2 of 10"); eq(e.lift, 0)
+    write(new .. "/ornaments.json", '{ "pot.svg": { "lift": 0.5 } }')
     O.invalidate()
-    eq(byName(O)["pot.svg"].lift, 0, "the file beats the directive")
+    local e2 = byName(O)["pot.svg"]
+    eq(e2.lift, 0.5); eq(e2.overhang, 0.2, "a height lost the file's overhang")
 end)
 
 t.test("bad values are skipped and clamped, the rest applies", function()
@@ -179,9 +183,9 @@ t.test("a directive survives a reader's change to another field", function()
     svg(new .. "/pot.svg", "<!-- bookshelf:overhang=2 -->")
     local e = byName(O)["pot.svg"]
     O.readerSet(e, "scale", 1.2)
-    eq(e.lift, -0.2, "the directive's overhang was lost on re-apply")
+    eq(e.overhang, 0.2, "the directive's overhang was lost on re-apply")
     O.readerSet(e, "lift", nil)
-    eq(e.lift, -0.2)
+    eq(e.overhang, 0.2); eq(e.lift, 0)
 end)
 
 t.test("nudges step on a grid and stop at the limits", function()
@@ -318,12 +322,12 @@ t.test("menu: a picture of the piece under its name, even while it is switched o
     package.loaded["lib/bookshelf_ornaments"] = nil
     local O = dofile("lib/bookshelf_ornaments.lua")
     local e = { name = "fox.png", path = "/o/fox.png", aspect = 2, overhang = 0.1,
-                scale = 3, raise = 0.5, sink = 0, lift = 0.5, mirror = "always", hang = true }
+                scale = 3, lift = 0.5, mirror = "always" }
     local pl = O.previewPlacement(e, 60, 1000)
     eq(pl.h, 60, "the preview is not the fixed height")
     eq(pl.w, 120, "the preview lost the piece's shape")
     eq(pl.mirror, true, "the preview ignores the mirror setting")
-    eq(pl.hang, false); eq(pl.raise, 0); eq(pl.below, 0)
+    eq(pl.t, 0, "the preview shows the piece's height, not its drawing"); eq(pl.below, 6, "the file's own 10% overhang")
     assert(pl.entry == e, "the preview does not render the piece itself")
     eq(O.previewPlacement(e, 60, 50).w, 50, "a wide piece overflows the dialog")
     local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
@@ -424,16 +428,16 @@ t.test("the menu never moves past the screen's edge, however tall it is", functi
     eq(Menu.offsetFor({ y = 700, h = 200 }, 1648, 1700), 0, "a menu taller than the screen stays centred")
 end)
 
-t.test("menu: hang, mirror and tap share one row, short; the place row is first", function()
+t.test("menu: mirror and tap share one row, short; no hang switch; the place row is first", function()
     local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
     local b = src:match("local buttons = {(.-)\n    }\n")
     assert(b, "no buttons table")
     local first = b:gsub("%-%-[^\n]*", ""):match("^%s*(%b{})")
     assert(first and first:find("placeGlyph(CHEV_LEFT, -1)", 1, true), "the place row is not the first row")
-    local row = b:match('\n        {\n(%s*{ text_func = function%(%)%s*return entry%.hang.-)\n        },')
-    assert(row and row:find("MIRROR_LABEL", 1, true) and row:find("Tap: ", 1, true), "hang, mirror and tap are not one row")
-    assert(src:find('_("Hang: on")', 1, true) and src:find('_("Hang: off")', 1, true), "the hang label is not short")
-    assert(not src:find('_("Hang from the shelf above: on")', 1, true), "the long hang label is still there")
+    local row = b:match('\n        {\n(%s*{ text_func = function%(%) return MIRROR_LABEL.-)\n        },')
+    assert(row and row:find("Tap: ", 1, true), "mirror and tap are not one row")
+    assert(not src:find('_("Hang: on")', 1, true) and not src:find('set("hang"', 1, true),
+        "the hang switch is still in the menu (a height of 100% replaces it)")
 end)
 
 t.test("menu: the height row runs down to up, left to right, like - and +", function()

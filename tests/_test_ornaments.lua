@@ -395,22 +395,23 @@ local function png_text(keyword, text)
 end
 local function png_idat() return be32(4) .. "IDAT" .. "xxxx" .. be32(0) end
 
-t.test("png: bookshelf tEXt directives -- overhang in pixels, hang, night", function()
+t.test("png: bookshelf tEXt directives -- overhang in pixels, night", function()
     local O = fresh()
     -- IHDR's own crc sits before the first tEXt in a real file.
     local base = png_header(100, 200) .. be32(0)
-    local _a, _n
-    local a, over, night, hang = O.parsePngHeader(base .. png_text("bookshelf", "overhang=20") .. png_idat())
-    eq(a, 0.5); eq(over, 0.1, "20px of a 200px image"); eq(night, false); eq(hang, false)
-    a, over, night, hang = O.parsePngHeader(base .. png_text("bookshelf", "hang")
+    local _a
+    local a, over, night, extra = O.parsePngHeader(base .. png_text("bookshelf", "overhang=20") .. png_idat())
+    eq(a, 0.5); eq(over, 0.1, "20px of a 200px image"); eq(night, false)
+    eq(extra, nil, "a fourth value (the old hang) is still returned")
+    a, over, night = O.parsePngHeader(base .. png_text("bookshelf", "overhang=10")
         .. png_text("bookshelf", "night=invert") .. png_idat())
-    eq(over, 0); eq(night, true); eq(hang, true, "separate chunks each count")
-    _a, over, _n, hang = O.parsePngHeader(base .. png_text("bookshelf", "overhang=10; hang") .. png_idat())
-    eq(over, 0.05); eq(hang, true, "several directives in one chunk")
+    eq(over, 0.05); eq(night, true, "separate chunks each count")
+    _a, over, night = O.parsePngHeader(base .. png_text("bookshelf", "overhang=10; night=invert") .. png_idat())
+    eq(over, 0.05); eq(night, true, "several directives in one chunk")
     -- Other tools' text is not ours, and nothing after the image data is read.
-    _a, over, _n, hang = O.parsePngHeader(base .. png_text("Software", "overhang=50 hang")
-        .. png_idat() .. png_text("bookshelf", "hang"))
-    eq(over, 0); eq(hang, false)
+    _a, over = O.parsePngHeader(base .. png_text("Software", "overhang=50")
+        .. png_idat() .. png_text("bookshelf", "overhang=30"))
+    eq(over, 0)
     -- A chunk cut off by the read limit is ignored rather than half-read.
     local cut = base .. png_text("bookshelf", "overhang=40")
     _a, over = O.parsePngHeader(cut:sub(1, #cut - 6))
@@ -420,16 +421,11 @@ t.test("png: bookshelf tEXt directives -- overhang in pixels, hang, night", func
     eq(over, 1)
 end)
 
-t.test("svg: bookshelf:hang is read like the other directives", function()
+t.test("svg: a bookshelf:hang line is not a directive any more", function()
+    -- Hanging is a height of 100% now, set in the long-press menu.
     local O = fresh()
-    local _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hang -->')
-    eq(hang, true)
-    _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hang=0 -->')
-    eq(hang, false, "=0 switches it off")
-    _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hanging-basket -->')
-    eq(hang, false, "a longer word is not the directive")
-    _a, _o, _n, hang = O.parseHeader('<svg viewBox="0 0 1 2">')
-    eq(hang, false)
+    local a, o, n, extra = O.parseHeader('<svg viewBox="0 0 1 2"><!-- bookshelf:hang -->')
+    eq(a, 0.5); eq(o, 0); eq(n, false); eq(extra, nil)
 end)
 
 t.test("png: list picks PNGs up beside the SVGs, with no overhang", function()
@@ -965,11 +961,10 @@ t.test("json: scale sizes the piece and its cap together, up to the whole row", 
        112, "half of 224")
 end)
 
-t.test("json: padding and raise reach the placement in px", function()
+t.test("json: padding reaches the placement in px", function()
     local O = fresh()
-    local p = O.place({ name = "p.svg", aspect = 1, overhang = 0, pad = -0.05, raise = 0.1 }, 400, 300, {}, 1)
+    local p = O.place({ name = "p.svg", aspect = 1, overhang = 0, pad = -0.05 }, 400, 300, {}, 1)
     eq(p.pad_px, -15, "5% of a 300px stand, tighter")
-    eq(p.raise, 24, "10% of its own 240px")
 end)
 
 t.test("json: mirror always flips every deal; alternate every other one", function()
@@ -982,32 +977,26 @@ t.test("json: mirror always flips every deal; alternate every other one", functi
     eq(table.concat(got, ","), "false,true,false,true")
 end)
 
-t.test("json: the shelf honours padding everywhere it reserves or paints the gap, and the raise", function()
+t.test("json: the shelf honours padding everywhere it reserves or paints the gap", function()
     local sh = io.open("lib/bookshelf_spine_shelf.lua"):read("*a")
     local n = select(2, sh:gsub("SpineShelf%.ornPad%(", ""))
     assert(n >= 4, "padding is applied in only " .. n .. " places (section gap, row-end reserve, both row-end sides)")
-    assert(sh:find("stand_h - pl.above - (pl.raise or 0)", 1, true), "the raise is not applied")
+    assert(sh:find("local stand_top = stand_h - pl.above", 1, true), "a piece does not stand on the plank")
     eq(select(2, sh:gsub("o%.max_room = ", "")), 2, "every slot gives its whole-row ceiling (row end and bare plank; section gap)")
 end)
 
 t.test("menu fix: a height nudge moves a piece, it never changes its size", function()
     -- Device report: "Height changes the size instead of lifting the ornament".
-    -- A piece whose file overhangs was shrunk to keep its overhang on the
-    -- plank, so moving its lift moved its size.
+    -- Height is placed by the shelf (SpineShelf.ornamentY); the placement
+    -- only carries it, with the size and the file's own overhang unchanged.
     local O = fresh()
     local function at(lift)
-        local e = { name = "pot.png", aspect = 1, overhang = 0.05,
-                    sink = lift < 0 and -lift or 0, raise = lift > 0 and lift or 0 }
-        return O.place(e, 1000, 300, { max_below = 20 }, 1)
+        return O.place({ name = "pot.png", aspect = 1, overhang = 0.05, lift = lift }, 1000, 300, { max_below = 20 }, 1)
     end
-    local a, b, c = at(-0.25), at(0), at(0.1)
-    eq(a.h, b.h, "sinking changed the size"); eq(b.h, c.h, "raising changed the size")
-    eq(b.below, 0, "at lift 0 it stands on the plank")
-    -- Past the plank's front edge: a deliberate height nudge lets a piece
-    -- dangle down in front of the plank (maintainer: "allow some extra
-    -- dangle"); the file's own overhang still sizes it to fit.
-    eq(a.below, math.floor(a.h * 0.25), "a sink stopped at the plank's front edge")
-    assert(c.raise > 0, "not raised")
+    local a, b, c = at(-0.25), at(0), at(0.6)
+    eq(a.h, b.h, "lowering changed the size"); eq(b.h, c.h, "raising changed the size")
+    eq(a.below, b.below, "lowering changed the file's overhang"); eq(c.below, b.below)
+    eq(a.t, -0.25); eq(c.t, 0.6)
 end)
 
 t.test("menu fix: a mirror change reaches a piece already dealt", function()
@@ -1031,20 +1020,26 @@ t.test("place: always a placement; a too-wide piece is scaled to the cap, never 
     assert(tiny and tiny.w >= 1 and tiny.h >= 1, "a tiny piece was refused")
 end)
 
-t.test("place: a hanging piece hangs, unless told to stand this once", function()
-    local O = fresh()
-    local bat = { name = "bat.svg", aspect = 1, overhang = 0.3, hang = true }
-    eq(O.place(bat, 1000, 400, {}, 1).hang, true)
-    local st = O.place(bat, 1000, 400, { stand = true }, 1)
-    eq(st.hang, false); eq(st.hang_lift, 0)
-end)
-
 t.test("the odds, budgets and deck are gone from the module", function()
     local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
     for _i, name in ipairs({ "M.pick", "PASS_LIMIT", "PAGE_PERIOD", "pageGuaranteed",
             "reservesRowEnds", "ROW_END_CHANCE", "GROUP_CHANCE", "budgetLeft", "_dealt" }) do
         assert(not src:find(name, 1, true), name .. " is still in the module")
     end
+end)
+
+t.test("hang is gone: no directive, no field; height 100% or more reaches the shelf above", function()
+    local O = fresh()
+    assert(O.FIELDS.hang == nil, "hang is still a field")
+    eq(O.FIELDS.lift.default, 0, "height does not default to standing")
+    assert(O.FIELDS.lift.max > 1, "height cannot go behind the shelf above")
+    local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
+    assert(not src:find("bookshelf:hang", 1, true), "the hang directive is still read")
+    local e = { name = "bat.png", path = "/o/bat.png", aspect = 1, overhang = 0, lift = 1 }
+    local pl = O.place(e, 1000, 400, {}, 1)
+    eq(pl.t, 1); eq(pl.below, 0)
+    eq(O.place(e, 1000, 400, { stand = true }, 1).t, 0, "a piece told to stand does not stand")
+    eq(pl.hang, nil, "placements still carry hang")
 end)
 
 t.done()

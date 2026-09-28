@@ -115,11 +115,11 @@ t.test("sides alternate with each shelf-end piece", function()
     eq(D.side("rarely", 4), "right"); eq(D.side("rarely", 8), "left")
 end)
 
-local function cards(spec)   -- "a,Hb,c": H = hangs
+local function cards(spec)   -- "a,Hb,c": H = reaches the shelf above (height 100%+)
     local out = {}
     for tok in spec:gmatch("[^,]+") do
-        local hang = tok:sub(1, 1) == "H"
-        out[#out + 1] = { name = hang and tok:sub(2) or tok, hang = hang or nil }
+        local up = tok:sub(1, 1) == "H"
+        out[#out + 1] = { name = up and tok:sub(2) or tok, reaches_above = up or nil }
     end
     return out
 end
@@ -331,7 +331,7 @@ t.test("no hanging piece is dealt to a page's top shelf", function()
         for r = 1, #prow do
             local top = ((r - 1) % 2) == 0
             local function check(pl)
-                if pl and pl.entry.hang and not pl.stand then
+                if pl and pl.entry.reaches_above and not pl.stand then
                     hung = hung + 1
                     if top then hung_on_top = hung_on_top + 1 end
                 end

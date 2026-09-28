@@ -319,9 +319,8 @@ function M.show(entry, bw, piece)
             bigButton("lift", 1),
         },
         -- One row, short labels: the menu has to fit a small screen whole.
+        -- (No hang switch: raising the height to 100% meets the shelf above.)
         {
-            { text_func = function() return entry.hang and _("Hang: on") or _("Hang: off") end,
-              callback = function() set("hang", not entry.hang) end },
             { text_func = function() return MIRROR_LABEL[entry.mirror or "off"] end,
               callback = function() set("mirror", MIRROR_NEXT[entry.mirror or "off"]) end },
             { text_func = function()

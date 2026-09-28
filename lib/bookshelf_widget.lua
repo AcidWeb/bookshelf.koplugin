@@ -6069,6 +6069,27 @@ end
 -- it moves down by one row pitch (row top to row top). Spine rows carry the
 -- list (SpineShelf.rowWidget's _hanging); other views' rows have none.
 function BookshelfWidget:_hangUnder(rows, pitch)
+    -- A piece's height is a place between its shelf and the one above
+    -- (SpineShelf.ornamentY), built against the layout's nominal row gap;
+    -- the real one, with the screen's slack spread into it (GridMargins), is
+    -- only known now. Each row noted its pieces off 0%: move each by its
+    -- height times the difference, so 100% meets the shelf above exactly.
+    for r = 2, #rows do
+        for _i, n in ipairs(rows[r] and rows[r]._orn_list or {}) do
+            local slack = (pitch - (n.rh or 0)) - (n.gap or 0)
+            local dy = math.floor(n.t * slack + 0.5)
+            if dy ~= 0 then
+                local off = n.w.overlap_offset or { 0, 0 }
+                n.w.overlap_offset = { off[1], off[2] - dy }
+                local c = n.part and n.part.placement and n.part.placement.crop
+                if c then
+                    local rise = -n.w.overlap_offset[2]
+                    c.y, c.h = rise, math.max(1, (n.part.placement.h or 0) - rise)
+                end
+            end
+        end
+        if rows[r] then rows[r]._orn_list = nil end
+    end
     for r = 2, #rows do
         local hang = rows[r] and rows[r]._hanging
         local above = rows[r - 1]

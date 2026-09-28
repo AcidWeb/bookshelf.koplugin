@@ -171,7 +171,7 @@ end
 --   Always  every shelf         1 in 2 group gaps
 -- Counted across the whole chip, from the END of each cycle ("bottom rows
 -- first"): Often = shelf 2, 4, 6, so on a two-shelf page every page's lower
--- shelf, and a hanging piece has a shelf above it.
+-- shelf, and a piece raised to meet the shelf above has one.
 local SHELF_EVERY = { rarely = 4, often = 2, always = 1 }
 local GAP_EVERY   = { often = 4, always = 2 }
 
@@ -202,7 +202,7 @@ end
 
 -- ── The dealer ──────────────────────────────────────────────────────────
 -- State: n = cards dealt from the order so far on this chip; shelf = shelves
--- counted; bnd = group boundaries counted; owed = hanging cards (card
+-- counted; bnd = group boundaries counted; owed = cards that reach the shelf above (card
 -- numbers) passed over on a top shelf, waiting for a slot with a shelf above.
 function M.newState() return { n = 0, shelf = 0, bnd = 0, owed = {} } end
 function M.copyState(st)
@@ -231,7 +231,7 @@ function Dealer:_choose(top)
     if not top then return st.n, false, nil, false end
     local c, skipped = st.n, {}
     for _i = 1, count do
-        if not self:_card(c).hang then return c, false, skipped, false end
+        if not self:_card(c).reaches_above then return c, false, skipped, false end
         skipped[#skipped + 1] = c
         c = c + 1
     end

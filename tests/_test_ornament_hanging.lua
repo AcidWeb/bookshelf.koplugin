@@ -43,12 +43,7 @@ t.test("the row keeps hanging pieces out of its own children, in all three slots
     local n = select(2, shelf:gsub("hanging%[#hanging %+ 1%] = w_", ""))
     eq(n, 3, "row end, section gap and a lead piece at a row's start")
     assert(shelf:find("if ornament and SpineShelf.behindAbove(ornament.placement, ornament.overlap_offset[2], opts) then", 1, true), "bare plank")
-    assert(shelf:find("row_group._hanging = hanging", 1, true))
-end)
-
-t.test("the height nudge moves a hanging piece (+ up, into the shelf above)", function()
-    assert(shelf:find("- (pl.hang_lift or 0)", 1, true), "ornamentY ignores the nudge for a hanging piece")
-    assert(orn:find("hang_lift = hang and math.floor((entry.lift or 0) * height + 0.5) or 0", 1, true))
+    assert(shelf:find("row_group._hanging, row_group._orn_list = hanging, orn_list", 1, true))
 end)
 
 t.test("a piece that rises above its row goes behind the shelf above, like a hanging one", function()
@@ -62,10 +57,9 @@ t.test("a piece that rises above its row goes behind the shelf above, like a han
     if _G.setfenv then f = assert(loadstring(body)); setfenv(f, env) else f = assert(load(body, "b", "t", env)) end
     f()
     local ba = env.SpineShelf.behindAbove
-    eq(ba({ hang = true }, 10, { row_index = 2 }), true, "a hanging piece")
-    eq(ba({ hang = false }, -5, { row_index = 2 }), true, "a piece rising above its row")
-    eq(ba({ hang = false }, 0, { row_index = 2 }), false, "a piece within its row")
-    eq(ba({ hang = false }, -5, { row_index = 1 }), false, "the first row has no shelf above")
+    eq(ba({}, -5, { row_index = 2 }), true, "a piece rising above its row")
+    eq(ba({}, 0, { row_index = 2 }), false, "a piece within its row")
+    eq(ba({}, -5, { row_index = 1 }), false, "the first row has no shelf above")
     local rw = shelf:match("\nfunction SpineShelf%.rowWidget%(opts%)\n(.-)\nfunction SpineShelf%.")
     local n = select(2, rw:gsub("SpineShelf%.behindAbove%(", ""))
     eq(n, 4, "the row end, the section gap, the lead piece and the bare plank must all decide this way")
@@ -105,17 +99,72 @@ t.test("a tall standing piece stays in front of its own shelf while its top goes
     f()
     local made
     local Orn = { Ornament = { new = function(_self, t) made = t; return t end } }
-    local pl = { w = 100, h = 300, entry = {}, hang = false }
+    local pl = { w = 100, h = 300, entry = {} }
     local part = env.SpineShelf.ownRowPart({ placement = pl, night = false, overlap_offset = { 40, -120 } }, Orn)
     eq(part.overlap_offset[1], 40); eq(part.overlap_offset[2], 0, "the own-row copy does not start at the row's top")
     eq(part.placement.crop.y, 120, "the risen part is not cropped away")
     eq(part.placement.crop.h, 180)
     eq(part.placement.w, 100, "the copy lost the placement")
     assert(pl.crop == nil, "the shared placement was changed")
-    eq(env.SpineShelf.ownRowPart({ placement = { w = 10, h = 10, hang = true }, overlap_offset = { 0, -5 } }, Orn), nil,
-       "a hanging piece got an own-row copy")
+    eq(env.SpineShelf.ownRowPart({ placement = { w = 10, h = 10 }, overlap_offset = { 0, 5 } }, Orn), nil,
+       "a piece within its row got an own-row copy")
     local rw = shelf:match("\nfunction SpineShelf%.rowWidget%(opts%)\n(.-)\nfunction SpineShelf%.")
     eq(select(2, rw:gsub("SpineShelf%.ownRowPart%(", "")), 4, "every slot must keep its own-row part")
+end)
+
+t.test("height is a place between the two shelves: 100% meets the shelf above whatever the sizes", function()
+    -- Maintainer: a piece set to just touch the shelf above drifted off it
+    -- when the shelf size or row count changed, because height was measured
+    -- in the piece's own height. Now 0 = standing, 1 = the DRAWING's top (its
+    -- transparent top room skipped) against the underside of the shelf above,
+    -- worked out from the actual geometry each paint.
+    local body = shelf:match("\n(function SpineShelf%.ornamentY%(pl, stand_h, opts%)\n.-\nend)\n")
+    assert(body, "ornamentY not found")
+    local env = setmetatable({ SpineShelf = {}, Screen = { scaleBySize = function(_s, v) return v end } },
+                             { __index = _G })
+    local f
+    if _G.setfenv then f = assert(loadstring(body)); setfenv(f, env) else f = assert(load(body, "y", "t", env)) end
+    f()
+    local Y = env.SpineShelf.ornamentY
+    for _i, g in ipairs({ { stand = 280, head = 40 }, { stand = 190, head = 30 }, { stand = 400, head = 60 } }) do
+        local pl = { above = 200, h = 200, t = 1, content_top = 25 }
+        local top = Y(pl, g.stand, { lift_headroom = g.head })
+        eq(top + pl.content_top, -(g.head + 2), "100% does not meet the shelf above at stand " .. g.stand)
+        pl.t = 0
+        eq(Y(pl, g.stand, { lift_headroom = g.head }), g.stand - 200, "0% is not standing")
+        pl.t = 0.5
+        local mid = Y(pl, g.stand, { lift_headroom = g.head })
+        local lo, hi = g.stand - 200, -(g.head + 2) - 25
+        assert(math.abs(mid - (lo + hi) / 2) <= 1, "50% is not halfway")
+    end
+    local pl = { above = 200, h = 200, t = -0.2, content_top = 0 }
+    assert(Y(pl, 280, { lift_headroom = 40 }) > 80, "below 0% does not dangle")
+    assert(not shelf:find("hang_lift", 1, true), "the old hang offset is still read")
+end)
+
+t.test("a height is corrected to the real gap between rows before anything is handed up", function()
+    -- Rig: a piece at 100% stopped short of the shelf above by the screen
+    -- slack GridMargins spreads between rows, which is only known after the
+    -- rows are built. Each row notes its pieces off 0% with the gap they
+    -- were built against; _hangUnder moves them by height x the difference.
+    local hang = load("return function(self, rows, pitch)\n"
+        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch)") .. "\nend",
+        "hang", "t", { ipairs = ipairs, table = table, math = math })()
+    local up = { name = "up", overlap_offset = { 10, 50 } }
+    local half = { name = "half", overlap_offset = { 20, 100 } }
+    local crop = { x = 0, y = 30, w = 50, h = 170 }
+    local risen = { name = "risen", overlap_offset = { 30, -30 } }
+    local part = { name = "part", overlap_offset = { 30, 0 }, placement = { h = 200, crop = crop } }
+    local row2 = { { name = "plank2" }, up, half, part, _hanging = { risen },
+                   _orn_list = { { w = up, t = 1, gap = 40, rh = 280 },
+                                 { w = half, t = 0.5, gap = 40, rh = 280 },
+                                 { w = risen, t = 1.2, gap = 40, rh = 280, part = part } } }
+    local rows = { { { name = "plank1" } }, row2 }
+    hang({}, rows, 280 + 60)                -- the real gap is 60, built against 40
+    eq(up.overlap_offset[2], 30, "100% did not move up by the whole slack")
+    eq(half.overlap_offset[2], 90, "50% did not move up by half of it")
+    eq(risen.overlap_offset[2], -54 + 340, "a risen piece was not corrected before it was handed up")
+    eq(crop.y, 54, "its own-row copy's crop did not follow"); eq(crop.h, 146)
 end)
 
 t.done()

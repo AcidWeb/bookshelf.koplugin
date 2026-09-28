@@ -11,10 +11,9 @@
 --
 -- WHAT A PIECE IS (listAll -> entries). Measured from its file: aspect (SVG
 -- viewBox, PNG IHDR) and the directives an artist can put in it: overhang
--- (the lowest N units/pixels hang over the plank's front), hang (it hangs
--- from the shelf above: a bat), night=invert (chalk in the dark look; also
--- cat.invert.png). Then ornaments.json, per field (see ornaments.json below):
--- scale, lift, pad, hang, night, mirror, tap. Rendering is KOReader's
+-- (the lowest N units/pixels hang over the plank's front), night=invert
+-- (chalk in the dark look; also cat.invert.png). Then ornaments.json, per
+-- field (see ornaments.json below): scale, lift, pad, night, mirror, tap. Rendering is KOReader's
 -- RenderImage (nanosvg for SVG, MuPDF for PNG, unpremultiplied here), so for
 -- SVG: bold solid shapes, no text, filters or masks.
 --
@@ -161,12 +160,11 @@ M.TEMPLATE_SVG = [==[<?xml version="1.0" encoding="UTF-8"?>
     silhouette would sink into that black, so for one of those add a line
     above the svg tag in the form of the overhang line, with night=invert
     in place of overhang=0: it is then shown light, like the spine titles.
-  - Something that HANGS (a bat, a spider on its thread): add a line in the
-    same form with hang in place of overhang=0, and draw it with its top at
-    the top of the picture. It hangs from the shelf above instead of
-    standing, so it only turns up from the second shelf down.
+  - Something that HANGS (a bat, a spider on its thread): long-press it on
+    the shelf and raise its height to 100%, which puts the top of the
+    drawing against the shelf above, whatever the shelf size.
   - A .png can carry these too, as text chunks with the keyword bookshelf
-    (overhang=N in the picture's own pixels, hang, night=invert).
+    (overhang=N in the picture's own pixels, night=invert).
 -->
 <!-- bookshelf:overhang=0 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 106">
@@ -374,7 +372,7 @@ function M.ensureTemplate()
 end
 
 -- parseHeader(text) -> aspect (w/h) or nil, overhang fraction (0..1),
--- night_invert (bool), hang (bool). Reads the viewBox and the "bookshelf:..." comments
+-- night_invert (bool). Reads the viewBox and the "bookshelf:..." comments
 -- from the SVG text; no XML parser, the facts are plain patterns.
 function M.parseHeader(text)
     if type(text) ~= "string" then return nil, 0 end
@@ -413,15 +411,7 @@ function M.parseHeader(text)
     -- mode, like the spine titles, instead of keeping its colours the way a
     -- cover does. Default is faithful (colour artwork stays the right colour).
     local night_invert = text:match("bookshelf:night%s*=%s*invert") ~= nil
-    return w / h, over / h, night_invert, M.declaresHang(text)
-end
-
--- declaresHang(text) -> bool: "bookshelf:hang", on its own or as "=1"/"=yes".
-function M.declaresHang(text)
-    if type(text) ~= "string" then return false end
-    local v = text:match("bookshelf:hang%s*=%s*(%w+)")
-    if v then return v ~= "0" and v ~= "no" and v ~= "false" end
-    return text:match("bookshelf:hang%f[^%w]") ~= nil
+    return w / h, over / h, night_invert
 end
 
 -- be32(s, i) -> the big-endian uint32 starting at byte i, or nil if short.
@@ -431,8 +421,7 @@ local function be32(s, i)
     return ((a * 256 + b) * 256 + c) * 256 + d
 end
 
--- parsePngHeader(bytes) -> aspect (w/h) or nil, overhang fraction, night_invert,
--- hang
+-- parsePngHeader(bytes) -> aspect (w/h) or nil, overhang fraction, night_invert
 --
 -- The same contract as parseHeader, for a raster. Everything comes out of the
 -- IHDR chunk, which a valid PNG is required to put first: the 8-byte
@@ -442,12 +431,12 @@ end
 -- and a decode is orders of magnitude dearer than a read.
 --
 -- DIRECTIVES come from tEXt chunks before the image data: keyword "bookshelf",
--- text "overhang=N", "hang" or "night=invert" (one per chunk, or several in
+-- text "overhang=N" or "night=invert" (one per chunk, or several in
 -- one separated by spaces or semicolons). N is in the image's own pixels, the
 -- raster's equivalent of an SVG's viewBox units. A PNG with none -- a picture
--- someone had -- stands on the plank as it always did: overhang 0, not
--- hanging. The ornament packs write them (the leaves under an apple basket
--- hanging over the plank front, a contact shadow reaching onto it, a bat).
+-- someone had -- stands on the plank as it always did: overhang 0. The
+-- ornament packs write them (the leaves under an apple basket hanging over
+-- the plank front, a contact shadow reaching onto it).
 --
 -- Only chunks inside `bytes` are seen (list() reads 8KB, and a tool that puts
 -- its tEXt after the image data is not supported -- the pack builder writes
@@ -467,7 +456,7 @@ function M.parsePngHeader(bytes)
     if over < 0 then over = 0 end
     if over > h then over = h end
     local night = text:match("bookshelf:night%s*=%s*invert") ~= nil
-    return w / h, over / h, night, M.declaresHang(text)
+    return w / h, over / h, night
 end
 
 -- pngDirectives(bytes) -> "bookshelf:<directive>" lines from the "bookshelf"
@@ -610,7 +599,7 @@ local function entryFor(path, relpath, file, pack)
     if not f then return nil end
     local head = f:read(8192)
     f:close()
-    local aspect, over, night_invert, hang
+    local aspect, over, night_invert
     if is_png then
         local pw, ph = M.pngSize(head)
         if pw and pw * ph > M.MAX_PNG_PX then
@@ -620,14 +609,14 @@ local function entryFor(path, relpath, file, pack)
                 pw, ph, pw * ph / 1e6, M.MAX_PNG_PX / 1e6, tostring(relpath)))
             return nil
         end
-        aspect, over, night_invert, hang = M.parsePngHeader(head)
+        aspect, over, night_invert = M.parsePngHeader(head)
         -- The name can carry the night flag too: cat.invert.png, the one
         -- channel that needs no tooling.
         night_invert = night_invert or lname:match("%.invert%.png$") ~= nil
     else
         -- sizeOf rather than parseHeader: it falls back to the renderer's own
         -- natural size when the header carries no usable viewBox or size.
-        aspect, over, night_invert, hang = M.sizeOf(path, head)
+        aspect, over, night_invert = M.sizeOf(path, head)
     end
     if not aspect then
         -- warn, not dbg: a dropped file is invisible on the shelf and the
@@ -654,8 +643,7 @@ local function entryFor(path, relpath, file, pack)
     -- name is the relative path: unique across packs, and what the deck, the
     -- on/off state and ornaments.json key on. file is the bare file name, for display.
     return { path = path, name = relpath, file = file, pack = pack,
-             aspect = aspect, overhang = over or 0, night_invert = night_invert,
-             hang = hang or nil }
+             aspect = aspect, overhang = over or 0, night_invert = night_invert }
 end
 
 -- displayName(entry) -> the file name without its extension (or the
@@ -682,9 +670,13 @@ M.FIELDS = {
     -- 5%, not half: a reader may want a piece small (maintainer). Not zero,
     -- which would leave its slot empty while it still takes its turn.
     scale  = { kind = "number", min = 0.05, max = 4, default = 1 },
-    lift   = { kind = "number", min = -1,  max = 1, default = 0 },
+    -- Height, as a place between the two shelves: 0 standing on its own,
+    -- 1 its drawing's top against the underside of the shelf above (see
+    -- SpineShelf.ornamentY), past 1 behind that shelf, below 0 dangling in
+    -- front of its own plank. Pinned to the shelves, so a piece set to meet
+    -- the shelf above still does after a change of shelf size (maintainer).
+    lift   = { kind = "number", min = -1, max = 1.5, default = 0 },
     pad    = { kind = "number", min = -1,  max = 2, default = 0 },
-    hang   = { kind = "boolean" },
     night  = { kind = "enum", values = { invert = true, off = true } },
     mirror = { kind = "enum", values = { off = true, always = true, alternate = true }, default = "off" },
     tap    = { kind = "table" },
@@ -744,28 +736,22 @@ local function applyLayers(e, layers)
         return nil
     end
     e.scale  = get("scale") or 1
-    local lift = get("lift")
-    if lift == nil then lift = -(e.overhang or 0) end
-    e.lift   = lift
+    e.lift   = get("lift") or 0
     e.pad    = get("pad") or 0
-    local hang = get("hang")
-    if hang ~= nil then e.hang = hang or nil end
     local night = get("night")
     if night ~= nil then e.night_invert = (night == "invert") end
     e.mirror = get("mirror") or "off"
     e.tap    = get("tap")
-    -- What placement reads: the lift sinks the piece or raises it. Its SIZE
-    -- follows only the file's own overhang (e.overhang, untouched here), so a
-    -- height nudge moves it without resizing it.
-    e.sink  = (lift < 0) and -lift or 0
-    e.raise = (lift > 0) and lift or 0
+    -- A piece that meets the shelf above (or goes behind it) wants one: the
+    -- deck keeps it off a page's top shelf (Deck.dealer).
+    e.reaches_above = e.lift >= 1 or nil
 end
 
 -- The directive-only values, kept so a re-apply (a reader's nudge) starts
 -- from what the file itself says rather than from the last merge.
 local function keepDirectives(e)
     if e._dir then return end
-    e._dir = { hang = e.hang, night_invert = e.night_invert }
+    e._dir = { night_invert = e.night_invert }
 end
 local function reapply(e)
     if not (e and e._layers) then return end
@@ -773,7 +759,7 @@ local function reapply(e)
     -- (its mtime changed) replaces M._reader, and an entry scanned before it
     -- would otherwise go on reading the old table.
     if e._reader_at then e._layers[e._reader_at] = M.readerTable() end
-    e.hang, e.night_invert = e._dir.hang, e._dir.night_invert
+    e.night_invert = e._dir.night_invert
     pcall(applyLayers, e, e._layers)
 end
 
@@ -1084,8 +1070,8 @@ local function defaultSize(path)
 end
 
 function M.sizeOf(path, head)
-    local aspect, over, night_invert, hang = M.parseHeader(head)
-    if aspect then return aspect, over, night_invert, hang end
+    local aspect, over, night_invert = M.parseHeader(head)
+    if aspect then return aspect, over, night_invert end
     local ok, w, h = pcall(M._size or defaultSize, path)
     if not ok or not (w and h) or w <= 0 or h <= 0 then return nil end
     -- Re-read the conventions from the header: only the SIZE was missing.
@@ -1095,7 +1081,7 @@ function M.sizeOf(path, head)
     if o > h then o = h end
     local inv = type(head) == "string"
         and head:match("bookshelf:night%s*=%s*invert") ~= nil or false
-    return w / h, o / h, inv, M.declaresHang(head)
+    return w / h, o / h, inv
 end
 
 -- hash(s) -> non-negative integer, djb2 (LuaJIT-safe arithmetic).
@@ -1170,7 +1156,7 @@ function M.sizeFor(entry, cap_px, stand_h, o)
     -- The FILE's overhang sizes the piece; a reader's height nudge only moves
     -- it (the sink, in place), or nudging the height would resize it.
     local over = entry.overhang or 0
-    if over > 0 and o.max_below and not (entry.hang and not o.stand) then
+    if over > 0 and o.max_below then
         if height * over > o.max_below then
             height = math.floor(o.max_below / over)
             width  = math.floor(height * aspect)
@@ -1189,33 +1175,31 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
     o = o or {}
     if not entry then return nil end
     local width, height = M.sizeFor(entry, cap_px, stand_h, o)
-    local hang = (entry.hang and not o.stand) and true or false
-    -- Below the plank's surface: the file's overhang, or the reader's sink.
-    -- A hanging piece has nothing below.
-    local sink = entry.sink
-    if sink == nil then sink = entry.overhang or 0 end
-    local below = hang and 0 or math.floor(height * sink)
-    -- The file's own overhang stays on the plank (sizeFor sizes it to fit);
-    -- a reader's deeper height nudge may take it past the front edge, to
-    -- dangle in front of the plank (maintainer: "allow some extra dangle").
-    if o.max_below and below > o.max_below and sink <= (entry.overhang or 0) then
-        below = o.max_below
+    -- Below the plank's surface: the file's own overhang, sized by sizeFor
+    -- to stay on the plank. Height (entry.lift) is placed by the shelf, which
+    -- knows where the shelf above is (SpineShelf.ornamentY).
+    local below = math.floor(height * (entry.overhang or 0))
+    if o.max_below and below > o.max_below then below = o.max_below end
+    local t = o.stand and 0 or (entry.lift or 0)
+    -- Where the drawing's top is inside the picture: 100% meets the shelf
+    -- above with the DRAWING, not the file's transparent top room. Probed
+    -- only for a piece that is raised or lowered.
+    local content_top = 0
+    if t ~= 0 and entry.path then
+        local _l, ct = M.contentBox(entry)
+        if ct then content_top = math.floor(ct * height + 0.5) end
     end
     -- Mirror from the piece's CURRENT setting, so a change in its menu
     -- reaches pieces already standing.
     local mirror = entry.mirror == "always"
                    or (entry.mirror == "alternate" and (deal_no or 1) % 2 == 0)
     return {
-        entry = entry, w = width, h = height, hang = hang,
+        entry = entry, w = width, h = height, t = t, content_top = content_top,
         above = height - below, below = below,
         mirror = mirror,
-        -- Lifted above the plank (a positive lift), in px.
-        raise = math.floor((entry.raise or 0) * height + 0.5),
-        -- Extra room each side, in px (negative: tighter against the books);
-        -- the shelf adds it to its own pad, never below touching.
+        -- Extra room each side, in px (negative: tighter, even behind the
+        -- books beside it); the shelf adds it to its own pad (SpineShelf.ornPad).
         pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
-        -- A hanging piece's height nudge, in px (+ up): see ornamentY.
-        hang_lift = hang and math.floor((entry.lift or 0) * height + 0.5) or 0,
     }
 end
 
@@ -1537,7 +1521,7 @@ end
 -- room is right on the shelf and wasted here, as in the browser. pl.crop is
 -- the drawn part, in the rendered picture's px.
 function M.previewPlacement(entry, h, max_w)
-    local proxy = setmetatable({ scale = 1, sink = 0, raise = 0, pad = 0, lift = 0, hang = false },
+    local proxy = setmetatable({ scale = 1, pad = 0, lift = 0 },
                                { __index = entry })
     local l, t, r, b
     if entry.path then l, t, r, b = M.contentBox(entry) end
