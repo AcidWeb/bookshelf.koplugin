@@ -15,4 +15,9 @@ t.test("the browser has a pick mode", function()
     assert(src:find('self.opts.pick and _("Cancel") or _("Apply")', 1, true), "the pick footer still says Apply")
 end)
 
+t.test("the browser's title is the collection, as its settings row", function()
+    assert(src:find('title = self.opts.pick and _("Swap for") or _("Ornament collection"),', 1, true),
+        "the browser is not titled Ornament collection")
+end)
+
 t.done()

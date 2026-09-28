@@ -365,7 +365,7 @@ function Browser.show(on_change, opts)
         end
     end
     local config = {
-        title = self.opts.pick and _("Swap for") or _("Ornaments"),
+        title = self.opts.pick and _("Swap for") or _("Ornament collection"),
         no_search = true,
         grid_cols = cols,
         cells_per_page = function() return cols() * 3 end,
