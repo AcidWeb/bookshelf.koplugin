@@ -84,63 +84,14 @@ local POOL = {
     { path = "/o/b.svg", name = "b.svg", aspect = 1.5, overhang = 0.25 },
 }
 
-t.test("pick is deterministic for a seed and varies across seeds", function()
-    local O = fresh()
-    local p1 = O.pick("book|1|8", 400, 300, POOL, { min_gap = 10, min_h = 10 })
-    local p2 = O.pick("book|1|8", 400, 300, POOL, { min_gap = 10, min_h = 10 })
-    assert((p1 == nil) == (p2 == nil), "same seed must agree on placing")
-    if p1 then eq(p1.entry.path, p2.entry.path); eq(p1.w, p2.w) end
-    local placed = 0
-    for i = 1, 200 do
-        if O.pick("seed" .. i, 400, 300, POOL, { min_gap = 10, min_h = 10 }) then
-            placed = placed + 1
-        end
-    end
-    assert(placed > 60 and placed < 140,
-        "about half of eligible gaps should get one, got " .. placed .. "/200")
-end)
-
-t.test("a narrow gap stays empty; a fitting one sizes to the stand height", function()
-    local O = fresh()
-    O.CHANCE = 1.0
-    assert(O.pick("s", 30, 300, POOL, { min_gap = 48, min_h = 10 }) == nil, "gap below the floor")
-    local p = O.pick("s", 400, 300, { POOL[1] }, { min_gap = 48, min_h = 10 })
-    assert(p, "expected a placement")
-    eq(p.h, 240, "80% of the stand height")
-    eq(p.w, 144, "width follows the aspect")
-    eq(p.below, 0); eq(p.above, 240)
-end)
-
-t.test("a piece too wide for a gap waits; a slot that makes room scales it only to the whole row", function()
-    local O = fresh()
-    O.CHANCE = 1.0
-    -- POOL[2] is 1.5:1, so 360px wide at its natural 240px.
-    eq(O.pick("g", 120, 300, { POOL[2] }, { min_gap = 48, min_h = 10, min_h_frac = 0 }), nil,
-        "a plain gap does not shrink a piece to fit")
-    local p = O.pick("r", 1000, 300, { POOL[2] }, { min_gap = 48, min_h = 10, makes_room = true })
-    assert(p, "a row end takes it")
-    eq(p.w, 360, "at its own width, not a share of the row")
-    eq(p.h, 240)
-    local q = O.pick("r2", 120, 300, { POOL[2] }, { min_gap = 48, min_h = 10, makes_room = true })
-    assert(q, "wider than the whole row: scaled to it, however low that makes it")
-    eq(q.w, 120); eq(q.h, 80)
-end)
-
 t.test("the overhang never reaches past the plank's front", function()
     local O = fresh()
-    O.CHANCE = 1.0
     -- 25% overhang on a 240px ornament would be 60px; only 20px allowed.
-    local p = O.pick("s", 1000, 300, { POOL[2] }, { min_gap = 48, min_h = 10, max_below = 20, min_h_frac = 0 })
+    local p = O.place(POOL[2], 1000, 300, { max_below = 20 }, 1)
     assert(p, "expected a placement")
     eq(p.below, 20)
     eq(p.h, 80, "shrunk so 25% of it is the allowed overhang")
     eq(p.above + p.below, p.h)
-end)
-
-t.test("too small after shrinking is not placed", function()
-    local O = fresh()
-    O.CHANCE = 1.0
-    assert(O.pick("s", 1000, 300, { POOL[2] }, { min_gap = 48, min_h = 100, max_below = 20, min_h_frac = 0 }) == nil)
 end)
 
 t.test("ensureTemplate creates the folder with the template, once", function()
@@ -481,20 +432,6 @@ t.test("svg: bookshelf:hang is read like the other directives", function()
     eq(hang, false)
 end)
 
-t.test("pick: a hanging piece waits for a row with a shelf above; it ignores overhang", function()
-    local O = fresh()
-    local bat  = { path = "/o/bat.png", name = "bat.png", aspect = 1, overhang = 0.5, hang = true }
-    local vase = { path = "/o/vase.png", name = "vase.png", aspect = 1, overhang = 0 }
-    for i = 1, 40 do
-        local p = O.pick("nh" .. i, 400, 300, { bat, vase }, { min_gap = 48, min_h = 10, chance = 1, no_hang = true })
-        assert(not (p and p.entry == bat), "a first row must never be given the bat")
-    end
-    local p = O.pick("h", 400, 300, { bat }, { min_gap = 48, min_h = 10, chance = 1, max_below = 5 })
-    assert(p and p.entry == bat, "the bat is fine where there is a shelf above")
-    eq(p.below, 0, "a hanging piece has nothing below its feet")
-    eq(p.h, 240, "and max_below does not shrink it: 0.8 of the stand")
-end)
-
 t.test("png: list picks PNGs up beside the SVGs, with no overhang", function()
     local O = fresh()
     local d = scratch()
@@ -578,96 +515,7 @@ t.test("png: rendering routes to the raster path, SVG keeps the vector one", fun
         .. " back functions instead of a blitbuffer")
 end)
 
--- ── which ornament: a shuffled deck ────────────────────────────────────────
-
-local function deckPool(n)
-    local out = {}
-    for i = 1, n do out[i] = { name = "o" .. i .. ".svg", aspect = 1, overhang = 0 } end
-    return out
-end
-local ANY = { min_gap = 0, min_h = 1, chance = 1 }
-
-t.test("with N ornaments, N placements are one of each, and the next N again", function()
-    -- "If you have 10 ornaments and see 10 ornaments you must see exactly one
-    -- of each" (maintainer).
-    local O = fresh()
-    local pool = deckPool(10)
-    for round = 1, 3 do
-        O.beginScreen()
-        local seen = {}
-        for i = 1, 10 do
-            local pl = O.pick("r" .. round .. "s" .. i, 10000, 400, pool, ANY)
-            assert(pl, "slot " .. i .. " was left empty")
-            assert(not seen[pl.entry.name], pl.entry.name .. " came round twice in round " .. round)
-            seen[pl.entry.name] = true
-        end
-    end
-end)
-
-t.test("a seed keeps the piece it was dealt, and a repaint deals nothing new", function()
-    local O = fresh()
-    local pool = deckPool(4)
-    local first = O.pick("a", 10000, 400, pool, ANY).entry.name
-    O.pick("b", 10000, 400, pool, ANY)
-    eq(O.pick("a", 10000, 400, pool, ANY).entry.name, first, "same seed, same piece")
-    local pos = O._deck_pos
-    O.pick("b", 10000, 400, pool, ANY)
-    eq(O._deck_pos, pos, "a repaint advanced the deck")
-end)
-
-t.test("a card that cannot stand in a slot waits on top for the next one that can", function()
-    local O = fresh()
-    local wide  = { name = "wide.svg",  aspect = 4, overhang = 0 }
-    local small = { name = "small.svg", aspect = 1, overhang = 0 }
-    local pool = { wide, small }
-    O.deck(pool)
-    O._deck = { wide, small }        -- a known order
-    eq(O.pick("gap", 400, 400, pool, ANY), nil, "the wide piece does not fit a 400px gap")
-    eq(O.pick("gap", 400, 400, pool, ANY), nil, "and the passed slot stays passed on a repaint")
-    local r = O.pick("rowend", 2000, 400, pool, { min_gap = 0, min_h = 1, chance = 1, makes_room = true })
-    eq(r.entry.name, "wide.svg", "the next slot that can take it gets it: the order holds")
-    eq(O.pick("gap2", 400, 400, pool, ANY).entry.name, "small.svg")
-end)
-
-t.test("a card passed over PASS_LIMIT times goes to the back instead of blocking the deck", function()
-    local O = fresh()
-    local bat  = { name = "bat.svg",  aspect = 1, overhang = 0, hang = true }
-    local vase = { name = "vase.svg", aspect = 1, overhang = 0 }
-    local pool = { bat, vase }
-    O.deck(pool)
-    O._deck = { bat, vase }
-    local got
-    for i = 1, O.PASS_LIMIT do
-        got = O.pick("row1_" .. i, 10000, 400, pool, { min_gap = 0, min_h = 1, chance = 1, no_hang = true })
-    end
-    eq(got, nil, "the last pass is still a pass")
-    local nxt = O.pick("row1_next", 10000, 400, pool, { min_gap = 0, min_h = 1, chance = 1, no_hang = true })
-    assert(nxt and nxt.entry == vase, "the bat still blocks the deck")
-end)
-
-t.test("the dealt memory is bounded", function()
-    local O = fresh()
-    O.DEAL_MAX = 4
-    local pool = deckPool(2)
-    for i = 1, 9 do O.pick("s" .. i, 10000, 400, pool, ANY) end
-    assert(O._dealt_n <= 4, "the memory grows without end")
-end)
-
-t.test("one ornament in the folder stands in every slot", function()
-    local O = fresh()
-    local pool = deckPool(1)
-    for i = 1, 3 do assert(O.pick("x" .. i, 10000, 400, pool, ANY), "slot " .. i .. " was empty") end
-end)
-
-t.test("pick takes a per-call chance", function()
-    local O = fresh()
-    -- The gaps BETWEEN sections are far more numerous than the one at a row's
-    -- end, so they run at lower odds.
-    local always = { chance = 1, min_gap = 0, min_h = 0 }
-    local never  = { chance = 0, min_gap = 0, min_h = 0 }
-    assert(O.pick("s", 1000, 400, POOL, always), "chance 1 always places")
-    assert(not O.pick("s", 1000, 400, POOL, never), "chance 0 never does")
-end)
+-- Which slots and which piece: tests/_test_ornament_deck.lua.
 
 -- ── the seeded files must be valid SVG ───────────────────────────────────
 --
@@ -901,176 +749,45 @@ local function withFreq(v, fn)
     if not ok then error(err, 0) end
 end
 
-t.test("frequency scales BOTH chances, keeping them apart", function()
-    -- The two base odds are deliberately far apart: a grouping chip's section
-    -- breaks are far more numerous than a plain shelf's gaps, so identical
-    -- odds there would put a plant between every other series. A setting that
-    -- replaced the numbers instead of scaling them would collapse that.
-    local W = fresh()
-    assert(W.CHANCE > W.GROUP_CHANCE * 2,
-        "the two base chances are no longer meaningfully apart")
-    local body = (io.open("lib/bookshelf_ornaments.lua"):read("a"))
-        :match("function M%.pick%(seed.-\nend")
-    assert(body:match("M%.frequency%(%)"),
-        "pick no longer scales by the frequency setting")
-end)
-
-t.test("None places nothing, whatever the gap", function()
-    withFreq(0, function(W)
-        W._entries = nil
-        local entries = { { name = "a.svg", aspect = 1, overhang = 0 } }
-        for i = 1, 40 do
-            eq(W.pick("seed" .. i, 10000, 400, entries, { min_gap = 0, min_h = 1 }),
-               nil, "an ornament appeared at frequency 0")
-        end
-    end)
-end)
-
-t.test("a higher frequency places strictly more often", function()
-    -- Counted over the same seeds, so the comparison is the setting and
-    -- nothing else.
-    local entries = { { name = "a.svg", aspect = 1, overhang = 0 } }
-    local function hits(freq)
-        local n = 0
-        withFreq(freq, function(W)
-            for i = 1, 200 do
-                if W.pick("s" .. i, 10000, 400, entries, { min_gap = 0, min_h = 1 }) then
-                    n = n + 1
-                end
-            end
-        end)
-        return n
-    end
-    local low, high = hits(0.5), hits(2)
-    assert(high > low, string.format(
-        "frequency 2 placed %d and frequency 0.5 placed %d", high, low))
-end)
-
-t.test("only the higher frequencies reserve a row end", function()
-    -- Reserving takes width off every shelf before the books are packed, so
-    -- it must not happen at the settings that mean "occasionally".
-    withFreq(1,   function(W) eq(W.reservesRowEnds(), false) end)
-    withFreq(2,   function(W) eq(W.reservesRowEnds(), true) end)
-    withFreq(0,   function(W) eq(W.reservesRowEnds(), false) end)
-end)
-
 t.test("the reservation is taken off BOTH packers", function()
     -- fillRows decides which books are on the page; balanceRows re-breaks the
     -- same books across the same rows. Give one the full width and it packs a
-    -- book into the strip the other stands an ornament in.
-    -- The width is now a per-row function (a row with a piece at its end
-    -- gives up that piece's width, no other row gives up anything); the rule
-    -- that matters is unchanged: BOTH packers must be handed the same one.
+    -- book into the strip the other stands an ornament in. Both are handed
+    -- the deck hooks' per-row width (a row with a piece at its end gives up
+    -- that piece's width, no other row gives up anything).
     local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    assert(src:match("SpineLayout%.fillRows%(widths, availAt"),
+    assert(src:find("SpineLayout.fillRows(widths, hk.avail", 1, true),
         "fillRows does not pack into the per-row width")
-    assert(src:match("SpineLayout%.balanceRows%(widths, availAt"),
+    assert(src:find("SpineLayout.balanceRows(widths, hk and hk.avail or content_w_books", 1, true),
         "balanceRows does not balance into the per-row width")
 end)
 
 t.test("there is ONE row-end ornament painter, and it knows rows are centred", function()
-    -- A second painter was added here and overlapped the first. The existing
-    -- one is correct and subtle: books stand CENTRED, so the row's leftover is
-    -- split between both ends (`lead`), and it derives its slack from
-    -- lead + content_w and places on whichever side the seed picked. A painter
-    -- that assumes the leftover is all at the right edge stands its ornament
-    -- on the last book.
+    -- Books stand CENTRED, so the row's leftover is split between both ends
+    -- (`lead`): the row-end piece stands beside lead + content_w on its side.
+    -- A painter that assumes the leftover is all at the right edge stands its
+    -- ornament on the last book. It paints the plan's piece; it picks none.
     local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
     local body = src:match("function SpineShelf%.rowWidget.-\nend\n")
     assert(body, "rowWidget could not be located")
-    local n = select(2, body:gsub("Orn%.pick", ""))
-    assert(n == 2, string.format(
-        "expected 2 Orn.pick calls in rowWidget (bare plank, row end); found %d", n))
-    assert(body:match("local slack  = opts%.width %- %(lead %+ content_w%)"),
+    eq(select(2, body:gsub("Orn%.pick", "")), 0, "rowWidget picks pieces again")
+    assert(body:find("x = lead + content_w + SpineShelf.ornPad(pad, pl)", 1, true),
         "the row-end ornament no longer accounts for the centring lead")
 end)
 
-t.test("a reserved row end is actually used, not left to a dice roll", function()
-    -- plan() takes the width off before the books are packed. Leaving the
-    -- strip empty on a dice roll would cost a book's width for nothing.
-    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    assert(src:match("chance    = reserved and 1 or nil"),
-        "the reserved row end still places on the default odds")
-end)
-
-t.test("no ornament stands twice on one screen", function()
-    -- Placements are seeded independently -- a section break knows the books
-    -- either side, a row end knows its row -- so nothing stopped two landing
-    -- on the same file. With a folder of three that is not unlikely, and it
-    -- reads as a mistake rather than as decoration.
-    local W = fresh()
-    local entries = {}
-    for i = 1, 3 do
-        entries[i] = { name = "o" .. i .. ".svg", aspect = 1, overhang = 0 }
-    end
-    W.beginScreen()
-    local seen = {}
-    for i = 1, 3 do
-        local pl = W.pick("gap" .. i, 10000, 400, entries,
-                          { min_gap = 0, min_h = 1, chance = 1 })
-        assert(pl, "placement " .. i .. " was refused")
-        assert(not seen[pl.entry.name],
-            pl.entry.name .. " stood twice on the same screen")
-        seen[pl.entry.name] = true
-    end
-end)
-
-t.test("a repeat beats a blank once every ornament is up", function()
-    -- Exhausting a small folder must not start refusing placements: the gap
-    -- is there either way, and an empty one looks like a bug.
-    local W = fresh()
-    local entries = { { name = "only.svg", aspect = 1, overhang = 0 } }
-    W.beginScreen()
-    assert(W.pick("a", 10000, 400, entries, { min_gap = 0, min_h = 1, chance = 1 }))
-    assert(W.pick("b", 10000, 400, entries, { min_gap = 0, min_h = 1, chance = 1 }),
-        "the second gap was left empty rather than repeating the only ornament")
-end)
-
-t.test("a refused placement does not consume an ornament", function()
-    -- pick bails on several paths (too short, too narrow, the odds). Counting
-    -- one that never stood would push the next gap onto a different file for
-    -- no reason, and exhaust a small folder early.
-    local W = fresh()
-    local entries = {}
-    for i = 1, 3 do
-        entries[i] = { name = "o" .. i .. ".svg", aspect = 1, overhang = 0 }
-    end
-    W.beginScreen()
-    -- min_h far above anything this stand height can produce: always refused.
-    for i = 1, 5 do
-        eq(W.pick("x" .. i, 10000, 40, entries, { min_gap = 0, min_h = 9999, chance = 1 }),
-           nil)
-    end
-    local used = 0
-    for _k in pairs(W._used) do used = used + 1 end
-    eq(used, 0, "refused placements were counted as standing")
-end)
-
-t.test("the screen is reset where the page is planned", function()
-    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    local plan = src:match("function SpineShelf%.plan%(items, opts%).-\n    local flat")
-    assert(plan, "the plan preamble could not be located")
-    assert(plan:match("beginScreen"),
-        "nothing clears the used set when a page is planned")
-end)
-
-
 t.test("a reserved row end is decided per row, in the plan, at the piece's own width", function()
-    -- At the higher frequencies plan() used to take one stand-height square
-    -- off EVERY row before packing, and the row widget then rolled for a
-    -- piece; a row that got none kept the hole, and one that did still had
-    -- the difference between the square and the piece. Now the plan picks
-    -- per row and reserves exactly that width; rows without a piece keep the
-    -- whole shelf (maintainer).
+    -- The plan deals each shelf's end piece (when its turn comes round) and
+    -- reserves exactly that width; rows without a piece keep the whole shelf
+    -- (maintainer).
     local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
     local plan = src:match("\nfunction SpineShelf%.plan%(items, opts%)\n.-\nend\n")
     assert(plan, "plan not found")
     local code = plan:gsub("%-%-[^\n]*", "")
     assert(not code:find("content_w_books = content_w_books %- orn%.row_end"),
         "plan still takes the nominal square off every row")
-    assert(code:find("row_orn", 1, true) and code:find("SpineLayout%.fillRows%(widths, availAt"),
+    assert(code:find("SpineLayout.fillRows(widths, hk.avail", 1, true),
         "plan does not hand fillRows a per-row width")
-    assert(code:find("%.ornament = row_orn"), "plan does not tell the row which piece stands on it")
+    assert(code:find("rows[r].ornament = hk.row_orn[r]", 1, true), "plan does not tell the row which piece stands on it")
     local rw = src:match("\nfunction SpineShelf%.rowWidget%(opts%)\n.-\nend\n")
     assert(rw and rw:gsub("%-%-[^\n]*", ""):find("opts%.row%.ornament"),
         "rowWidget ignores the plan's row-end ornament")
@@ -1153,108 +870,7 @@ t.test("seeds: the pot stands a little back from the plank's edge", function()
     end
 end)
 
-t.test("row-end ornaments alternate sides down a screen", function()
-    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    local body = src:match("\nfunction SpineShelf%.rowEndSide%(base, k%)\n.-\nend\n")
-    assert(body, "rowEndSide not found")
-    local SpineShelf = {}
-    assert(load(body, "rowEndSide", "t", { SpineShelf = SpineShelf, tonumber = tonumber }))()
-    eq(SpineShelf.rowEndSide("left", 1), "left")
-    eq(SpineShelf.rowEndSide("left", 2), "right")
-    eq(SpineShelf.rowEndSide("left", 3), "left")
-    eq(SpineShelf.rowEndSide("right", 2), "left")
-    eq(SpineShelf.rowEndSide(nil, 1), "right", "an unknown side reads as right, as pick does")
-    -- and plan uses the FIRST row's side as the base for the rest
-    local plan = src:match("\nfunction SpineShelf%.plan%(items, opts%)\n.-\nend\n"):gsub("%-%-[^\n]*", "")
-    assert(plan:find("SpineShelf.rowEndSide(SpineShelf.rowEndBase(key),", 1, true),
-        "plan does not alternate the pieces from the page's base side")
-end)
-
-
 -- ── Pages differ from their neighbours; Lots leaves the odd row to the books ─
-t.test("the first row's side comes from the page's parity, so neighbouring pages mirror", function()
-    -- Maintainer: with Lots, the pieces stayed put while the spines changed,
-    -- "it ruins the effect of looking at a different shelf". The first row's
-    -- side used to hash the page's first book, so neighbours matched half the
-    -- time. Odd pages start one side, even pages the other; a page still
-    -- composes the same way every time it is shown.
-    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    local body = src:match("\nfunction SpineShelf%.rowEndBase%(page_key%)\n.-\nend\n")
-    assert(body, "rowEndBase not found")
-    local SpineShelf = {}
-    assert(load(body, "rowEndBase", "t",
-        { SpineShelf = SpineShelf, tonumber = tonumber, tostring = tostring,
-          pcall = pcall, require = require }))()
-    eq(SpineShelf.rowEndBase(1), "right")
-    eq(SpineShelf.rowEndBase(2), "left")
-    eq(SpineShelf.rowEndBase(3), "right")
-    eq(SpineShelf.rowEndBase("2"), "left", "a page number as a string still counts")
-    assert(SpineShelf.rowEndBase(7) ~= SpineShelf.rowEndBase(8), "neighbours must differ")
-    -- A page is NAMED by its first book now, not numbered, because the number
-    -- reaches the render through a lookup that can go stale. A name still has
-    -- to give a side, and two different names must not always agree.
-    local sides = {}
-    for _i, name in ipairs({ "/a.epub", "/b.epub", "/c.epub", "/d.epub",
-                             "/e.epub", "/f.epub" }) do
-        sides[#sides + 1] = SpineShelf.rowEndBase(name)
-    end
-    local l, r = 0, 0
-    for _i = 1, #sides do
-        assert(sides[_i] == "left" or sides[_i] == "right", "a name gave no side")
-        if sides[_i] == "left" then l = l + 1 else r = r + 1 end
-    end
-    assert(l > 0 and r > 0, "every page name landed on the same side")
-    local plan = src:match("\nfunction SpineShelf%.plan%(items, opts%)\n(.-)\nfunction SpineShelf%.")
-    assert(plan, "plan not found")
-    assert(plan:find("SpineShelf.rowEndBase(key)", 1, true),
-        "plan does not take the base side from the page's own identity")
-    assert(not plan:find("row_orn[1] and row_orn[1].side or pl.side", 1, true),
-        "plan still hashes the first row's side")
-end)
-
-t.test("rows that get a piece alternate by PIECE, so a bookless row does not pair two on one side", function()
-    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    local plan = src:match("\nfunction SpineShelf%.plan%(items, opts%)\n(.-)\nfunction SpineShelf%.")
-    -- Counted per PAGE, so the count cannot run on across a page boundary in
-    -- the pagination pass.
-    assert(plan:find("placed_on[key] = (placed_on[key] or 0) + 1", 1, true),
-        "the side must alternate over the pieces placed, not the row index")
-    assert(plan:find("SpineShelf.rowEndSide(SpineShelf.rowEndBase(key),", 1, true),
-        "the alternation no longer starts from the page's base side")
-end)
-
-t.test("a reserved row end is usually, not always, taken: Lots leaves about one row in six to the books", function()
-    -- Maintainer: "allow some rows even on 'lots' setting to be occasionally
-    -- filled with books". pick() scales its odds by the frequency level, so
-    -- one constant gives Often about half its row ends and Lots most of them.
-    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
-    local plan = src:match("\nfunction SpineShelf%.plan%(items, opts%)\n(.-)\nfunction SpineShelf%.")
-    -- The ORDINARY path still rolls; a promised page's first row is the only
-    -- placement that does not (see _test_ornament_page_cadence).
-    assert(plan:find("or Orn.ROW_END_CHANCE", 1, true),
-        "the row-end pick no longer rolls on the ordinary path")
-    local O = fresh()
-    -- Lots, as a per-shelf pin: the frequency has no library setting behind
-    -- it any more, so stubbing the store would set nothing.
-    O.setChipFrequency(3)
-    assert(type(O.ROW_END_CHANCE) == "number", "no ROW_END_CHANCE constant")
-    assert(O.ROW_END_CHANCE * 3 < 1, "at Lots every row end is still taken")
-    assert(O.ROW_END_CHANCE * 3 >= 0.75, "at Lots too many row ends go to the books")
-    assert(O.ROW_END_CHANCE * 2 >= 0.5, "at Often fewer than half the row ends are taken")
-    local pool = { { name = "a", aspect = 0.6, overhang = 0 }, { name = "b", aspect = 0.6, overhang = 0 } }
-    local none = 0
-    for page = 1, 100 do
-        O.beginScreen()
-        for r = 1, 3 do
-            local pl = O.pick("/lib/book" .. page .. ".epub|rowend|" .. r, 400, 100, pool,
-                { min_gap = 0, min_h = 1, chance = O.ROW_END_CHANCE })
-            if not pl then none = none + 1 end
-        end
-    end
-    assert(none >= 15 and none <= 75, "expected roughly 1 in 6 of 300 row ends bookless at Lots, got " .. none)
-    O.setChipFrequency(nil)
-end)
-
 t.test("the page plan tells plan() which page it is", function()
     local src = io.open("lib/bookshelf_widget.lua"):read("a")
     -- Set on the options the render builds from _spinePlanBase, since the
@@ -1291,53 +907,6 @@ t.test("PNG ornaments are unpremultiplied after decoding (not SVGs NanoSVG alrea
     assert(dr:find("is_straight", 1, true), "an SVG MuPDF rendered is premultiplied too")
 end)
 
-t.test("device geometry: every piece of a mixed folder stands, in equal shares", function()
-    -- Twelve-to-fourteen test ornaments of every shape, reported twice as
-    -- "the same two over and over". PW5 row end: a 1135px row, books 280px;
-    -- the 9:1 panorama is scaled to the cap, not left out.
-    local O = fresh()
-    local pool = {}
-    local aspects = { 0.57, 0.57, 0.48, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 9.0 }
-    for i, a in ipairs(aspects) do pool[i] = { name = "f" .. i, aspect = a, overhang = 0 } end
-    local seen = {}
-    for page = 1, 140 do
-        O.beginScreen()
-        for within = 1, 2 do
-            -- The slot offers the quarter-row default (1135 / 4).
-            local pl = O.pick("page" .. page .. "|rowend|" .. within, 283, 280, pool,
-                              { chance = math.huge, min_h_frac = O.ROW_END_MIN_H_FRAC, makes_room = true })
-            assert(pl, "a row end was left empty")
-            assert(pl.w <= 283, "a piece is wider than the quarter-row default")
-            seen[pl.entry.name] = (seen[pl.entry.name] or 0) + 1
-        end
-    end
-    local lo, hi = math.huge, 0
-    for i = 1, #pool do
-        local c = seen[pool[i].name] or 0
-        lo, hi = math.min(lo, c), math.max(hi, c)
-    end
-    assert(lo > 0, "a piece never stood")
-    eq(hi - lo, 0, "280 slots over 14 pieces: exactly 20 each")
-end)
-
-t.test("shuffle: every slot is dealt afresh, from a new order", function()
-    local O = fresh()
-    local pool = deckPool(8)
-    local before = {}
-    for i = 1, 8 do before[i] = O.pick("s" .. i, 10000, 400, pool, ANY).entry.name end
-    O.shuffle()
-    eq(O._dealt_n, 0, "the deals were not forgotten")
-    local same = 0
-    local seen = {}
-    for i = 1, 8 do
-        local n = O.pick("s" .. i, 10000, 400, pool, ANY).entry.name
-        if n == before[i] then same = same + 1 end
-        assert(not seen[n], "a repeat within the new round")
-        seen[n] = true
-    end
-    assert(same < 8, "the same slots got the same pieces after a shuffle")
-end)
-
 t.test("shuffle is a KOReader action the shelf answers", function()
     local main = io.open("main.lua"):read("*a")
     assert(main:find('registerAction("bookshelf_shuffle_ornaments"', 1, true), "no action registered")
@@ -1364,20 +933,16 @@ t.test("json: scale sizes the piece and its cap together, up to the whole row", 
     local O = fresh()
     local wide = { name = "w.svg", aspect = 3, overhang = 0, scale = 2 }
     -- stand 280: natural 224 tall; x2 = 448 tall, 1344 wide; cap 280 x2 = 560.
-    local p = O.pick("a", 280, 280, { wide }, { min_gap = 0, min_h = 1, chance = 1, makes_room = true, max_room = 1135 })
-    eq(p.w, 560, "the cap grows with the scale")
-    local q = O.pick("b", 280, 280, { { name = "w2.svg", aspect = 3, overhang = 0, scale = 4 } },
-                     { min_gap = 0, min_h = 1, chance = 1, makes_room = true, max_room = 1000 })
-    eq(q.w, 1000, "never past the whole row")
-    local small = O.pick("c", 280, 280, { { name = "s.svg", aspect = 1, overhang = 0, scale = 0.5 } },
-                         { min_gap = 0, min_h = 1, chance = 1, makes_room = true, max_room = 1135 })
-    eq(small.h, 112, "half of 224")
+    eq(O.place(wide, 280, 280, { max_room = 1135 }, 1).w, 560, "the cap grows with the scale")
+    eq(O.place({ name = "w2.svg", aspect = 3, overhang = 0, scale = 4 }, 280, 280, { max_room = 1000 }, 1).w,
+       1000, "never past the whole row")
+    eq(O.place({ name = "s.svg", aspect = 1, overhang = 0, scale = 0.5 }, 280, 280, { max_room = 1135 }, 1).h,
+       112, "half of 224")
 end)
 
 t.test("json: padding and raise reach the placement in px", function()
     local O = fresh()
-    local p = O.pick("a", 400, 300, { { name = "p.svg", aspect = 1, overhang = 0, pad = -0.05, raise = 0.1 } },
-                     { min_gap = 0, min_h = 1, chance = 1, makes_room = true })
+    local p = O.place({ name = "p.svg", aspect = 1, overhang = 0, pad = -0.05, raise = 0.1 }, 400, 300, {}, 1)
     eq(p.pad_px, -15, "5% of a 300px stand, tighter")
     eq(p.raise, 24, "10% of its own 240px")
 end)
@@ -1385,14 +950,11 @@ end)
 t.test("json: mirror always flips every deal; alternate every other one", function()
     local O = fresh()
     local al = { name = "al.svg", aspect = 1, overhang = 0, mirror = "always" }
-    for i = 1, 3 do assert(O.pick("x" .. i, 1000, 300, { al }, ANY).mirror, "always, deal " .. i) end
-    local O2 = fresh()
+    for i = 1, 3 do assert(O.place(al, 1000, 300, {}, i).mirror, "always, deal " .. i) end
     local alt = { name = "alt.svg", aspect = 1, overhang = 0, mirror = "alternate" }
     local got = {}
-    for i = 1, 4 do got[i] = O2.pick("y" .. i, 1000, 300, { alt }, ANY).mirror end
-    eq(table.concat({ tostring(got[1]), tostring(got[2]), tostring(got[3]), tostring(got[4]) }, ","),
-       "false,true,false,true")
-    eq(O2.pick("y2", 1000, 300, { alt }, ANY).mirror, true, "a repaint keeps the slot's own flip")
+    for i = 1, 4 do got[i] = tostring(O.place(alt, 1000, 300, {}, i).mirror) end
+    eq(table.concat(got, ","), "false,true,false,true")
 end)
 
 t.test("json: the shelf honours padding everywhere it reserves or paints the gap, and the raise", function()
@@ -1400,7 +962,7 @@ t.test("json: the shelf honours padding everywhere it reserves or paints the gap
     local n = select(2, sh:gsub("SpineShelf%.ornPad%(", ""))
     assert(n >= 4, "padding is applied in only " .. n .. " places (section gap, row-end reserve, both row-end sides)")
     assert(sh:find("stand_h - pl.above - (pl.raise or 0)", 1, true), "the raise is not applied")
-    eq(select(2, sh:gsub("max_room   = ", "")), 3, "every slot that makes room gives its whole-row ceiling")
+    eq(select(2, sh:gsub("o%.max_room = ", "")), 2, "every slot gives its whole-row ceiling (row end and bare plank; section gap)")
 end)
 
 t.test("menu fix: a height nudge moves a piece, it never changes its size", function()
@@ -1411,7 +973,7 @@ t.test("menu fix: a height nudge moves a piece, it never changes its size", func
     local function at(lift)
         local e = { name = "pot.png", aspect = 1, overhang = 0.05,
                     sink = lift < 0 and -lift or 0, raise = lift > 0 and lift or 0 }
-        return O.pick("s" .. lift, 1000, 300, { e }, { min_gap = 0, min_h = 1, chance = 1, max_below = 20, makes_room = true })
+        return O.place(e, 1000, 300, { max_below = 20 }, 1)
     end
     local a, b, c = at(-0.25), at(0), at(0.1)
     eq(a.h, b.h, "sinking changed the size"); eq(b.h, c.h, "raising changed the size")
@@ -1424,11 +986,11 @@ t.test("menu fix: a mirror change reaches a piece already dealt", function()
     -- Device report: "Mirror option does nothing".
     local O = fresh()
     local e = { name = "m.svg", aspect = 1, overhang = 0, mirror = "off" }
-    eq(O.pick("slot", 1000, 300, { e }, ANY).mirror, false)
+    eq(O.place(e, 1000, 300, {}, 1).mirror, false)
     e.mirror = "always"
-    eq(O.pick("slot", 1000, 300, { e }, ANY).mirror, true, "the slot kept its old flip")
+    eq(O.place(e, 1000, 300, {}, 1).mirror, true, "the slot kept its old flip")
     e.mirror = "alternate"
-    eq(O.pick("slot", 1000, 300, { e }, ANY).mirror, false, "first deal of the piece: unflipped")
+    eq(O.place(e, 1000, 300, {}, 1).mirror, false, "first deal of the piece: unflipped")
 end)
 
 t.test("negative padding can tighten into the image's own transparent sides", function()
@@ -1438,13 +1000,39 @@ t.test("negative padding can tighten into the image's own transparent sides", fu
     local O = fresh()
     local e = { name = "p.png", path = "/o/p.png", aspect = 1, overhang = 0, pad = -0.2 }
     O._content["/o/p.png|1"] = { 0.25, 0, 0.8, 1 }     -- 25% clear on the left, 20% on the right
-    local p = O.pick("a", 1000, 300, { e }, { min_gap = 0, min_h = 1, chance = 1, makes_room = true })
+    local p = O.place(e, 1000, 300, {}, 1)
     eq(p.slack_px, math.floor(0.2 * p.w), "the narrower clear side, in px")
     local e2 = { name = "q.png", path = "/o/q.png", aspect = 1, overhang = 0, pad = 0.1 }
-    local q = O.pick("b", 1000, 300, { e2 }, { min_gap = 0, min_h = 1, chance = 1, makes_room = true })
+    local q = O.place(e2, 1000, 300, {}, 1)
     eq(q.slack_px, 0, "no probe for a piece that is not tightened")
     local sh = io.open("lib/bookshelf_spine_shelf.lua"):read("*a")
     assert(sh:find("math.max(-(pl and pl.slack_px or 0)", 1, true), "the shelf still stops at the image's box")
+end)
+
+t.test("place: always a placement; a too-wide piece is scaled to the cap, never refused", function()
+    local O = fresh()
+    local wide = { name = "w.svg", aspect = 5, overhang = 0 }
+    local pl = O.place(wide, 100, 400, {}, 1)
+    assert(pl, "a piece was refused")
+    eq(pl.w, 100)
+    local tiny = O.place({ name = "t.svg", aspect = 0.01, overhang = 0 }, 100, 10, {}, 1)
+    assert(tiny and tiny.w >= 1 and tiny.h >= 1, "a tiny piece was refused")
+end)
+
+t.test("place: a hanging piece hangs, unless told to stand this once", function()
+    local O = fresh()
+    local bat = { name = "bat.svg", aspect = 1, overhang = 0.3, hang = true }
+    eq(O.place(bat, 1000, 400, {}, 1).hang, true)
+    local st = O.place(bat, 1000, 400, { stand = true }, 1)
+    eq(st.hang, false); eq(st.hang_lift, 0)
+end)
+
+t.test("the odds, budgets and deck are gone from the module", function()
+    local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
+    for _i, name in ipairs({ "M.pick", "PASS_LIMIT", "PAGE_PERIOD", "pageGuaranteed",
+            "reservesRowEnds", "ROW_END_CHANCE", "GROUP_CHANCE", "budgetLeft", "_dealt" }) do
+        assert(not src:find(name, 1, true), name .. " is still in the module")
+    end
 end)
 
 t.done()

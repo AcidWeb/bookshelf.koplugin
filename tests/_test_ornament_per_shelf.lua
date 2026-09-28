@@ -94,27 +94,22 @@ t.test("four stops, in the maintainer's words, and no hidden Default", function(
 end)
 
 t.test("every stop looks different from the one before it", function()
-    -- THE BUG. pick() does:
-    --     local chance = (o.chance or M.CHANCE) * M.frequency()
-    --     if chance < 1 and (h % 100) >= math.floor(chance * 100) then return nil end
-    -- so once base * level reaches 1 the roll is skipped and EVERY eligible
-    -- gap takes a piece. Two stops above that line are one stop wearing two
-    -- names, which is what Often (2) and Lots (3) were.
-    local base = tonumber(orn:match("\nM%.CHANCE%s*=%s*([%d%.]+)"))
-    assert(base, "M.CHANCE moved or was renamed")
-    local saturated = 0
-    for i, stop in ipairs(STOPS) do
-        local chance = base * stop.value
-        if chance >= 1 then saturated = saturated + 1 end
-        if i > 1 then
-            local prev = base * STOPS[i - 1].value
-            assert(chance > prev,
-                stop.word .. " is not denser than " .. STOPS[i - 1].word)
+    -- Each stop names a pattern (lib/bookshelf_ornament_deck). Two stops that
+    -- landed on one pattern would be one stop wearing two names, which is what
+    -- Often and Lots once were under the odds.
+    package.loaded["logger"] = package.loaded["logger"] or { warn = function() end, dbg = function() end }
+    local Deck = dofile("lib/bookshelf_ornament_deck.lua")
+    local prev
+    for _i, stop in ipairs(STOPS) do
+        local level = Deck.levelOf(stop.value)
+        local n = 0
+        for k = 1, 24 do
+            if Deck.shelfSlot(level, k) then n = n + 1 end
+            if Deck.gapSlot(level, k) then n = n + 1 end
         end
+        if prev then assert(n > prev, stop.word .. " is not denser than the stop before it") end
+        prev = n
     end
-    eq(saturated, 1,
-        "only the top stop may fill every gap; " .. saturated .. " stops saturate, "
-        .. "so the ones above the first are the same picture")
 end)
 
 t.test("an untouched chip shows its default's word, by nearest stop", function()

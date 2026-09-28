@@ -41,14 +41,14 @@ end)
 
 t.test("the row keeps hanging pieces out of its own children, in all three slots", function()
     local n = select(2, shelf:gsub("hanging%[#hanging %+ 1%] = w_", ""))
-    eq(n, 2, "row end and section gap")
-    assert(shelf:find("if ornament and ornament.placement.entry.hang then hanging[1] = ornament", 1, true), "bare plank")
+    eq(n, 3, "row end, section gap and a lead piece at a row's start")
+    assert(shelf:find("if ornament and ornament.placement.hang then hanging[1] = ornament", 1, true), "bare plank")
     assert(shelf:find("row_group._hanging = hanging", 1, true))
 end)
 
 t.test("the height nudge moves a hanging piece (+ up, into the shelf above)", function()
     assert(shelf:find("- (pl.hang_lift or 0)", 1, true), "ornamentY ignores the nudge for a hanging piece")
-    assert(orn:find("hang_lift = entry.hang and math.floor((entry.lift or 0) * height + 0.5) or 0", 1, true))
+    assert(orn:find("hang_lift = hang and math.floor((entry.lift or 0) * height + 0.5) or 0", 1, true))
 end)
 
 t.done()

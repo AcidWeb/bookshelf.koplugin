@@ -6164,11 +6164,9 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
             -- over by the next row's books and by the footer.
             defer_badges      = true,
             lift_headroom     = lift_head,
-            -- For an empty row's ornament seed: the page's identity + the
-            -- row's index (see rowWidget).
             row_index         = r,
-            page_key          = plan.entries[1] and plan.entries[1].book
-                                and plan.entries[1].book.filepath or nil,
+            -- An empty plank's piece, dealt by the plan after the books.
+            bare_piece        = plan.bare and plan.bare[r],
             width             = content_w,
             height            = shelf_h,
             gap               = gap,
@@ -14305,7 +14303,7 @@ function BookshelfWidget:onBookshelfToggleHero()
 end
 
 function BookshelfWidget:onBookshelfShuffleOrnaments()
-    require("lib/bookshelf_ornaments").shuffle()
+    require("lib/bookshelf_ornament_deck").shuffle()
     -- The pieces' widths decide where rows (and so pages) break: the page
     -- map is rebuilt on the next jump. The page on screen keeps its first
     -- book; what follows it may move.

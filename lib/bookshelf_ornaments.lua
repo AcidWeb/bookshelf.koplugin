@@ -42,17 +42,11 @@ M.NEW_SUBDIR    = "ornaments"
 M.PARENT        = "icons"
 M.SUBDIR        = "bookshelf.ornaments"
 M.TEMPLATE_NAME = "template.svg"
-M.MIN_GAP_DP    = 48     -- a gap narrower than this stays empty
-M.MIN_H_DP      = 28     -- and an ornament that would come out smaller isn't placed
-M.MIN_H_FRAC    = 0.45   -- ...nor one shrunk (to fit a narrow gap) below this share
-                         -- of the books' height: ornaments scale with the shelf,
-                         -- a speck beside tall books looked wrong (user report)
 M.HEIGHT_FRAC   = 0.8    -- height as a fraction of the books' stand height
 -- THE ROW END, where width is the scarce thing and height is not.
 --
 -- The slot used to be a stand-height SQUARE. Anything wider than that was
--- shrunk to fit and, once the shrinking took it under MIN_H_FRAC, dropped --
--- so a broad ornament simply never appeared, and nothing on screen said why
+-- shrunk to fit and, past a floor, dropped -- so a broad ornament simply never appeared, and nothing on screen said why
 -- (maintainer: "users will wonder why their ornament never appears if it's
 -- just over some hidden limit"). The square is not a rule anybody chose; it
 -- is just what falls out of using the height for the width too.
@@ -78,24 +72,12 @@ M.ASIDE_STANDS  = 1.0
 function M.maxWidth(stand_h, row_w)
     return math.max(0, math.min(row_w or 0, math.floor((stand_h or 0) * M.ASIDE_STANDS)))
 end
--- ...and a piece that spreads across a row-end slot may stand shorter than
--- one wedged into a gap between books. There is nothing above a row end to
--- crowd, so a low wide piece reads as an ornament rather than as a mistake,
--- where the same piece squeezed between two spines would not.
-M.ROW_END_MIN_H_FRAC = 0.3
-M.CHANCE        = 0.5    -- fraction of eligible gaps that get an ornament
-M.GROUP_CHANCE  = 0.08   -- ...and of the gaps BETWEEN sections on a grouping
-                         -- chip, which are far more numerous: the same odds
-                         -- there would put a plant between every other series
 M.CACHE_MAX     = 12     -- rendered bitmaps kept (path x size x night)
 
 -- ── Frequency ──────────────────────────────────────────────────────
 --
--- A MULTIPLIER on the odds above, not a replacement for them. The two base
--- chances are deliberately far apart -- a grouping chip's section breaks are
--- far more numerous than the gaps on a plain shelf, so identical odds would
--- put a plant between every other series -- and that relationship should hold
--- at every setting. Scaling both keeps it.
+-- The level names a PATTERN of slots (lib/bookshelf_ornament_deck):
+-- Rarely, Often, Always. Off places nothing.
 -- The PER-SHELF key: a chip carries its own number in its tab record. There
 -- is deliberately no library-wide setting behind it. A default that every
 -- shelf can override is a trap -- change the default later and nothing
@@ -103,142 +85,6 @@ M.CACHE_MAX     = 12     -- rendered bitmaps kept (path x size x night)
 -- A shelf that has never been touched holds nothing and gets FREQ_DEFAULT.
 M.FREQ_SETTING  = "ornament_frequency"
 M.FREQ_DEFAULT  = 1
-
--- Above this, ornaments stop waiting for a gap wide enough and have a place
--- RESERVED at the end of each shelf (see SpineShelf.plan). Below it they are
--- opportunistic, which is what "occasional" has always meant here.
-M.FREQ_RESERVE_AT = 1.5
--- The odds a RESERVED row end (see SpineShelf.plan) actually takes a piece,
--- before pick() scales them by the level: Often (2) keeps about half its
--- row ends, Lots (3) about five in six. Maintainer: "allow some rows even on
--- 'lots' setting to be occasionally filled with books". A row that rolls
--- nothing gives nothing up, so the odd bookless row costs no shelf.
-M.ROW_END_CHANCE = 0.28
-
--- Odds that survive pick()'s scaling by the level, for the one placement that
--- is a promise rather than a roll. A plain 1 would not do: pick multiplies by
--- the frequency, so at Rarely a "certainty" of 1 comes back out as 0.5.
-M.CHANCE_CERTAIN = math.huge
-
--- ── The group channel has its own curve ───────────────────────────────────
---
--- One level scales every channel, but the channels do not offer the same
--- NUMBER of chances. A plain shelf offers a couple of row ends per page; a
--- grouping chip can offer thirty section breaks. Multiplying both by the same
--- number gives the two complaints that arrived one after the other: nothing
--- at all on a packed plain shelf, and "set ornaments to rarely appear and I
--- have 4 on screen right now" on a chip full of small groups.
---
--- So the section-break channel is damped at the lower levels rather than
--- following the level directly. Per gap, and across a page holding thirty of
--- them:
---
---     level        per gap    expected on such a page
---     Rarely        1.6%              0.5
---     Often         5.6%              1.7
---     Always       16.0%              4.8
---
--- Not a per-screen CAP, which is what this wanted to be: the section-break
--- placement widens the gap it stands in, so it changes how many books fit,
--- and a cap counted per screen would give plan()'s two callers different
--- answers and break page boundaries again (see pageGuaranteed). A curve is a
--- pure function of the level, so both passes still agree.
-M.GROUP_LEVEL = { [0] = 0, [0.5] = 0, [1] = 0.7, [2] = 2 }
-
--- The row end gets a curve too, and for the same reason: it is the channel
--- that was actually doing the work on a grouped chip (instrumented: six
--- placements at 0.28 against one section break at 0.08), so damping the
--- section breaks alone left Rarely at "9 ornaments across 11 pages... often 2
--- on a page", which is not rare.
---
--- ZERO at Rarely. That setting is then exactly its promise -- one page in
--- four stands a piece, and no other channel adds to it -- which is both rare
--- and predictable. Everything above it keeps a roll on top of the promise.
-M.ROW_END_LEVEL = { [0] = 0, [0.5] = 0, [1] = 0.7, [2] = 2 }
-
-local function levelFrom(curve)
-    local f = M.frequency()
-    local best, dist = 0, math.huge
-    for level, mul in pairs(curve) do
-        local d = math.abs(level - f)
-        if d < dist then best, dist = mul, d end
-    end
-    return best
-end
-
-function M.rowEndLevel() return levelFrom(M.ROW_END_LEVEL) end
-
--- ── A ceiling for the channels that can have one ──────────────────────────
---
--- The curve above thins the section breaks, but the other channels keep
--- adding: the promised row end, the odd row end that rolls one anyway, the
--- leftover slack beside a short row. Measured on a grouped chip at Rarely
--- that came to about two a page, which is not what "rarely" promises.
---
--- So the channels that do NOT affect packing take a hard per-screen ceiling,
--- counting everything already standing (a section-break piece is placed
--- earlier, in plan, and counts against it). Only those channels: the
--- section-break piece widens the gap it stands in, so capping it would give
--- plan()'s two callers different answers and break page boundaries -- the
--- constraint that also ruled out a cap for the group channel.
-M.PAGE_BUDGET = { [0] = 0, [0.5] = 1, [1] = 2, [2] = 4 }
-
-function M.pageBudget()
-    local f = M.frequency()
-    local best, dist = 0, math.huge
-    for level, n in pairs(M.PAGE_BUDGET) do
-        local d = math.abs(level - f)
-        if d < dist then best, dist = n, d end
-    end
-    return best
-end
-
--- budgetLeft() -> how many more a screen may take, for budgeted channels.
-function M.budgetLeft()
-    local n = 0
-    for _k in pairs(M._used) do n = n + 1 end
-    return M.pageBudget() - n
-end
-
-function M.groupLevel() return levelFrom(M.GROUP_LEVEL) end
-
--- ── The per-PAGE promise ──────────────────────────────────────────────────
---
--- Every other placement is opportunistic: a piece appears where a gap happens
--- to be wide enough. On a plain shelf that can mean almost never. A shelf with
--- no groups has no section breaks at all -- the default Home shelf, flattened
--- folders, is exactly that -- and a densely packed row leaves a few dozen
--- pixels at its end, under MIN_GAP_DP. Both channels empty, at every level
--- below the top one: "set to often, there was only one ornament in total on
--- the whole shelf" (maintainer).
---
--- So a level also says how often a PAGE is promised a piece, and a promised
--- page stands one at a row end whether or not a gap turned up. One page in N:
-M.PAGE_PERIOD = { [0] = 0, [0.5] = 4, [1] = 2, [2] = 1 }
-
-function M.pagePeriod()
-    local f = M.frequency()
-    local best, dist = 0, math.huge
-    for level, period in pairs(M.PAGE_PERIOD) do
-        local d = math.abs(level - f)
-        if d < dist then best, dist = period, d end
-    end
-    return best
-end
-
--- pageGuaranteed(page) -> is THIS page promised a piece?
---
--- Hashed from the page's ORDINAL, not from its books. The ordinal is the one
--- thing both of plan()'s callers agree on: the render knows it, and the
--- pagination pass derives it from the row index. Seeding on anything else --
--- the page's first book, say -- gives the two passes different answers, and
--- they then pack differently and disagree about where pages start.
-function M.pageGuaranteed(page)
-    local period = M.pagePeriod()
-    if period <= 0 then return false end
-    if period == 1 then return true end
-    return (M.hash("page:" .. tostring(page)) % period) == 0
-end
 
 -- The shelf on screen may pin its own frequency, so the value is pushed in
 -- rather than read from the library setting alone: a chip's pin is resolved
@@ -257,29 +103,6 @@ function M.frequency()
     return pinned
 end
 
--- ── One of each, per screen ───────────────────────────────────────
---
--- Placements are seeded independently -- a section break knows the two books
--- either side of it, a row end knows its row -- so nothing stopped two of them
--- landing on the same file. With a folder of three that is not unlikely; it
--- reads as a mistake rather than as decoration, which is the maintainer's
--- report.
---
--- A set rather than a counter: the question is only "is this one already
--- standing on this screen", and when every entry is spoken for a repeat still
--- beats a blank gap.
-M._used = {}
-
--- beginScreen() -- forget what is standing, for a screen about to be built.
--- Called from SpineShelf.plan, which runs once per page and before any row.
-function M.beginScreen()
-    M._used = {}
-end
-
--- reservesRowEnds() -> should a shelf keep a slot free at its end?
-function M.reservesRowEnds()
-    return M.frequency() >= M.FREQ_RESERVE_AT
-end
 
 
 M.TEMPLATE_SVG = [==[<?xml version="1.0" encoding="UTF-8"?>
@@ -1295,243 +1118,69 @@ function M.hash(s)
 end
 
 
--- THE DECK: which ornament a slot gets.
---
--- Every enabled ornament is a card in a shuffled deck, dealt in order: with
--- ten ornaments, the first ten a reader sees are one of each, then the deck
--- is shuffled again (maintainer: "if you have 10 ornaments and see 10
--- ornaments you must see exactly one of each").
---
--- The rotation this replaces handed each slot a place in a cycle over the
--- pieces that FITTED that slot, so every gap cycled over a different subset
--- and pieces came round again before the rest had been seen. Now a slot does
--- not choose: it takes the top card. A slot that cannot take it (a section
--- gap too narrow for it, the first row of a page for a piece that hangs from
--- the shelf above, packing slack too small) stays plain and the card waits on
--- top for the next slot that can, so the order is never broken. Row ends and
--- bare planks make room: a piece gets its natural width there, up to the
--- whole row, and the books move over (maintainer: "each ornament makes space
--- for itself ... max width for an ornament is a full row, it can even have no
--- books").
---
--- Dealt once per seed and remembered (M._dealt), because pick() runs again on
--- every repaint and in both planning passes, and they must agree. Bounded:
--- page turns mint seeds forever, and on overflow the memory is dropped, which
--- at worst re-deals pieces the reader has paged away from.
-M._deck, M._deck_pos, M._deck_key = nil, 1, nil
-M._dealt, M._dealt_n = {}, 0
-M._deal_no, M._deal_count = {}, {}
-M.DEAL_MAX = 2048
-M.PASS_LIMIT = 6
-M._passes = 0
--- Shuffled with its own generator, so nothing else that draws math.random is
--- disturbed, and seeded from the clock, so each session starts somewhere new.
-M._shuffle_state = nil
-local function nextRand(n)
-    local s = M._shuffle_state or (os.time() % 2147483647)
-    s = (s * 48271) % 2147483647
-    M._shuffle_state = s
-    return (s % n) + 1
-end
-local function entryName(e) return e.name or e.path end
+-- Which slots hold a piece, and which piece: lib/bookshelf_ornament_deck.
 
--- deck(entries) -> the deck for this pool, rebuilt when the pool changes.
-function M.deck(entries)
-    local names = {}
-    for i = 1, #entries do names[i] = entryName(entries[i]) end
-    local key = table.concat(names, "\0")
-    if M._deck_key ~= key then
-        M._deck, M._deck_pos, M._deck_key = {}, 1, key
-        M.reshuffle(entries)
-    end
-    return M._deck
-end
-
--- reshuffle(entries): a new order for the next round. Pieces already standing
--- on this screen go to the back, so a small deck does not show the same piece
--- twice across the seam.
-function M.reshuffle(entries)
-    local fresh, standing = {}, {}
-    local order = {}
-    for i = 1, #entries do order[i] = entries[i] end
-    for i = #order, 2, -1 do
-        local j = nextRand(i)
-        order[i], order[j] = order[j], order[i]
-    end
-    for i = 1, #order do
-        if M._used[entryName(order[i])] then standing[#standing + 1] = order[i]
-        else fresh[#fresh + 1] = order[i] end
-    end
-    for i = 1, #standing do fresh[#fresh + 1] = standing[i] end
-    M._deck, M._deck_pos = fresh, 1
-end
-
--- shuffle(): a new layout (the "Bookshelf: shuffle ornaments" action). Every
--- slot forgets what it was dealt and the deck starts a fresh order, so the
--- next paint deals every shelf again.
-function M.shuffle()
-    M._dealt, M._dealt_n, M._passes = {}, 0, 0
-    M._deal_no, M._deal_count = {}, {}
-    M._used = {}
-    M._deck, M._deck_pos, M._deck_key = nil, 1, nil
-end
-
-local function topCard(entries)
-    local deck = M.deck(entries)
-    if M._deck_pos > #deck then M.reshuffle(entries); deck = M._deck end
-    return deck[M._deck_pos]
-end
-
--- pick(seed, gap_px, stand_h, entries, o) -> placement or nil.
---   gap_px  : the width this slot can give, net of margins and padding
---   stand_h : the books' stand height (feet at y = stand_h in row coords)
---   entries : pool (default M.list())
---   o.min_gap, o.min_h : px floors; o.min_h_frac : floor as a share of
---   stand_h (default M.MIN_H_FRAC); o.max_below : how far below the feet the
---   overhang may reach (the plank's surface strip + front face); o.no_hang :
---   a hanging piece cannot go here (no shelf above); o.makes_room : the slot
---   is sized to the piece (a row end, a bare plank), so gap_px is the whole
---   row and a piece wider than that is scaled to it rather than passed over.
--- sizeFor(entry, gap_px, stand_h, o) -> w, h of the piece at a slot, or nil
--- when it cannot stand there. 80% of the books' stand height, times the
--- piece's scale; no wider than the slot's cap (gap_px, grown with the scale
--- up to o.max_room where the slot makes room); the file's own overhang kept
--- on the plank; a height floor against specks. Only a slot that makes room
--- scales a too-wide piece down; anywhere else it waits for one that can.
-function M.sizeFor(entry, gap_px, stand_h, o)
+-- sizeFor(entry, cap_px, stand_h, o) -> w, h of a dealt piece. 80% of the
+-- books' stand height, times the piece's scale; no wider than the cap
+-- (grown with the scale, up to o.max_room); the file's own overhang kept on
+-- the plank. Never refuses: space is always made (maintainer), so a slot
+-- whose turn it is always shows its piece, however small that comes out.
+function M.sizeFor(entry, cap_px, stand_h, o)
     o = o or {}
-    if o.no_hang and entry.hang then return nil end
     local scale = entry.scale or 1
-    local cap = gap_px
-    if o.makes_room then
-        cap = math.floor(gap_px * scale)
-        if o.max_room then cap = math.min(cap, o.max_room) end
-    end
+    local aspect = entry.aspect or 1
+    local cap = math.floor((cap_px or 0) * scale)
+    if o.max_room then cap = math.min(cap, o.max_room) end
+    cap = math.max(1, cap)
     local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC * scale)
-    local width  = math.floor(height * entry.aspect)
-    local shrunk = false
+    local width  = math.floor(height * aspect)
     if width > cap then
-        if not o.makes_room then return nil end
         width  = cap
-        height = math.floor(width / entry.aspect)
-        shrunk = true
+        height = math.floor(width / aspect)
     end
     -- The FILE's overhang sizes the piece; a reader's height nudge only moves
-    -- it (the sink, in pick), or nudging the height would resize it.
+    -- it (the sink, in place), or nudging the height would resize it.
     local over = entry.overhang or 0
-    if over > 0 and o.max_below and not entry.hang then
+    if over > 0 and o.max_below and not (entry.hang and not o.stand) then
         if height * over > o.max_below then
             height = math.floor(o.max_below / over)
-            width  = math.floor(height * entry.aspect)
+            width  = math.floor(height * aspect)
         end
     end
-    if width < 1 or height < 1 then return nil end
-    -- A piece as wide as the whole row is shown however low that makes it.
-    if not shrunk or not o.makes_room then
-        local frac  = o.min_h_frac or M.MIN_H_FRAC
-        local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
-        -- A piece made smaller on purpose stays: the floor shrinks with it.
-        if scale < 1 then min_h = math.floor(min_h * scale) end
-        if height < min_h then return nil end
-    end
-    return width, height
+    return math.max(1, width), math.max(1, height)
 end
 
--- deal(seed, entries, size) -> entry, w, h, deal_no, or nil. The slot's
--- card: the one it was dealt before (still in the pool), else the top of the
--- deck if it can stand here (size(entry) -> w, h or nil), else nothing, the
--- slot remembered as passed over and the card left on top (see THE DECK).
--- deal_no counts this piece's deals, for "mirror every other time".
-local function deal(seed, entries, size)
-    local key = tostring(seed)
-    local had = M._dealt[key]
-    if had == false then return nil end
-    if had then
-        for i = 1, #entries do
-            local e = entries[i]
-            if entryName(e) == had then
-                local w, h = size(e)
-                if not w then return nil end
-                return e, w, h, M._deal_no[key] or 1
-            end
-        end
-        -- Its piece was switched off or removed: deal this slot afresh.
-    end
-    local card = topCard(entries)
-    if not card then return nil end
-    if M._dealt_n >= M.DEAL_MAX then
-        M._dealt, M._dealt_n, M._deal_no = {}, 0, {}
-    end
-    M._dealt_n = M._dealt_n + 1
-    local w, h = size(card)
-    if not w then
-        -- Remembered as passed over, so a repaint does not deal it after all.
-        -- A card passed over PASS_LIMIT slots running (a hanging piece on a
-        -- one-row shelf, say) goes to the back of this round rather than
-        -- block the deck.
-        M._dealt[key] = false
-        M._passes = M._passes + 1
-        if M._passes >= M.PASS_LIMIT then
-            table.insert(M._deck, table.remove(M._deck, M._deck_pos))
-            M._passes = 0
-        end
-        return nil
-    end
-    M._passes = 0
-    M._deck_pos = M._deck_pos + 1
-    local name = entryName(card)
-    M._dealt[key] = name
-    local n = (M._deal_count[name] or 0) + 1
-    M._deal_count[name], M._deal_no[key] = n, n
-    return card, w, h, n
-end
-
--- pick(seed, gap_px, stand_h, entries, o) -> placement or nil: whether this
--- slot gets a piece (the odds), which (the deal), and where it stands.
-function M.pick(seed, gap_px, stand_h, entries, o)
+-- place(entry, cap_px, stand_h, o, deal_no) -> where a dealt piece stands.
+-- o.max_room : the widest a scaled-up piece may go (the whole row);
+-- o.max_below : how far below the feet an overhang may reach (the plank's
+-- surface strip + front face); o.stand : a hanging piece stands this once
+-- (a page's top shelf, when every piece hangs). deal_no counts this piece's
+-- deals on the chip, for "mirror every other time".
+function M.place(entry, cap_px, stand_h, o, deal_no)
     o = o or {}
-    entries = entries or M.list()
-    if #entries == 0 then return nil end
-    if (gap_px or 0) < (o.min_gap or 0) then return nil end
-    local h = M.hash(tostring(seed))
-    -- A budgeted channel stops once the screen has its fill. Checked before
-    -- the odds so a full screen costs nothing.
-    if o.budgeted and M.budgetLeft() <= 0 then return nil end
-    -- Scaled here rather than at each call site, so every placement moves
-    -- together with one setting; o.level lets a channel use its own curve
-    -- (see M.GROUP_LEVEL).
-    local level = o.level or M.frequency()
-    local chance = (o.chance or M.CHANCE) * level
-    if chance <= 0 then return nil end
-    if chance < 1 and (h % 100) >= math.floor(chance * 100) then return nil end
-
-    local entry, width, height, deal_no = deal(seed, entries, function(e)
-        return M.sizeFor(e, gap_px, stand_h, o)
-    end)
     if not entry then return nil end
-    M._used[entryName(entry)] = true
+    local width, height = M.sizeFor(entry, cap_px, stand_h, o)
+    local hang = (entry.hang and not o.stand) and true or false
     -- Below the plank's surface: the file's overhang, or the reader's sink,
     -- stopped at the plank's front edge. A hanging piece has nothing below.
     local sink = entry.sink
     if sink == nil then sink = entry.overhang or 0 end
-    local below = entry.hang and 0 or math.floor(height * sink)
+    local below = hang and 0 or math.floor(height * sink)
     if o.max_below and below > o.max_below then below = o.max_below end
-    -- Mirror from the piece's CURRENT setting on every paint, so a change in
-    -- its menu reaches slots already dealt.
+    -- Mirror from the piece's CURRENT setting, so a change in its menu
+    -- reaches pieces already standing.
     local mirror = entry.mirror == "always"
-                   or (entry.mirror == "alternate" and deal_no % 2 == 0)
-    -- How far a NEGATIVE padding may tighten: the image's own transparent
-    -- margin on its narrower clear side (so the drawing, not its box, meets
-    -- the books). Probed only for a piece being tightened; cached per file.
+                   or (entry.mirror == "alternate" and (deal_no or 1) % 2 == 0)
+    -- How far negative padding may go past the image's box: its own
+    -- transparent side margin (the narrower side), probed only when asked.
     local slack_px = 0
     if (entry.pad or 0) < 0 and entry.path then
         local l, _t, r = M.contentBox(entry)
         if l and r then slack_px = math.max(0, math.floor(math.min(l, 1 - r) * width + 1e-6)) end
     end
     return {
-        entry = entry, w = width, h = height,
+        entry = entry, w = width, h = height, hang = hang,
         above = height - below, below = below,
-        side  = (math.floor(h / 10000) % 2 == 0) and "right" or "left",
         mirror = mirror,
         -- Lifted above the plank (a positive lift), in px.
         raise = math.floor((entry.raise or 0) * height + 0.5),
@@ -1540,7 +1189,7 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
         slack_px = slack_px,
         -- A hanging piece's height nudge, in px (+ up): see ornamentY.
-        hang_lift = entry.hang and math.floor((entry.lift or 0) * height + 0.5) or 0,
+        hang_lift = hang and math.floor((entry.lift or 0) * height + 0.5) or 0,
     }
 end
 
