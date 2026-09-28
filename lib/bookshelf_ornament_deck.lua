@@ -130,4 +130,98 @@ function M.swap(a, b)
     return true
 end
 
+-- ── Patterns ────────────────────────────────────────────────────────────
+-- Which slots hold a piece, per level (maintainer's table):
+--   Rarely  shelf ends 1 in 4   group gaps never
+--   Often   every other shelf   1 in 4 group gaps
+--   Always  every shelf         1 in 2 group gaps
+-- Counted across the whole chip, from the END of each cycle ("bottom rows
+-- first"): Often = shelf 2, 4, 6, so on a two-shelf page every page's lower
+-- shelf, and a hanging piece has a shelf above it.
+local SHELF_EVERY = { rarely = 4, often = 2, always = 1 }
+local GAP_EVERY   = { often = 4, always = 2 }
+
+function M.levelOf(freq)
+    freq = tonumber(freq) or 0
+    if freq <= 0 then return "off" end
+    if freq <= 0.75 then return "rarely" end
+    if freq <= 1.5 then return "often" end
+    return "always"
+end
+
+function M.shelfSlot(level, s)
+    local k = SHELF_EVERY[level]
+    return k ~= nil and s >= 1 and s % k == 0
+end
+
+function M.gapSlot(level, b)
+    local k = GAP_EVERY[level]
+    return k ~= nil and b >= 1 and b % k == 0
+end
+
+-- side(level, s): the shelf-end pieces alternate ends, counted by piece.
+function M.side(level, s)
+    local k = SHELF_EVERY[level] or 1
+    local nth = math.floor(s / k)
+    return (nth % 2 == 1) and "right" or "left"
+end
+
+-- ── The dealer ──────────────────────────────────────────────────────────
+-- State: n = cards dealt from the order so far on this chip; shelf = shelves
+-- counted; bnd = group boundaries counted; owed = hanging cards (card
+-- numbers) passed over on a top shelf, waiting for a slot with a shelf above.
+function M.newState() return { n = 0, shelf = 0, bnd = 0, owed = {} } end
+function M.copyState(st)
+    st = st or M.newState()
+    local o = {}
+    for i, c in ipairs(st.owed or {}) do o[i] = c end
+    return { n = st.n or 0, shelf = st.shelf or 0, bnd = st.bnd or 0, owed = o }
+end
+
+local Dealer = {}
+Dealer.__index = Dealer
+
+function M.dealer(st, cards)
+    return setmetatable({ st = st or M.newState(), cards = cards or {} }, Dealer)
+end
+
+function Dealer:_card(c) return self.cards[(c % #self.cards) + 1] end
+
+-- _choose(top) -> card number, from_owed, skipped (hanging cards passed
+-- over), stand. Pure: peek and take share it, so they cannot disagree.
+function Dealer:_choose(top)
+    local count = #self.cards
+    if count == 0 then return nil end
+    local st = self.st
+    if not top and #st.owed > 0 then return st.owed[1], true, nil, false end
+    if not top then return st.n, false, nil, false end
+    local c, skipped = st.n, {}
+    for _i = 1, count do
+        if not self:_card(c).hang then return c, false, skipped, false end
+        skipped[#skipped + 1] = c
+        c = c + 1
+    end
+    -- Every card hangs: the first stands on the plank this once.
+    return st.n, false, nil, true
+end
+
+function Dealer:peek(top)
+    local c, _o, _s, stand = self:_choose(top)
+    if not c then return nil end
+    return self:_card(c), math.floor(c / #self.cards) + 1, stand
+end
+
+function Dealer:take(top)
+    local c, from_owed, skipped, stand = self:_choose(top)
+    if not c then return nil end
+    local st = self.st
+    if from_owed then
+        table.remove(st.owed, 1)
+    else
+        for _i, s in ipairs(skipped or {}) do st.owed[#st.owed + 1] = s end
+        st.n = c + 1
+    end
+    return self:_card(c), math.floor(c / #self.cards) + 1, stand
+end
+
 return M
