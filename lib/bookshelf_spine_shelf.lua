@@ -4217,10 +4217,12 @@ end
 
 -- ornPad(base, pl) -> the room each side of a placed piece: the shelf's own
 -- pad plus the piece's padding (ornaments.json, px).
--- A negative padding may go past touching the image's box, as far as its own
--- transparent side (pl.slack_px), so the drawing meets the books.
+-- A negative padding may take the piece behind the books beside it.
 function SpineShelf.ornPad(base, pl)
-    return math.max(-(pl and pl.slack_px or 0), (base or 0) + (pl and pl.pad_px or 0))
+    -- Negative padding may take the piece behind the books beside it (they
+    -- paint over it, see rowWidget), down to half its width: past that the
+    -- room it asks for would turn negative (maintainer).
+    return math.max(-math.floor((pl and pl.w or 0) / 2), (base or 0) + (pl and pl.pad_px or 0))
 end
 
 function SpineShelf.rowWidget(opts)
@@ -5043,11 +5045,14 @@ function SpineShelf.rowWidget(opts)
     local design = SpineShelf.plankDesignWidget(opts.width, opts.height)
     if design then children[#children + 1] = design end
     if recess then children[#children + 1] = recess end
-    children[#children + 1] = group
+    -- The pieces BEFORE the books: a piece tightened with negative padding
+    -- goes behind the books beside it (maintainer). After the recess, so the
+    -- shelf's shading does not fall on them.
     for _i = 1, #gap_ornaments do
         children[#children + 1] = gap_ornaments[_i]
     end
     if ornament then children[#children + 1] = ornament end
+    children[#children + 1] = group
     local badges
     if #badge_spans > 0 then
         badges = ShelfBadges:new{

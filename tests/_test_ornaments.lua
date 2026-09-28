@@ -1018,22 +1018,6 @@ t.test("menu fix: a mirror change reaches a piece already dealt", function()
     eq(O.place(e, 1000, 300, {}, 1).mirror, false, "first deal of the piece: unflipped")
 end)
 
-t.test("negative padding can tighten into the image's own transparent sides", function()
-    -- Device: "padding adjustment seems to have little effect". Tightening
-    -- stopped where the image's BOX met the books, and most PNGs carry
-    -- transparent room at their sides; now it can go as far as the drawing.
-    local O = fresh()
-    local e = { name = "p.png", path = "/o/p.png", aspect = 1, overhang = 0, pad = -0.2 }
-    O._content["/o/p.png|1"] = { 0.25, 0, 0.8, 1 }     -- 25% clear on the left, 20% on the right
-    local p = O.place(e, 1000, 300, {}, 1)
-    eq(p.slack_px, math.floor(0.2 * p.w), "the narrower clear side, in px")
-    local e2 = { name = "q.png", path = "/o/q.png", aspect = 1, overhang = 0, pad = 0.1 }
-    local q = O.place(e2, 1000, 300, {}, 1)
-    eq(q.slack_px, 0, "no probe for a piece that is not tightened")
-    local sh = io.open("lib/bookshelf_spine_shelf.lua"):read("*a")
-    assert(sh:find("math.max(-(pl and pl.slack_px or 0)", 1, true), "the shelf still stops at the image's box")
-end)
-
 t.test("place: always a placement; a too-wide piece is scaled to the cap, never refused", function()
     local O = fresh()
     local wide = { name = "w.svg", aspect = 5, overhang = 0 }

@@ -2077,12 +2077,15 @@ function Settings:_ornamentsRow()
     return {
         text_func = function()
             local O = orn()
-            local n = 0
+            local n, total = 0, 0
             if O and O.list then
                 local ok, list = pcall(O.list)
                 n = (ok and list) and #list or 0
+                local ok_a, all = pcall(function() return #O.listAll() end)
+                total = ok_a and all or n
             end
-            return T(_("Ornaments: %1"), n)
+            local icon = (O and O.COLLECTION_ICON) and (O.COLLECTION_ICON .. "  ") or ""
+            return icon .. T(_("Ornament collection: %1/%2 enabled"), n, total)
         end,
         help_text_func = function()
             local O = orn()

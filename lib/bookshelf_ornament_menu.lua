@@ -58,10 +58,12 @@ end
 -- Steps (small, big). Size in its own multiple; padding in the books' stand
 -- height; height (lift) in the piece's own height. The big step is the
 -- outer "10" buttons (and a hold on the small ones): ten points of each.
+-- Height's small step is ONE point: seating a piece so it looks centred on
+-- the plank needs finer control than 2% of its height (maintainer).
 M.STEPS = {
     scale = { 0.05, 0.10 },
-    pad   = { 0.02, 0.10 },
-    lift  = { 0.02, 0.10 },
+    pad   = { 0.01, 0.10 },
+    lift  = { 0.01, 0.10 },
 }
 
 local function O() return require("lib/bookshelf_ornaments") end
@@ -162,7 +164,21 @@ function M.show(entry, bw, piece)
             Orn.paintPlacement(bb, x, top, pl, night)
         end
         local gap = Screen:scaleBySize(10)
-        local text_w = math.max(1, avail - pic.dimen.w - gap)
+        -- The collection's own icon, top right: the way to manage every
+        -- piece from the one being edited (maintainer).
+        local Button = require("ui/widget/button")
+        local manage = Button:new{
+            text = Orn.COLLECTION_ICON, text_font_face = "symbols",
+            text_font_size = GLYPH_SIZE, bordersize = 0, padding = Screen:scaleBySize(6),
+            show_parent = dialog,
+            callback = function()
+                UIManager:close(dialog)
+                require("lib/bookshelf_ornament_browser").show(function()
+                    if bw and bw._rebuild then bw:_rebuild(); UIManager:setDirty(bw, "ui") end
+                end)
+            end,
+        }
+        local text_w = math.max(1, avail - pic.dimen.w - gap - manage:getSize().w)
         local sub = entry.pack or ""
         if Orn.isOff(entry.name) then
             sub = (sub ~= "" and (sub .. " \xC2\xB7 ") or "") .. _("switched off")   -- U+00B7 middle dot
@@ -179,6 +195,7 @@ function M.show(entry, bw, piece)
             pic,
             HorizontalSpan:new{ width = gap },
             LeftContainer:new{ dimen = Geom:new{ w = text_w, h = header_h }, lines },
+            manage,
         }
         box.parent, box.not_focusable = dialog, true
         return box

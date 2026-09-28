@@ -71,4 +71,25 @@ t.test("a piece that rises above its row goes behind the shelf above, like a han
     eq(n, 4, "the row end, the section gap, the lead piece and the bare plank must all decide this way")
 end)
 
+t.test("negative padding may take a piece behind the books beside it", function()
+    -- Maintainer: tightening should be able to go behind the adjacent books.
+    -- So the pieces paint before the books (after the plank and the recess),
+    -- and the padding may go past the drawing's edge, down to half the piece.
+    local rw = shelf:match("\nfunction SpineShelf%.rowWidget%(opts%)\n(.-)\nfunction SpineShelf%.")
+    local g = rw:find("children[#children + 1] = group", 1, true)
+    local o = rw:find("children[#children + 1] = ornament end", 1, true)
+    local gp = rw:find("children[#children + 1] = gap_ornaments[_i]", 1, true)
+    assert(g and o and gp and o < g and gp < g, "pieces are painted over the books")
+    local rec = rw:find("if recess then children[#children + 1] = recess end", 1, true)
+    assert(rec and rec < gp, "pieces are painted under the recess shading")
+    local body = shelf:match("\n(function SpineShelf%.ornPad%(base, pl%)\n.-\nend)\n")
+    local env = setmetatable({ SpineShelf = {} }, { __index = _G })
+    local f
+    if _G.setfenv then f = assert(loadstring(body)); setfenv(f, env) else f = assert(load(body, "p", "t", env)) end
+    f()
+    eq(env.SpineShelf.ornPad(10, { w = 100, pad_px = -30 }), -20, "tightening stopped short of the books")
+    eq(env.SpineShelf.ornPad(10, { w = 100, pad_px = -500 }), -50, "a piece may not tighten past half its width")
+    eq(env.SpineShelf.ornPad(10, { w = 100, pad_px = 5 }), 15)
+end)
+
 t.done()

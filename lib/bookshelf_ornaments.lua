@@ -42,6 +42,9 @@ M.NEW_SUBDIR    = "ornaments"
 M.PARENT        = "icons"
 M.SUBDIR        = "bookshelf.ornaments"
 M.TEMPLATE_NAME = "template.svg"
+-- The ornament collection's icon (U+F0F4): its settings row and the button
+-- in a piece's long-press menu that opens it (maintainer).
+M.COLLECTION_ICON = "\xEF\x83\xB4"
 M.HEIGHT_FRAC   = 0.8    -- height as a fraction of the books' stand height
 -- THE ROW END, where width is the scarce thing and height is not.
 --
@@ -1197,13 +1200,6 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
     -- reaches pieces already standing.
     local mirror = entry.mirror == "always"
                    or (entry.mirror == "alternate" and (deal_no or 1) % 2 == 0)
-    -- How far negative padding may go past the image's box: its own
-    -- transparent side margin (the narrower side), probed only when asked.
-    local slack_px = 0
-    if (entry.pad or 0) < 0 and entry.path then
-        local l, _t, r = M.contentBox(entry)
-        if l and r then slack_px = math.max(0, math.floor(math.min(l, 1 - r) * width + 1e-6)) end
-    end
     return {
         entry = entry, w = width, h = height, hang = hang,
         above = height - below, below = below,
@@ -1213,7 +1209,6 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
         -- Extra room each side, in px (negative: tighter against the books);
         -- the shelf adds it to its own pad, never below touching.
         pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
-        slack_px = slack_px,
         -- A hanging piece's height nudge, in px (+ up): see ornamentY.
         hang_lift = hang and math.floor((entry.lift or 0) * height + 0.5) or 0,
     }
