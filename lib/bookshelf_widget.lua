@@ -6099,6 +6099,8 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     -- (SpineShelf.rowEndBase): synced from the cursor before the rows are
     -- planned, so a page turn plans with the page it is turning to.
     opts.page_index = self.page
+    -- Where this page starts in the ornament deck (see _ornStartState).
+    opts.orn_state   = self:_ornStartState({ content_w = content_w, shelf_h = shelf_h })
     -- "First unread in series" across the whole shelf, not per screen (issue
     -- 458): series already claimed by a book before this page start taken.
     -- Only when that reason is on; the pagination pass plans from the top and
@@ -6120,6 +6122,15 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     -- plan) and how many of that item's spines are already behind us.
     self._spine_next_item = plan.next_item
     self._spine_next_skip = plan.next_skip or 0
+    -- The next page starts where this one ended: recorded, so paging on
+    -- never needs the page map.
+    do
+        local c = self._spine_fetch_cache
+        if c and plan.orn_end and plan.next_item then
+            c.page_orn = c.page_orn or {}
+            c.page_orn[self:_ornKey(self._cursor + (plan.next_item - 1), plan.next_skip or 0)] = plan.orn_end
+        end
+    end
     self:_noteSpineRows(plan)
     -- Book-unit count for the footer range: plan entries ARE books.
     self._spine_books_shown = plan.rows[#plan.rows]
@@ -6382,13 +6393,13 @@ end
 -- pass it: jump to page, jump to last, and the no-history back-step. They are
 -- deliberate presses, they pay once, and the answer is cached for the footer
 -- and everything else afterwards.
-function BookshelfWidget:_spinePageFirsts(build)
+function BookshelfWidget:_spinePageFirsts(build, dims)
     local c = self._spine_fetch_cache
     if c and c.page_firsts and c.firsts_shelves == self:_nShelves() then
         return c.page_firsts
     end
     if not build then return nil end
-    local d = self._shelf_dims
+    local d = dims or self._shelf_dims
     if not d or not d.content_w or not d.shelf_h then return nil end
     local items = c and c.items
     if not items then
@@ -6415,6 +6426,11 @@ function BookshelfWidget:_spinePageFirsts(build)
         -- renders, so the greedy boundaries are the ones the real pages follow.
         opts.balance       = false
         local plan = SpineShelf.plan(items, opts)
+        -- Every page's start in the ornament deck (see _ornStartState).
+        if c then
+            c.page_orn = c.page_orn or {}
+            for k, st in pairs(plan.page_orn or {}) do c.page_orn[k] = st end
+        end
         local pages = SpineLayout.paginate(plan.rows, self:_nShelves())
         local out = {}
         for i = 1, #pages do
@@ -6431,6 +6447,74 @@ function BookshelfWidget:_spinePageFirsts(build)
         return firsts
     end
     return nil
+end
+
+-- ── Ornament deal states ───────────────────────────────────────────────
+-- The nth slot on a chip holds the nth card (lib/bookshelf_ornament_deck),
+-- so a page must know how far through the deck it starts. The first page
+-- starts from nothing; a page reached by paging on starts where the one
+-- before ended (recorded by that page's render); anything else asks the page
+-- map, which records every page's start while it plans the whole chip.
+function BookshelfWidget:_ornKey(cursor, skip)
+    return tostring(cursor) .. ":" .. tostring(skip or 0)
+end
+
+-- _ornSig(): what a recorded state depends on besides the books: the level,
+-- the saved order (swap, shuffle, a new piece), the enabled pool and the
+-- shelves per page.
+function BookshelfWidget:_ornSig()
+    local ok, Orn = pcall(require, "lib/bookshelf_ornaments")
+    local Deck = require("lib/bookshelf_ornament_deck")
+    local n = (ok and Orn) and #Orn.list() or 0
+    local f = (ok and Orn) and Orn.frequency() or 0
+    return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), n }, "|")
+end
+
+function BookshelfWidget:_ornStartState(dims)
+    local Deck = require("lib/bookshelf_ornament_deck")
+    local cur, skip = self._cursor or 1, self:_spineSkip()
+    local c = self._spine_fetch_cache
+    if not c then return Deck.newState() end
+    c.page_orn = c.page_orn or {}
+    local key = self:_ornKey(cur, skip)
+    -- Something the states depend on changed (a swap, a piece switched on or
+    -- off, the level): forget them all but THIS page's, so the piece being
+    -- edited stays where it is. A shuffle keeps nothing.
+    local sig = self:_ornSig()
+    if c.orn_sig ~= sig then
+        local keep = (c.orn_epoch == Deck.epoch()) and c.page_orn[key] or nil
+        c.page_orn, c.page_firsts = {}, nil
+        if keep then c.page_orn[key] = keep end
+        c.orn_sig, c.orn_epoch = sig, Deck.epoch()
+    end
+    if cur <= 1 and skip == 0 then return Deck.newState() end
+    if c.page_orn[key] then return Deck.copyState(c.page_orn[key]) end
+    self:_spinePageFirsts(true, dims)
+    c = self._spine_fetch_cache or c
+    if c.page_orn and c.page_orn[key] then return Deck.copyState(c.page_orn[key]) end
+    -- No map (a windowed source) or it disagrees: the nearest page before.
+    local best, best_c
+    for k, st in pairs(c.page_orn or {}) do
+        local kc, ks = k:match("^(%d+):(%d+)$")
+        kc, ks = tonumber(kc), tonumber(ks)
+        if kc and (kc < cur or (kc == cur and ks <= skip)) and (not best_c or kc > best_c) then
+            best, best_c = st, kc
+        end
+    end
+    logger.warn("[bookshelf] ornaments: no deal state for page", key, best and "(nearest earlier)" or "(from the start)")
+    return best and Deck.copyState(best) or Deck.newState()
+end
+
+-- _dropOrnPages(keep_current): after a change to a piece's size or padding,
+-- which moves where later pages break. The page on screen keeps its start
+-- so the piece being nudged does not jump; the rest is re-learnt.
+function BookshelfWidget:_dropOrnPages(keep_current)
+    local c = self._spine_fetch_cache
+    if not c then return end
+    local key = self:_ornKey(self._cursor or 1, self:_spineSkip())
+    local keep = keep_current and c.page_orn and c.page_orn[key] or nil
+    c.page_firsts, c.page_orn = nil, {}
+    if keep then c.page_orn[key] = keep end
 end
 
 -- _spineCursorForPage(p) / _spinePrevPageCursor(cur) — page-map lookups.
@@ -14303,11 +14387,11 @@ function BookshelfWidget:onBookshelfToggleHero()
 end
 
 function BookshelfWidget:onBookshelfShuffleOrnaments()
+    -- A new saved order: every page's start in the deck, and the page map
+    -- (the pieces' widths decide where pages break), are re-learnt. The page
+    -- on screen keeps its first book; what follows it may move.
     require("lib/bookshelf_ornament_deck").shuffle()
-    -- The pieces' widths decide where rows (and so pages) break: the page
-    -- map is rebuilt on the next jump. The page on screen keeps its first
-    -- book; what follows it may move.
-    if self._spine_fetch_cache then self._spine_fetch_cache.page_firsts = nil end
+    self:_dropOrnPages(false)
     self:_rebuild()
     UIManager:setDirty(self, "ui")
     return true

@@ -137,7 +137,7 @@ t.test("the pagination plan does not balance every row of the chip", function()
     -- balanceRows is a DP over rows x books; asked for all 415 rows of a
     -- 1234-book chip it took 585ms, for boundaries the pages never use.
     local w = read("lib/bookshelf_widget.lua")
-    local pf = body(w, "\nfunction BookshelfWidget:_spinePageFirsts%(build%)\n")
+    local pf = body(w, "\nfunction BookshelfWidget:_spinePageFirsts%(build, dims%)\n")
     assert(pf:find("balance%s*=%s*false"), "_spinePageFirsts still asks for a balanced plan")
     -- ...and it is not built unless somebody asks. The map plans every book
     -- in the chip, which on a big folder is a second of sidecar reads on the

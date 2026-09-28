@@ -70,9 +70,9 @@ function M.show(entry, bw, piece)
     end
     local function redraw()
         if bw and bw._rebuild then
-            -- The piece's size moves where rows, and so pages, break: the
-            -- page map is rebuilt on the next jump (as a shuffle does).
-            if bw._spine_fetch_cache then bw._spine_fetch_cache.page_firsts = nil end
+            -- The piece's size moves where rows, and so pages, break later
+            -- on: those are re-learnt, and this page keeps its start.
+            if bw._dropOrnPages then bw:_dropOrnPages(true) end
             bw:_rebuild()
             UIManager:setDirty(bw, "ui")
         end
