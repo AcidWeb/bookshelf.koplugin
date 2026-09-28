@@ -183,13 +183,16 @@ function M.show(entry, bw, piece)
             { text = _("Shuffle all"), callback = closeAnd(function()
                 if bw and bw.onBookshelfShuffleOrnaments then bw:onBookshelfShuffleOrnaments() end
             end) },
+            -- Out of the deck and back, with the menu still open: a piece
+            -- switched off keeps its place in the saved order, so switching
+            -- it back on puts it where it stood (maintainer).
+            { text_func = function() return Orn.isOff(entry.name) and _("Switch on") or _("Switch off") end,
+              callback = function()
+                Orn.setOff(entry.name, not Orn.isOff(entry.name))
+                redraw()
+            end },
         },
         {
-            -- Out of the deck: the browser switches it back on.
-            { text = _("Switch off"), callback = closeAnd(function()
-                Orn.setOff(entry.name, true)
-                if bw and bw._rebuild then bw:_rebuild(); UIManager:setDirty(bw, "ui") end
-            end) },
             { text = _("Reset"), callback = function()
                 Orn.readerReset(entry)
                 entry = Orn.current(entry)
