@@ -168,6 +168,8 @@ function M.show(entry, bw, piece)
                 require("lib/bookshelf_ornament_browser").show(function()
                     if bw and bw._rebuild then bw:_rebuild(); UIManager:setDirty(bw, "ui") end
                 end, { pick = function(chosen)
+                    -- A piece never in the order yet (it was off) joins it first.
+                    Deck.sync(Orn.listAll())
                     Deck.swap(entry.name, chosen.name)
                 end })
             end) },

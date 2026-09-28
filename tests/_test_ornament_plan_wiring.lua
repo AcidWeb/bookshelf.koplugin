@@ -56,4 +56,10 @@ t.test("the render hands each empty row its bare piece", function()
     assert(b and b:find("bare_piece        = plan.bare and plan.bare[r]", 1, true))
 end)
 
+t.test("plan and Swap reconcile the order with the pieces on disk", function()
+    assert(plan:find("Deck.sync(orn.mod.listAll())", 1, true), "plan deals from an unreconciled order")
+    local menu = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(menu:find("Deck.sync(Orn.listAll())", 1, true), "Swap does not reconcile before swapping")
+end)
+
 t.done()

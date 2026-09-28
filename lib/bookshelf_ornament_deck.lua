@@ -83,6 +83,18 @@ function M.reconcile(all_names)
     if changed then saveOrder(out) end
 end
 
+-- sync(all): reconcile the saved order with every piece on disk (switched
+-- off or not), once per scan: `all` is the scan's own table (Orn.listAll),
+-- which stays the same table while nothing on disk changed.
+M._synced_for = nil
+function M.sync(all)
+    if all == nil or all == M._synced_for then return end
+    M._synced_for = all
+    local names = {}
+    for i, e in ipairs(all) do names[i] = e.name end
+    M.reconcile(names)
+end
+
 -- order(pool) -> the pool's entries in saved order. pool is the ENABLED
 -- pieces; switched-off ones stay in the saved order (not in the result), so
 -- switching one back on returns it to its place. Pieces in the pool that the
@@ -320,7 +332,18 @@ function M.fillHooks(env)
             if pl then ent.gap_before = (ent.gap_base or 0) + env.space("gap", pl) end
         end
     end
-    function h.empty_ok(r) return h.row_orn[r] ~= nil end
+    -- A row may stand as its piece alone, but a page's LAST row may not when
+    -- the page has no book yet: a page of nothing but pieces has no first
+    -- book to name it, and the plan has no book to end it on (review: a
+    -- whole-row piece on every shelf crashed plan). Page-relative, so both
+    -- passes agree.
+    function h.empty_ok(r)
+        if h.row_orn[r] == nil then return false end
+        local page, within = pageOf(r)
+        local last = env.paginating and per_page or (env.n_rows or per_page)
+        if within >= last and not page_has_book[page] then return false end
+        return true
+    end
     function h.stop() dealing = false end
     function h.state() return d.st end
     function h.final()

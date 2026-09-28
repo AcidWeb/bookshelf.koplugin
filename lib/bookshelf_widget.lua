@@ -267,7 +267,9 @@ function BookshelfWidget:init()
         pcall(function()
             require("lib/bookshelf_spine_shelf").invalidateBook(fp)
         end)
-        bw._spine_fetch_cache = nil
+        -- Expired, not dropped: the list is the same, so the refetch keeps
+        -- where each page starts in the ornament deck (_spineCachedFetch).
+        bw:_expireSpineFetch()
         -- The extraction kickoff memo holds "this book's BIM row is
         -- complete" verdicts; a metadata edit / cover change can make
         -- that stale for this book.
@@ -6126,7 +6128,7 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     -- never needs the page map.
     do
         local c = self._spine_fetch_cache
-        if c and plan.orn_end and plan.next_item then
+        if c and self._spine_fetch_live ~= false and plan.orn_end and plan.next_item then
             c.page_orn = c.page_orn or {}
             c.page_orn[self:_ornKey(self._cursor + (plan.next_item - 1), plan.next_skip or 0)] = plan.orn_end
         end
@@ -6323,11 +6325,16 @@ function BookshelfWidget:_spineCachedFetch(n)
     local key = tostring(self.chip) .. "|" .. tip_sig
     local c = self._spine_fetch_cache
     if c and c.key == key and (os.time() - c.at) <= 30 then
+        self._spine_fetch_live = true
         return c.items, nil
     end
     local items, hint = self:_fetchChipItems(n, true)
     items = items or {}
     if type(items) == "table" and items.opds_open_ended then
+        -- A feed window does not replace the cache, so what is left in it is
+        -- another chip's: the ornament deal states must not be read from it
+        -- or recorded into it (see _ornStartState).
+        self._spine_fetch_live = false
         return items, hint
     end
     -- The ornament deal states (see _ornStartState) depend only on the list:
@@ -6335,11 +6342,21 @@ function BookshelfWidget:_spineCachedFetch(n)
     -- turn after the TTL would rebuild the whole page map to find its start.
     local sig = self:_spineItemsSig(items)
     local keep = (c and c.key == key and c.items_sig == sig) and c or nil
+    self._spine_fetch_live = true
     self._spine_fetch_cache = { key = key, items = items, at = os.time(), items_sig = sig,
                                 page_orn = keep and keep.page_orn or nil,
                                 orn_sig = keep and keep.orn_sig or nil,
                                 orn_epoch = keep and keep.orn_epoch or nil }
     return items, nil
+end
+
+-- _expireSpineFetch(): the next fetch goes to the source again (a book's
+-- record changed), but a list that comes back the same keeps its ornament
+-- page states; dropping the cache outright made every return from a book at
+-- page > 1 rebuild the whole page map.
+function BookshelfWidget:_expireSpineFetch()
+    local c = self._spine_fetch_cache
+    if c then c.at = -math.huge end
 end
 
 -- _spineItemsSig(items) -> a string naming the list: its books (or groups,
@@ -6486,16 +6503,20 @@ end
 function BookshelfWidget:_ornSig()
     local ok, Orn = pcall(require, "lib/bookshelf_ornaments")
     local Deck = require("lib/bookshelf_ornament_deck")
-    local n = (ok and Orn) and #Orn.list() or 0
+    -- The pool by identity: Orn.list() hands out the same table while
+    -- nothing is switched, a new one when anything is (a count alone missed
+    -- one piece off and another on).
+    local pool = (ok and Orn) and tostring(Orn.list()) or ""
     local f = (ok and Orn) and Orn.frequency() or 0
-    return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), n }, "|")
+    return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), pool }, "|")
 end
 
 function BookshelfWidget:_ornStartState(dims)
     local Deck = require("lib/bookshelf_ornament_deck")
     local cur, skip = self._cursor or 1, self:_spineSkip()
     local c = self._spine_fetch_cache
-    if not c then return Deck.newState() end
+    -- An open-ended feed's window: the cache belongs to another chip.
+    if not c or self._spine_fetch_live == false then return Deck.newState() end
     c.page_orn = c.page_orn or {}
     local key = self:_ornKey(cur, skip)
     -- Something the states depend on changed (a swap, a piece switched on or
@@ -8928,7 +8949,7 @@ function BookshelfWidget:_refreshSpineSlotInPlace(fp)
                         slot.entry.series_num = tostring(fresh.series_num)
                     end
                     -- The cached page fetch still holds the stale record.
-                    self._spine_fetch_cache = nil
+                    self:_expireSpineFetch()
                     if slot.dimen then
                         union = union or slot.dimen:copy()
                     end

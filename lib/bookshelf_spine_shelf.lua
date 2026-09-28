@@ -4020,6 +4020,7 @@ function SpineShelf.plan(items, opts)
     -- lib/bookshelf_ornament_deck: which slots hold a piece is the level's
     -- pattern, which piece is the saved order). One implementation for both
     -- passes, so the render and the page map cannot decide differently.
+    if Deck and orn and orn_level ~= "off" then Deck.sync(orn.mod.listAll()) end
     local cards = (Deck and orn and orn_level ~= "off") and Deck.order(orn.mod.list()) or {}
     local function size(kind, e, deal_no, stand)
         local o = { max_below = orn.max_below, stand = stand }
@@ -4119,7 +4120,7 @@ function SpineShelf.plan(items, opts)
     --
     -- The next page now resumes INSIDE the item, next_skip spines in.
     local shown, next_item, next_skip = 0, nil, 0
-    if #rows > 0 then
+    if #rows > 0 and rows[#rows].last >= 1 then
         local last_entry = rows[#rows].last
         local last_item  = entries[last_entry].item_idx
         local after      = entries[last_entry + 1]

@@ -289,7 +289,7 @@ t.test("a page starting with an empty row: the first book's boundary is absent i
     local D = fresh()
     -- A full-row piece: size returns w = 300, so a row-end slot row stands empty.
     local all = shelf(30, 45, 2)
-    local e1 = env(D, D.newState(), "always", all, true, 2, math.huge, cards("a,b"))
+    local e1 = env(D, D.newState(), "always", all, true, 2, math.huge, cards("a,b,c"))
     e1.size = function(kind, e, no) return { entry = e, w = (kind == "rowend") and 300 or 40, no = no } end
     local prow, ph = run(D, e1)
     local pages = SpineLayout.paginate(prow, 2)
@@ -297,7 +297,7 @@ t.test("a page starting with an empty row: the first book's boundary is absent i
         local first = pages[p].first
         local st = ph.page_orn[tostring(all[first].item_idx)]
         local es = sub(all, first)
-        local e2 = env(D, D.copyState(st), "always", es, false, 2, 2, cards("a,b"))
+        local e2 = env(D, D.copyState(st), "always", es, false, 2, 2, cards("a,b,c"))
         e2.size = e1.size
         local rrow, rh = run(D, e2)
         eq(pieces(rrow, es, rh, 1, 2), pieces(prow, all, ph, (p - 1) * 2 + 1, p * 2), "page " .. p)
@@ -344,6 +344,42 @@ t.test("no hanging piece is dealt to a page's top shelf", function()
         assert(hung > 0, level .. ": test premise, no hanging piece was dealt at all")
         eq(hung_on_top, 0, level .. ": a hanging piece was dealt to a top shelf")
     end
+end)
+
+t.test("a full-row piece on every shelf still leaves every page a book", function()
+    -- Review: Always, one piece nudged to the whole row: every row stood
+    -- empty, the page placed no book, and plan's next-page block indexed
+    -- entry 0 (a crash on the home screen).
+    local D = fresh()
+    local function big(e)
+        e.size = function(kind, en, no) return { entry = en, w = (kind == "rowend") and 300 or 40, no = no } end
+        return e
+    end
+    local es = shelf(20, 45, nil)
+    local rows = run(D, big(env(D, D.newState(), "always", es, false, 2, 2, cards("a"))))
+    assert(#rows >= 1 and rows[#rows].last >= 1, "the render's page holds no book")
+    local all = shelf(20, 45, nil)
+    local prow = run(D, big(env(D, D.newState(), "always", all, true, 2, math.huge, cards("a"))))
+    for p, pg in ipairs(SpineLayout.paginate(prow, 2)) do
+        assert(pg.last >= pg.first, "page " .. p .. " holds no book")
+    end
+end)
+
+t.test("sync reconciles the order with every piece on disk, once per scan", function()
+    -- Review: reconcile had no production caller, so deleted files were never
+    -- dropped, a re-added one came back to its old place, and a piece that
+    -- was off when the order was made never entered it (Swap to it did nothing).
+    local D, mem = fresh()
+    mem["ornament_deck"] = { "a", "gone", "b" }
+    local all = pool({ "a", "b", "off1" })
+    local saves = 0
+    local save = D._store.save
+    D._store.save = function(k, v) saves = saves + 1; save(k, v) end
+    D.sync(all)
+    eq(table.concat(mem["ornament_deck"], ","), "a,b,off1")
+    D.sync(all)
+    eq(saves, 1, "the same scan reconciled twice")
+    eq(D.swap("a", "off1"), true, "a piece that was off cannot be swapped to")
 end)
 
 t.done()

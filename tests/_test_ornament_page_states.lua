@@ -116,4 +116,59 @@ t.test("a refetch of the same list keeps the page states; a changed list drops t
     eq(self._spine_fetch_cache.page_orn, nil, "a changed list kept stale page states")
 end)
 
+t.test("a per-book change expires the fetch, and the same list keeps its page states", function()
+    -- Review: closing a book (Repo.invalidateProgressCache) cleared the whole
+    -- fetch cache, so every return to the shelf at page > 1 rebuilt the map.
+    local fetch, expire = method("_spineCachedFetch"), method("_expireSpineFetch")
+    local list = { { filepath = "/a" }, { filepath = "/b" } }
+    local self = { chip = "all" }
+    self._fetchChipItems = function() return { list[1], list[2] } end
+    self._spineItemsSig = method("_spineItemsSig")
+    fetch(self, 400)
+    self._spine_fetch_cache.page_orn = { ["2:0"] = { n = 3, shelf = 2, bnd = 0, owed = {} } }
+    expire(self)
+    local before = self._spine_fetch_cache
+    fetch(self, 400)
+    assert(self._spine_fetch_cache ~= before, "an expired fetch was served")
+    eq(self._spine_fetch_cache.page_orn["2:0"].n, 3, "the page states went with the expired fetch")
+    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
+    local hook = w:match("Repo%.on_book_invalidated = function%(fp%)(.-)\n    end\n")
+    assert(hook and hook:find("bw:_expireSpineFetch()", 1, true), "a book's invalidation still drops the page states")
+end)
+
+t.test("an open-ended feed neither reads nor writes another chip's page states", function()
+    -- Review: an OPDS window returns before replacing the fetch cache, so the
+    -- deal states read and recorded were the previous chip's.
+    local fetch = method("_spineCachedFetch")
+    local self = { chip = "opds", _spine_fetch_cache = { key = "all|", items = {}, at = os.time(), page_orn = {} } }
+    self._fetchChipItems = function() return { opds_open_ended = true } end
+    self._spineItemsSig = method("_spineItemsSig")
+    fetch(self, 400)
+    eq(self._spine_fetch_live, false, "the open-ended fetch left the cache marked live")
+    local st_self = stub(9, 0)
+    st_self._spine_fetch_live = false
+    st_self._spine_fetch_cache.page_orn["9:0"] = { n = 7, shelf = 1, bnd = 0, owed = {} }
+    eq(method("_ornStartState")(st_self).n, 0, "a feed page read another chip's state")
+    eq(st_self.builds, 0, "a feed page built another chip's page map")
+    local b = src:match("\nfunction BookshelfWidget:_buildSpineRows%(.-%)\n(.-)\nend\n")
+    assert(b:find("if c and self._spine_fetch_live ~= false and plan.orn_end and plan.next_item then", 1, true),
+        "a feed page records its end state into another chip's cache")
+end)
+
+t.test("the deal-state signature changes when the enabled pieces change, not only their count", function()
+    -- Review: one piece off and another on kept the count, so every recorded
+    -- state survived a pool whose widths and page starts had changed.
+    local sigf = method("_ornSig")
+    local pool = { { name = "a" }, { name = "b" } }
+    local saved = package.loaded["lib/bookshelf_ornaments"]
+    package.loaded["lib/bookshelf_ornaments"] = { list = function() return pool end, frequency = function() return 1 end }
+    local self = stub(1, 0)
+    self._nShelves = function() return 2 end
+    local s1 = sigf(self)
+    pool = { { name = "a" }, { name = "c" } }        -- same count, a new list
+    local s2 = sigf(self)
+    package.loaded["lib/bookshelf_ornaments"] = saved
+    assert(s1 ~= s2, "swapping which pieces are on kept the signature")
+end)
+
 t.done()
