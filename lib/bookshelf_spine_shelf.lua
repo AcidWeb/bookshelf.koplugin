@@ -2904,21 +2904,6 @@ end
 
 -- Rendered design strips, per (files, row width, plank height, frame).
 local _strip_cache, _strip_order = {}, {}
--- stripStats() -> { {w, h, regions, solid_px, blend_px}, ... } for the cached
--- design strips (benchmark drivers; nothing in the plugin reads it).
-function SpineShelf.stripStats()
-    local out = {}
-    for _k, hit in pairs(_strip_cache) do
-        local n, solid, blend = 0, 0, 0
-        for _i, r in ipairs(hit.regions or {}) do
-            n = n + 1
-            if r.solid then solid = solid + r.w * r.h else blend = blend + r.w * r.h end
-        end
-        out[#out + 1] = { w = hit.bb:getWidth(), h = hit.bb:getHeight(), regions = hit.regions and n or -1,
-                          solid_px = solid, blend_px = blend }
-    end
-    return out
-end
 
 -- _pngInfo(path) -> { w, h, edge } from the header: size from IHDR, the
 -- bookshelf:plank_end marker from a tEXt chunk, or nil.
@@ -3079,7 +3064,7 @@ local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverti
                                width, row_x, row_w, surf_h, face_h,
                                inverting and "n" or "d" }, "|")
     local hit = _strip_cache[key]
-    if hit then return hit.bb, hit.top_h, hit.regions, key end
+    if hit then return hit.bb, hit.top_h, hit.regions end
     local mid = _pngInfo(design.middle); if not mid then return nil end
     local l = SpineShelf.plankDesignLayout{
         screen_w = width, row_x = row_x, row_w = row_w, surf_h = surf_h, face_h = face_h,
@@ -3128,48 +3113,7 @@ local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverti
         local old = table.remove(_strip_order, 1)
         if _strip_cache[old] then _strip_cache[old].bb:free(); _strip_cache[old] = nil end
     end
-    return strip, l.top_h, regions, key
-end
-
--- ── The design's composite, kept (PW5: ~40ms per spine-shelf tap) ──────────
--- Even painted in regions, blending a design's shadow and fading ends onto
--- the screen cost a PW5 ~40ms per tap (tap at 195ms against 152ms with no
--- design, 2026-09-28). The blend's inputs are the strip and what was on the
--- screen beneath it, so the first paint at a place keeps both: what it found
--- (under) and what it left (over). A later paint at the same place compares
--- what is beneath now with `under`, row by row with memcmp, and when it is the
--- same the result must be too, so `over` is copied instead of blending.
--- Exact by construction; anything else beneath (another wallpaper, a colour,
--- a book leaning over it) differs and is blended afresh.
-local _comp, _comp_order = {}, {}
-local COMP_MAX = 6
-local _ffi_ok, _ffi = pcall(require, "ffi")
-if _ffi_ok then pcall(require, "ffi/posix_h") end
-
--- rowPtr(bb, x, y) -> a byte pointer to pixel (x, y) of an unrotated buffer.
-local function _rowPtr(bb, x, y, bpp)
-    return _ffi.cast("uint8_t*", bb.data) + y * tonumber(bb.stride) + x * bpp
-end
-
--- sameRegion(a, ax, ay, b, w, h, bpp) -> is a's w x h block at (ax, ay) byte
--- for byte the whole of b?
-local function _sameRegion(a, ax, ay, b, w, h, bpp)
-    local n = w * bpp
-    for y = 0, h - 1 do
-        if _ffi.C.memcmp(_rowPtr(a, ax, ay + y, bpp), _rowPtr(b, 0, y, bpp), n) ~= 0 then
-            return false
-        end
-    end
-    return true
-end
-
--- _compositeUsable(bb) -> bytes per pixel, when bb can be compared raw.
-local function _compositeUsable(bb)
-    if not (_ffi_ok and bb and bb.data and bb.stride and bb.getBpp) then return nil end
-    if bb.getRotation and bb:getRotation() ~= 0 then return nil end
-    local bits = bb:getBpp()
-    if not bits or bits % 8 ~= 0 then return nil end
-    return bits / 8
+    return strip, l.top_h, regions
 end
 
 local PlankDesign = Widget:extend{}
@@ -3183,7 +3127,7 @@ function PlankDesign:paintTo(bb, x, y)
     local on_screen = (bb == Screen.bb) and sw > w
     local width, row_x = w, 0
     if on_screen then width, row_x = sw, x end
-    local strip, top_h, regions, strip_key = _designStrip(self.design, width, row_x, w, surf_h, face_h, _nightMode())
+    local strip, top_h, regions = _designStrip(self.design, width, row_x, w, surf_h, face_h, _nightMode())
     if not strip then return end
     -- The middle band's surface lands on the plank's own surface top.
     local top = y + h - face_h - surf_h - top_h
@@ -3192,62 +3136,13 @@ function PlankDesign:paintTo(bb, x, y)
         bb:alphablitFrom(strip, dx, top, 0, 0, width, strip:getHeight())
         return
     end
-    local function paintRegions()
-        -- Only what has any alpha, copying what is solid (see alphaRegions).
-        for _i, r in ipairs(regions) do
-            if r.solid then
-                bb:blitFrom(strip, dx + r.x, top + r.y, r.x, r.y, r.w, r.h)
-            else
-                bb:alphablitFrom(strip, dx + r.x, top + r.y, r.x, r.y, r.w, r.h)
-            end
-        end
-    end
-    -- The block the regions cover, on the screen (see _comp above).
-    local bpp = on_screen and #regions > 0 and _compositeUsable(bb)
-    if not bpp then paintRegions() return end
-    local x0, y0, x1, y1 = math.huge, math.huge, -1, -1
+    -- Only what has any alpha, copying what is solid (see alphaRegions).
     for _i, r in ipairs(regions) do
-        x0, y0 = math.min(x0, r.x), math.min(y0, r.y)
-        x1, y1 = math.max(x1, r.x + r.w), math.max(y1, r.y + r.h)
-    end
-    local cx, cy = dx + x0, top + y0
-    local cw, ch = x1 - x0, y1 - y0
-    if cx < 0 or cy < 0 or cx + cw > bb:getWidth() or cy + ch > bb:getHeight() then
-        paintRegions() return
-    end
-    -- The strip's own key, not its address: a freed strip's address can come
-    -- back for another, and its composite must not.
-    local ckey = strip_key .. "|" .. cx .. "|" .. cy .. "|" .. cw .. "x" .. ch .. "|" .. bb:getType()
-    local c = _comp[ckey]
-    if c and _sameRegion(bb, cx, cy, c.under, cw, ch, bpp) then
-        bb:blitFrom(c.over, cx, cy, 0, 0, cw, ch)
-        return
-    end
-    local painted = false
-    local ok = pcall(function()
-        local under = c and c.under or Blitbuffer.new(cw, ch, bb:getType())
-        under:blitFrom(bb, 0, 0, cx, cy, cw, ch)
-        paintRegions()
-        painted = true
-        local over = c and c.over or Blitbuffer.new(cw, ch, bb:getType())
-        over:blitFrom(bb, 0, 0, cx, cy, cw, ch)
-        if not c then
-            _comp[ckey] = { under = under, over = over }
-            _comp_order[#_comp_order + 1] = ckey
-            while #_comp_order > COMP_MAX do
-                local old = table.remove(_comp_order, 1)
-                local oc = _comp[old]
-                _comp[old] = nil
-                if oc then oc.under:free(); oc.over:free() end
-            end
+        if r.solid then
+            bb:blitFrom(strip, dx + r.x, top + r.y, r.x, r.y, r.w, r.h)
+        else
+            bb:alphablitFrom(strip, dx + r.x, top + r.y, r.x, r.y, r.w, r.h)
         end
-    end)
-    -- Painted once, whatever failed after: never blend it twice.
-    if not ok then
-        if not painted then paintRegions() end
-        local bad = _comp[ckey]
-        _comp[ckey] = nil
-        if bad then pcall(function() bad.under:free(); bad.over:free() end) end
     end
 end
 function SpineShelf.plankDesignWidget(w, h)
