@@ -19,6 +19,9 @@ local M = {}
 
 local CHEV_UP   = "\xEE\xA1\x82"   -- U+E842 mdi-chevron-up
 local CHEV_DOWN = "\xEE\xA0\xBF"   -- U+E83F mdi-chevron-down
+-- Earlier / Later in the order: the shelf editor's own move chevrons.
+local CHEV_LEFT  = "\xEE\xA1\x80"  -- U+E840 mdi-chevron-left
+local CHEV_RIGHT = "\xEE\xA1\x81"  -- U+E841 mdi-chevron-right
 local GLYPH_SIZE = 28
 -- The piece's picture, top left beside its name: what is being edited, even
 -- while it is switched off and gone from the shelf. A tall piece may rise a
@@ -236,6 +239,20 @@ function M.show(entry, bw, piece)
     local function step(delta)
         if Deck.move(entry.name, delta, onNames()) then redraw() end
     end
+    -- placeGlyph(glyph, delta): a move chevron, greyed out where the piece
+    -- cannot go that way (first, last, or switched off), as the shelf
+    -- editor's are.
+    local function placeGlyph(text, delta)
+        return {
+            text = text, font_face = "symbols", font_size = GLYPH_SIZE, font_bold = false,
+            enabled_func = function()
+                local on = onNames()
+                local i = Deck.position(entry.name, on)
+                return i ~= nil and i + delta >= 1 and i + delta <= #on
+            end,
+            callback = function() step(delta) end,
+        }
+    end
 
     local MIRROR_NEXT = { off = "always", always = "alternate", alternate = "off" }
     local MIRROR_LABEL = {
@@ -286,13 +303,13 @@ function M.show(entry, bw, piece)
             callback = function() M.chooseTap(entry, redraw) end,
         }},
         {
-            { text = _("Earlier"), callback = function() step(-1) end },
+            placeGlyph(CHEV_LEFT, -1),
             { text_func = function()
                 local i, n = Deck.position(entry.name, onNames())
                 if not i then return _("Place: off") end
                 return T(_("Place: %1 of %2"), i, n)
             end, callback = function() end },
-            { text = _("Later"), callback = function() step(1) end },
+            placeGlyph(CHEV_RIGHT, 1),
         },
         {
             { text = _("Swap"), callback = closeAnd(function()

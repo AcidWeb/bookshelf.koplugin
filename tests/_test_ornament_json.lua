@@ -399,11 +399,13 @@ end)
 
 t.test("menu: the piece's place in the order, with Earlier and Later, and Shuffle all asks first", function()
     local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
-    assert(src:find('_("Earlier")', 1, true) and src:find('_("Later")', 1, true), "no Earlier / Later")
+    assert(src:find('local CHEV_LEFT  = "\\xEE\\xA1\\x80"', 1, true) and src:find('local CHEV_RIGHT = "\\xEE\\xA1\\x81"', 1, true),
+        "not the shelf editor's left / right chevrons")
     assert(src:find('_("Place: %1 of %2")', 1, true), "the place in the order is not shown")
     assert(src:find("Deck.move(entry.name, delta, onNames())", 1, true)
-           and src:find('{ text = _("Earlier"), callback = function() step(-1) end }', 1, true)
-           and src:find('{ text = _("Later"), callback = function() step(1) end }', 1, true),
+           and src:find("placeGlyph(CHEV_LEFT, -1)", 1, true)
+           and src:find("placeGlyph(CHEV_RIGHT, 1)", 1, true)
+           and src:find("enabled_func", 1, true),
         "Earlier / Later do not move the piece")
     local shuffle = src:match('{ text = _%("Shuffle all"%)(.-)end },')
     assert(shuffle and shuffle:find("ConfirmBox", 1, true), "Shuffle all does not ask first")
