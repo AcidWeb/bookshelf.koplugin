@@ -917,6 +917,10 @@ local function keepDirectives(e)
 end
 local function reapply(e)
     if not (e and e._layers) then return end
+    -- The reader's layer is looked up now, not kept from the scan: a reload
+    -- (its mtime changed) replaces M._reader, and an entry scanned before it
+    -- would otherwise go on reading the old table.
+    if e._reader_at then e._layers[e._reader_at] = M.readerTable() end
     e.hang, e.night_invert = e._dir.hang, e._dir.night_invert
     pcall(applyLayers, e, e._layers)
 end
@@ -962,12 +966,17 @@ function M.current(entry)
     return entry
 end
 
--- reapplyAll(entry): the reader's record, applied to the given entry AND the
--- live one(s) for the same piece.
+-- reapplyAll(entry): the reader's record, applied to the given entry AND
+-- every other held for the same piece: listAll()'s, and list()'s, which the
+-- shelf draws from and which may still be the older set until SCAN_TTL runs
+-- out (a save changes the file's mtime, and so the scan key).
 local function reapplyAll(entry)
     reapply(entry)
-    for _i, e in ipairs(M._all_cache or {}) do
-        if e ~= entry and e.name == entry.name then reapply(e) end
+    local done = { [entry] = true }
+    for _c, cache in ipairs({ M._all_cache or {}, M._list_cache or {} }) do
+        for _i, e in ipairs(cache) do
+            if not done[e] and e.name == entry.name then done[e] = true; reapply(e) end
+        end
     end
 end
 
@@ -1101,8 +1110,9 @@ function M.listAll()
     if not ok then out = {} end
     -- The settings layers. The root files of both folders, then each pack's
     -- own file, read from the folder its piece came from.
-    local root_json = {}
+    local root_json, reader_at = {}, nil
     for _r, d in ipairs(roots) do
+        if d == M.dir() then reader_at = _r end
         root_json[_r] = (d == M.dir()) and M.readerTable() or M.readJson(d .. "/" .. M.JSON_NAME)
     end
     local pack_json = {}
@@ -1117,7 +1127,7 @@ function M.listAll()
             layers[#layers + 1] = pack_json[pdir]
             lookup[#layers] = e.file
         end
-        e.lookup, e._layers = lookup, layers
+        e.lookup, e._layers, e._reader_at = lookup, layers, reader_at
         keepDirectives(e)
         pcall(applyLayers, e, layers)
     end
@@ -1529,6 +1539,8 @@ function M.pick(seed, gap_px, stand_h, entries, o)
         -- the shelf adds it to its own pad, never below touching.
         pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
         slack_px = slack_px,
+        -- A hanging piece's height nudge, in px (+ up): see ornamentY.
+        hang_lift = entry.hang and math.floor((entry.lift or 0) * height + 0.5) or 0,
     }
 end
 

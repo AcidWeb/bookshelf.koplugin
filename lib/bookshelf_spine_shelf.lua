@@ -4357,7 +4357,10 @@ end
 -- no_hang on a page's first row.
 function SpineShelf.ornamentY(pl, stand_h, opts)
     if pl.entry and pl.entry.hang then
-        return -((opts and opts.lift_headroom or 0) + Screen:scaleBySize(2))
+        -- Its top meets the underside of the plank above; the height nudge
+        -- moves it from there (+ up, into and behind that plank, so a piece
+        -- whose image carries room above the drawing can still connect).
+        return -((opts and opts.lift_headroom or 0) + Screen:scaleBySize(2)) - (pl.hang_lift or 0)
     end
     -- raise: a positive lift from ornaments.json (a negative one is the
     -- overhang, already in pl.above).
@@ -4423,8 +4426,12 @@ function SpineShelf.rowWidget(opts)
         local design = SpineShelf.plankDesignWidget(opts.width, opts.height)
         local kids = { dimen = dimen, plank }
         if design then kids[#kids + 1] = design end
-        if ornament then kids[#kids + 1] = ornament end
-        return OverlapGroup:new(kids)
+        local hanging = {}
+        if ornament and ornament.placement.entry.hang then hanging[1] = ornament
+        elseif ornament then kids[#kids + 1] = ornament end
+        local g = OverlapGroup:new(kids)
+        g._hanging = hanging
+        return g
     end
 
     -- Books stand ON the plank's top surface, a step back from the lip:
@@ -4486,6 +4493,10 @@ function SpineShelf.rowWidget(opts)
     local recess_cols = {}
     local slots_by_fp = {}
     local gap_ornaments = {}
+    -- Pieces that hang from the shelf above: the widget hands them to the row
+    -- above, to paint before its plank (BookshelfWidget:_hangUnder), so the
+    -- shelf above and its shadow are in front of them.
+    local hanging = {}
     for i = opts.row.first, opts.row.last do
         local e = opts.plan.entries[i]
         if e then
@@ -4507,7 +4518,8 @@ function SpineShelf.rowWidget(opts)
                                                       night = _nightMode() }
                         w_.overlap_offset = { cursor + math.floor((gap_w - pl.w) / 2),
                                               SpineShelf.ornamentY(pl, stand_h, opts) }
-                        gap_ornaments[#gap_ornaments + 1] = w_
+                        if pl.entry.hang then hanging[#hanging + 1] = w_
+                        else gap_ornaments[#gap_ornaments + 1] = w_ end
                     end)
                 end
                 group[#group + 1] = HorizontalSpan:new{ width = gap_w }
@@ -4854,7 +4866,7 @@ function SpineShelf.rowWidget(opts)
         if x < margin or x + pl.w > opts.width - margin then return end
         local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
         w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
-        ornament = w_
+        if pl.entry.hang then hanging[#hanging + 1] = w_ else ornament = w_ end
     end)
     -- ── Shelf recess ──────────────────────────────────────────────
     --
@@ -5237,6 +5249,7 @@ function SpineShelf.rowWidget(opts)
     -- pass removed from paging).
     row_group._slots_by_fp = slots_by_fp
     row_group._shelf_badges = badges
+    row_group._hanging = hanging
     return row_group
 end
 

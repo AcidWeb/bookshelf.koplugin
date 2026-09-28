@@ -2535,6 +2535,7 @@ function BookshelfWidget:_rebuild()
 
     local shelf_first_idx = #inner_vgroup + 1
     local list_rows = self:_isListMode()
+    self:_hangUnder(rows, shelf_h + grid_between)
     local ListRow   = list_rows and require("lib/bookshelf_list_row") or nil
     for r = 1, n_shelves do
         inner_vgroup[#inner_vgroup + 1] = rows[r]
@@ -2664,6 +2665,9 @@ function BookshelfWidget:_rebuild()
         -- is followed by exactly one gap widget (a VerticalSpan, or the
         -- hairline divider in list mode), so subsequent rows live at +2.
         shelf_top_idx        = shelf_first_idx,
+        -- Row top to row top, for pieces that hang from the shelf above
+        -- (_hangUnder), which a swap in place has to place again.
+        row_pitch            = shelf_h + grid_between,
         shelf_bottom_idx     = shelf_first_idx + 2 * (n_shelves - 1),
         footer_overlap_idx   = footer_idx,
         -- Screen-y where the shelf rows begin (pre_rows_h includes the
@@ -6057,6 +6061,27 @@ function BookshelfWidget:_spinePlanBase(content_w, shelf_h, all_items)
     }
 end
 
+-- _hangUnder(rows, pitch): a piece that hangs from the shelf above is painted
+-- by the ROW ABOVE, before its plank, so that plank and its shadow are in
+-- front of it (maintainer). Its offset was worked out against its own row, so
+-- it moves down by one row pitch (row top to row top). Spine rows carry the
+-- list (SpineShelf.rowWidget's _hanging); other views' rows have none.
+function BookshelfWidget:_hangUnder(rows, pitch)
+    for r = 2, #rows do
+        local hang = rows[r] and rows[r]._hanging
+        local above = rows[r - 1]
+        if hang and #hang > 0 and above then
+            for i = #hang, 1, -1 do
+                local w_ = hang[i]
+                local off = w_.overlap_offset or { 0, 0 }
+                w_.overlap_offset = { off[1], off[2] + pitch }
+                table.insert(above, 1, w_)
+            end
+            rows[r]._hanging = {}
+        end
+    end
+end
+
 function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     local SpineShelf = require("lib/bookshelf_spine_shelf")
     local shared = self:_shelfCallbacks()
@@ -7853,6 +7878,7 @@ function BookshelfWidget:_swapShelvesInPlace()
     local ListRow      = list_rows and require("lib/bookshelf_list_row") or nil
     local VerticalSpan = list_rows and require("ui/widget/verticalspan") or nil
     local old_rows = {}
+    if d.row_pitch then self:_hangUnder(rows, d.row_pitch) end
     for r = 1, n_shelves do
         local idx = d.shelf_top_idx + 2 * (r - 1)
         old_rows[r] = self._inner_vgroup[idx]

@@ -258,4 +258,26 @@ t.test("an edit reaches the piece the shelf draws, even after a rescan made new 
     eq(O.current(old).scale, 1.5, "the menu cannot find the live entry")
 end)
 
+t.test("an edit reaches the list() entry the shelf draws, while list() is still cached", function()
+    -- The shelf draws from list(), which is served from its cache for
+    -- SCAN_TTL. A save changes the file's mtime, so listAll() builds new
+    -- entries; list() still hands out the old ones until the TTL runs out,
+    -- and an edit applied only to listAll()'s never reached the shelf (rig:
+    -- a hanging piece's height nudge did nothing).
+    local O, new = setup()
+    O.SCAN_TTL = 1000
+    O._encode = function() return "{}" end
+    svg(new .. "/cat.svg")
+    local drawn = O.list()[1]
+    O.readerSet(drawn, "scale", 1.2)
+    O.saveReader()
+    os.execute("sleep 1")
+    write(new .. "/ornaments.json", '{ "cat.svg": { "scale": 1.2 } }')
+    local live = O.current(drawn)
+    assert(live ~= drawn, "the rescan was expected to build new entries")
+    assert(O.list()[1] == drawn, "list() was expected to still be cached")
+    O.readerSet(live, "lift", 0.2)       -- the menu edits the live entry
+    eq(O.list()[1].lift, 0.2, "the entry the shelf draws did not get the edit")
+end)
+
 t.done()
