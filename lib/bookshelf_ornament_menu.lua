@@ -1,7 +1,8 @@
 -- lib/bookshelf_ornament_menu.lua
 -- Long-press an ornament on the shelf: adjust it where it stands. Size,
 -- padding and height nudge live (the shelf redraws under the menu); hang,
--- mirror and a tap action; switch it off; reset to what its pack says.
+-- mirror and a tap action; swap it for another piece, or shuffle them all;
+-- reset to what its pack says.
 --
 -- Every change is the READER's (lib/bookshelf_ornaments readerSet), kept in
 -- the ornaments folder's own ornaments.json keyed by the piece's relative
@@ -29,6 +30,7 @@ M.STEPS = {
 }
 
 local function O() return require("lib/bookshelf_ornaments") end
+local Deck = require("lib/bookshelf_ornament_deck")
 
 local function pct(v) return string.format("%+d%%", math.floor((v or 0) * 100 + 0.5)) end
 
@@ -151,10 +153,23 @@ function M.show(entry, bw, piece)
             end,
             callback = function() M.chooseTap(entry, redraw) end,
         }},
+        {{
+            -- A new order for every piece on every shelf (the "Bookshelf:
+            -- shuffle ornaments" action), which also clears every swap.
+            text = _("Shuffle all"),
+            callback = closeAnd(function()
+                if bw and bw.onBookshelfShuffleOrnaments then bw:onBookshelfShuffleOrnaments() end
+            end),
+        }},
         {
-            { text = _("Switch off"), callback = closeAnd(function()
-                Orn.setOff(entry.name, true)
-                if bw and bw._rebuild then bw:_rebuild(); UIManager:setDirty(bw, "ui") end
+            { text = _("Swap"), callback = closeAnd(function()
+                -- The browser in pick mode: the chosen piece takes this one's
+                -- place in the order, and this one takes the chosen piece's.
+                require("lib/bookshelf_ornament_browser").show(function()
+                    if bw and bw._rebuild then bw:_rebuild(); UIManager:setDirty(bw, "ui") end
+                end, { pick = function(chosen)
+                    Deck.swap(entry.name, chosen.name)
+                end })
             end) },
             { text = _("Reset"), callback = function()
                 Orn.readerReset(entry)

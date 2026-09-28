@@ -280,4 +280,13 @@ t.test("an edit reaches the list() entry the shelf draws, while list() is still 
     eq(O.list()[1].lift, 0.2, "the entry the shelf draws did not get the edit")
 end)
 
+t.test("menu: Swap replaces Switch off, and Shuffle all is there", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    assert(not src:find('_("Switch off")', 1, true), "Switch off is still in the menu")
+    assert(src:find('_("Swap")', 1, true), "no Swap")
+    assert(src:find('_("Shuffle all")', 1, true), "no Shuffle all")
+    assert(src:find("Deck.swap(entry.name, chosen.name)", 1, true), "Swap does not trade places")
+    assert(src:find("bw:onBookshelfShuffleOrnaments()", 1, true), "Shuffle all is not the shuffle action")
+end)
+
 t.done()

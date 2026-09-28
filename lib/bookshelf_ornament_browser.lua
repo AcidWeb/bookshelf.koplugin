@@ -166,6 +166,18 @@ function Browser:_toggle(item)
     self:_changed()
 end
 
+-- _pick(item): pick mode (the long-press menu's Swap). The chosen piece
+-- takes the slot; a switched-off one, or one in a switched-off pack, is
+-- switched on, or the swap would put nothing there.
+function Browser:_pick(item)
+    if item.entry.is_plank then return end
+    if item.off then O().setOff(item.entry.name, false) end
+    if item.pack_off and item.entry.pack then O().setPackOff(item.entry.pack, false) end
+    self.opts.pick(item.entry)
+    self._dirty = true
+    self._close()
+end
+
 -- _changed(rescan): redraw the browser after a switch. The shelf behind is
 -- rebuilt once, when the browser closes (see show): it is almost all covered,
 -- and rebuilding it per tap made tapping through a pack slow. rescan (after a
@@ -286,6 +298,9 @@ end
 -- screen, so it asks for a full repaint.
 function Browser:_footerRows()
     local rows = {}
+    local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Apply"), on_tap = self._close }
+    -- Choosing a replacement: nothing to switch here, only a way out.
+    if self.opts.pick then return { { close } } end
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
     if ok_t and TP and self:_isPack(self.chip) then
         local th, pack, row = TP.theme(self.chip), self.chip, {}
@@ -313,14 +328,17 @@ function Browser:_footerRows()
         end
         if #row > 0 then rows[#rows + 1] = row end
     end
-    rows[#rows + 1] = { self:_packAction(), { key = "close", label = _("Apply"), on_tap = self._close } }
+    rows[#rows + 1] = { self:_packAction(), close }
     return rows
 end
 
--- show(on_change): on_change() runs once when the browser closes, if anything
--- changed, so the caller can redraw the shelf.
-function Browser.show(on_change)
-    local self = setmetatable({ chip = ALL, on_change = on_change }, { __index = Browser })
+-- show(on_change, opts): on_change() runs once when the browser closes, if
+-- anything changed, so the caller can redraw the shelf. opts.pick(entry)
+-- turns it into a chooser (the long-press menu's Swap): tapping a piece
+-- picks it and closes.
+function Browser.show(on_change, opts)
+    local self = setmetatable({ chip = ALL, on_change = on_change, opts = opts or {} },
+                              { __index = Browser })
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
     local function plankId()
         local pl = ok_t and TP and TP.activePlank()
@@ -347,7 +365,7 @@ function Browser.show(on_change)
         end
     end
     local config = {
-        title = _("Ornaments"),
+        title = self.opts.pick and _("Swap for") or _("Ornaments"),
         no_search = true,
         grid_cols = cols,
         cells_per_page = function() return cols() * 3 end,
@@ -359,7 +377,9 @@ function Browser.show(on_change)
             if self._config then self._config.footer_rows = self:_footerRows() end
         end,
         cell_renderer = Browser._renderCell,
-        on_cell_tap = function(item) self:_toggle(item) end,
+        on_cell_tap = function(item)
+            if self.opts.pick then self:_pick(item) else self:_toggle(item) end
+        end,
         cell_long_tap = function(item) self:_longTap(item) end,
         item_count = function() return #self.items end,
         item_at = function(idx) return self.items[idx] end,
