@@ -652,7 +652,9 @@ end
 -- side, - tightens it against the books).
 M.JSON_NAME = "ornaments.json"
 M.FIELDS = {
-    scale  = { kind = "number", min = 0.5, max = 4, default = 1 },
+    -- 5%, not half: a reader may want a piece small (maintainer). Not zero,
+    -- which would leave its slot empty while it still takes its turn.
+    scale  = { kind = "number", min = 0.05, max = 4, default = 1 },
     lift   = { kind = "number", min = -1,  max = 1, default = 0 },
     pad    = { kind = "number", min = -1,  max = 2, default = 0 },
     hang   = { kind = "boolean" },

@@ -22,9 +22,10 @@ local CHEV_DOWN = "\xEE\xA0\xBF"   -- U+E83F mdi-chevron-down
 local GLYPH_SIZE = 28
 
 -- Steps (small, big). Size in its own multiple; padding in the books' stand
--- height; height (lift) in the piece's own height.
+-- height; height (lift) in the piece's own height. The big step is the
+-- outer "10" buttons (and a hold on the small ones): ten points of each.
 M.STEPS = {
-    scale = { 0.05, 0.25 },
+    scale = { 0.05, 0.10 },
     pad   = { 0.02, 0.10 },
     lift  = { 0.02, 0.10 },
 }
@@ -97,13 +98,23 @@ function M.show(entry, bw, piece)
             hold_callback = function() nudge(field, sign, true) end,
         }
     end
+    -- bigButton(field, sign): the outer ten-point step, for getting far
+    -- quickly (maintainer); the inner buttons fine-tune.
+    local function bigButton(field, sign)
+        return {
+            text = (sign > 0 and "+" or "\xE2\x88\x92") .. "10",
+            callback = function() nudge(field, sign, true) end,
+        }
+    end
     local function plusMinus(field, label_func)
         return {
+            bigButton(field, -1),
             { text = "\xE2\x88\x92", callback = function() nudge(field, -1, false) end,   -- U+2212 minus
               hold_callback = function() nudge(field, -1, true) end },
             { text_func = label_func, callback = function() set(field, nil) end },
             { text = "+", callback = function() nudge(field, 1, false) end,
               hold_callback = function() nudge(field, 1, true) end },
+            bigButton(field, 1),
         }
     end
 
@@ -129,10 +140,12 @@ function M.show(entry, bw, piece)
             return T(_("Padding: %1"), pct(entry.pad))
         end),
         {
+            bigButton("lift", 1),
             glyph(CHEV_UP, "lift", 1),
             { text_func = function() return T(_("Height: %1"), pct(entry.lift)) end,
               callback = function() set("lift", nil) end },
             glyph(CHEV_DOWN, "lift", -1),
+            bigButton("lift", -1),
         },
         {{
             text_func = function()
@@ -153,14 +166,6 @@ function M.show(entry, bw, piece)
             end,
             callback = function() M.chooseTap(entry, redraw) end,
         }},
-        {{
-            -- A new order for every piece on every shelf (the "Bookshelf:
-            -- shuffle ornaments" action), which also clears every swap.
-            text = _("Shuffle all"),
-            callback = closeAnd(function()
-                if bw and bw.onBookshelfShuffleOrnaments then bw:onBookshelfShuffleOrnaments() end
-            end),
-        }},
         {
             { text = _("Swap"), callback = closeAnd(function()
                 -- The browser in pick mode: the chosen piece takes this one's
@@ -172,6 +177,18 @@ function M.show(entry, bw, piece)
                     Deck.sync(Orn.listAll())
                     Deck.swap(entry.name, chosen.name)
                 end })
+            end) },
+            -- A new order for every piece on every shelf (the "Bookshelf:
+            -- shuffle ornaments" action), which also clears every swap.
+            { text = _("Shuffle all"), callback = closeAnd(function()
+                if bw and bw.onBookshelfShuffleOrnaments then bw:onBookshelfShuffleOrnaments() end
+            end) },
+        },
+        {
+            -- Out of the deck: the browser switches it back on.
+            { text = _("Switch off"), callback = closeAnd(function()
+                Orn.setOff(entry.name, true)
+                if bw and bw._rebuild then bw:_rebuild(); UIManager:setDirty(bw, "ui") end
             end) },
             { text = _("Reset"), callback = function()
                 Orn.readerReset(entry)

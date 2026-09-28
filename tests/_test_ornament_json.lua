@@ -280,13 +280,33 @@ t.test("an edit reaches the list() entry the shelf draws, while list() is still 
     eq(O.list()[1].lift, 0.2, "the entry the shelf draws did not get the edit")
 end)
 
-t.test("menu: Swap replaces Switch off, and Shuffle all is there", function()
+t.test("menu: Swap beside Shuffle all, and Switch off is back beside Reset", function()
     local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
-    assert(not src:find('_("Switch off")', 1, true), "Switch off is still in the menu")
-    assert(src:find('_("Swap")', 1, true), "no Swap")
-    assert(src:find('_("Shuffle all")', 1, true), "no Shuffle all")
+    assert(src:find('{ text = _("Swap")', 1, true) and src:find('{ text = _("Shuffle all")', 1, true), "no Swap / Shuffle all")
+    local row = src:match('\n        {\n            { text = _%("Swap"%).-\n        },\n')
+    assert(row and row:find('_("Shuffle all")', 1, true), "Swap and Shuffle all are not one row")
+    assert(src:find('{ text = _("Switch off")', 1, true), "no way to take a piece out of the deck")
+    assert(src:find("Orn.setOff(entry.name, true)", 1, true), "Switch off does not switch it off")
     assert(src:find("Deck.swap(entry.name, chosen.name)", 1, true), "Swap does not trade places")
     assert(src:find("bw:onBookshelfShuffleOrnaments()", 1, true), "Shuffle all is not the shuffle action")
+end)
+
+t.test("menu: each nudge row has 10-point buttons either side", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    local pm = src:match("local function plusMinus%(field, label_func%)(.-)\n    end\n")
+    assert(pm and pm:find("bigButton(field, -1)", 1, true) and pm:find("bigButton(field, 1)", 1, true),
+        "size and padding have no 10-point buttons")
+    assert(src:find('bigButton("lift", 1)', 1, true) and src:find('bigButton("lift", -1)', 1, true),
+        "height has no 10-point buttons")
+    package.loaded["lib/bookshelf_ornaments"] = nil
+    local Menu = dofile("lib/bookshelf_ornament_menu.lua")
+    eq(Menu.STEPS.scale[2], 0.10); eq(Menu.STEPS.pad[2], 0.10); eq(Menu.STEPS.lift[2], 0.10)
+end)
+
+t.test("size goes down to 5%, not stopping at half", function()
+    local O = dofile("lib/bookshelf_ornaments.lua")
+    eq(O.cleanField("scale", 0.2), 0.2)
+    eq(O.cleanField("scale", 0), 0.05)
 end)
 
 t.done()
