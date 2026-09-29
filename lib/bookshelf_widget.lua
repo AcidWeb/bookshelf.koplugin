@@ -3328,6 +3328,20 @@ function BookshelfWidget:_pollExtraction()
             local ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
             for fp in pairs(ready_cover_paths) do ScaledCoverCache:drop(fp) end
         end
+        -- A spine shelf keeps its own caches of each book (look, hydration,
+        -- rendered pixels) and of the page fetch, all taken from the
+        -- stand-in record painted before extraction: the file name as
+        -- title, which for an OPDS download ("Author - Title") put the
+        -- author on the spine with authors off (GitHub issue 477), and the
+        -- grey default look. Drop them for the books now ready, as a
+        -- metadata edit does (_refreshSpineSlotInPlace).
+        if self:_isSpineMode() then
+            local SpineShelf = require("lib/bookshelf_spine_shelf")
+            if SpineShelf.invalidateBook then
+                for fp in pairs(ready_paths) do SpineShelf.invalidateBook(fp) end
+            end
+            self:_expireSpineFetch()
+        end
         -- _swapShelvesInPlace re-fetches Book records (which re-query
         -- BIM) and re-arms polling for whatever is still missing.
         self:_swapShelvesInPlace()
