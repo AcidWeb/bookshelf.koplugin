@@ -5715,6 +5715,10 @@ function BookshelfWidget:_shelfCallbacks()
         -- unifies the d-pad focus cell, the open-double pending tap, and the
         -- hero preview.
         selected_filepath = self:_selectedFilepath(),
+        -- Whether a lifted book shows on this page, for a spine slot to let a
+        -- tap on the wall above it through to _dropLift (SpineBookSlot:onTap).
+        -- Not in bulk selection, where every tap is a pick.
+        lift_shown        = function() return bw:_liftShown() end,
         -- Expanded mode is "browse to open" — single tap opens the book.
         -- Normal mode is "preview, then commit" — tap shelf cover stages it
         -- in the hero, tap hero opens.
@@ -13332,16 +13336,38 @@ end
 -- the same book highlights in the 2-row grid, the expanded grid, and previews
 -- in the hero. Priority: live d-pad focus cell > a pending expanded tap
 -- (open-double's first tap) > the hero preview book. nil = nothing selected.
+function BookshelfWidget:_selectedFilepath()
+    if self._cursor_idx and self._page_items then
+        local ci = self._page_items[self._cursor_idx]
+        if ci then
+            if     ci.filepath              then return ci.filepath end
+            if     ci.first_book            then return ci.first_book.filepath end
+            if     ci.books and ci.books[1] then return ci.books[1].filepath end
+        end
+    end
+    if self._tap_selected_fp then return self._tap_selected_fp end
+    if self._preview_book then return self._preview_book.filepath end
+    return nil
+end
+
+-- _liftShown() -> the rect of a lifted book on this page that a tap on empty
+-- space would put back, or nil.
+function BookshelfWidget:_liftShown()
+    if self._cursor_idx then return nil end
+    if self._selection and self._selection.isActive and self._selection:isActive() then return nil end
+    local fp = self:_selectedFilepath()
+    return fp and self:_shelfSlotRect(fp) or nil
+end
+
 -- _dropLift() -> true when it put a lifted book back on the shelf: the first
 -- tap of "tap twice to open", or the book the hero is previewing (the hero
 -- goes back to the book being read, as the Currently reading chip does).
 -- Only a lift that shows on this page: a previewed book elsewhere is left
 -- as it is. A d-pad cursor is not a lift; the keys move it.
 function BookshelfWidget:_dropLift()
-    if self._cursor_idx then return false end
-    local fp = self:_selectedFilepath()
-    local rect = fp and self:_shelfSlotRect(fp)
+    local rect = self:_liftShown()
     if not rect then return false end
+    local fp = self:_selectedFilepath()
     if self._tap_selected_fp then
         self._tap_selected_fp = nil
         self:_repaintSelectionHighlight(fp, nil)
@@ -13365,20 +13391,6 @@ end
 function BookshelfWidget:_dropLiftOnTap(ev)
     if not ev or ev.ges ~= "tap" then return false end
     return self:_dropLift()
-end
-
-function BookshelfWidget:_selectedFilepath()
-    if self._cursor_idx and self._page_items then
-        local ci = self._page_items[self._cursor_idx]
-        if ci then
-            if     ci.filepath              then return ci.filepath end
-            if     ci.first_book            then return ci.first_book.filepath end
-            if     ci.books and ci.books[1] then return ci.books[1].filepath end
-        end
-    end
-    if self._tap_selected_fp then return self._tap_selected_fp end
-    if self._preview_book then return self._preview_book.filepath end
-    return nil
 end
 
 -- _globalIndexOfFilepath(fp) — 1-based index of a book VISIBLE on the current

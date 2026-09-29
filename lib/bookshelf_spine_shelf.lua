@@ -1805,7 +1805,17 @@ end
 
 function SpineBookSlot:getSize() return self.dimen end
 
-function SpineBookSlot:onTap()
+function SpineBookSlot:onTap(_arg, ges)
+    -- The tap range is the slot's whole column, so the wall above a short
+    -- book is that book's. While another book is lifted, a tap up there is
+    -- empty space: it falls through and the shelf puts the lifted book back
+    -- (BookshelfWidget:_dropLift). With nothing lifted the whole column still
+    -- picks the book, which is kinder to short spines.
+    if not self.is_selected and ges and ges.pos and self.entry and self.dimen and self.dimen.y
+            and self.callbacks and self.callbacks.lift_shown and self.callbacks.lift_shown() then
+        local top = self.dimen.y + self.height - math.min(self.entry.h or self.height, self.height)
+        if ges.pos.y < top - Screen:scaleBySize(6) then return false end
+    end
     local cb = _itemCallback(self.callbacks, self.book, "tap")
     if cb then cb(self.book) return true end
 end

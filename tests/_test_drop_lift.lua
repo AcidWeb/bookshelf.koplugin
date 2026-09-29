@@ -9,6 +9,7 @@ local H = dofile("tests/_helpers.lua")
 local t, eq = H.runner(), H.eq
 local src = io.open("lib/bookshelf_widget.lua"):read("*a")
 local body = src:match("\n(function BookshelfWidget:_dropLift%(.-\nend)\n")
+local shown_body = src:match("\n(function BookshelfWidget:_liftShown%(.-\nend)\n")
 
 local dirty = {}
 local function load_drop()
@@ -18,10 +19,14 @@ local function load_drop()
         Screen = { scaleBySize = function(_s, v) return v end },
         UIManager = { setDirty = function(_u, w, f) dirty[#dirty + 1] = { w, f } end },
     }, { __index = _G })
-    local chunk = assert((loadstring or load)(body, "=_dropLift", "t", env))
+    assert(shown_body, "no BookshelfWidget:_liftShown")
+    local chunk = assert((loadstring or load)(shown_body .. "\n" .. body, "=_dropLift", "t", env))
     if setfenv then setfenv(chunk, env) end
     chunk()
-    return env.BookshelfWidget._dropLift
+    return function(w)
+        w._liftShown = env.BookshelfWidget._liftShown
+        return env.BookshelfWidget._dropLift(w)
+    end
 end
 
 local function widget(o)
@@ -64,10 +69,12 @@ t.test("nothing lifted on this page: the tap is left alone", function()
     eq(drop(widget{}), false)
 end)
 
-t.test("a d-pad cursor is not a lift to drop", function()
+t.test("a d-pad cursor, or bulk selection, is not a lift to drop", function()
     local drop = load_drop()
-    local w = widget{ _cursor_idx = 3, visible = "cursor.epub" }
-    eq(drop(w), false)
+    eq(drop(widget{ _cursor_idx = 3, visible = "cursor.epub" }), false)
+    local w = widget{ _tap_selected_fp = "a.epub", visible = "a.epub",
+                      _selection = { isActive = function() return true end } }
+    eq(drop(w), false); eq(w._tap_selected_fp, "a.epub")
 end)
 
 t.test("handleEvent offers a tap to _dropLift after our widgets and KOReader's zones", function()
@@ -79,6 +86,46 @@ t.test("handleEvent offers a tap to _dropLift after our widgets and KOReader's z
     assert(kids and fmz and drop and kids < fmz and fmz < drop, "the drop runs before something that should come first")
     local tap = src:match("function BookshelfWidget:_dropLiftOnTap%(ev%)(.-)\nend\n")
     assert(tap and tap:find('ev.ges ~= "tap"', 1, true), "the drop is not limited to a plain tap")
+end)
+
+-- The slot's tap range is its whole column, so the wall above a short book
+-- is that book's. While another book is lifted, a tap there must fall
+-- through to _dropLift instead of lifting the short book.
+local sss = io.open("lib/bookshelf_spine_shelf.lua"):read("*a")
+local ontap = sss:match("\n(function SpineBookSlot:onTap%(.-\nend)\n")
+local function load_ontap(tapped)
+    assert(ontap, "no SpineBookSlot:onTap")
+    local env = setmetatable({
+        SpineBookSlot = {},
+        Screen = { scaleBySize = function(_s, v) return v end },
+        _itemCallback = function(cbs, book, kind) return function(b) tapped[#tapped + 1] = b end end,
+    }, { __index = _G })
+    local chunk = assert((loadstring or load)(ontap, "=onTap", "t", env))
+    if setfenv then setfenv(chunk, env) end
+    chunk()
+    return env.SpineBookSlot.onTap
+end
+local function slot(lift_shown, selected)
+    return { is_selected = selected, height = 300, entry = { h = 200 }, book = { filepath = "short.epub" },
+             dimen = { x = 0, y = 1000, w = 30, h = 300 },
+             callbacks = { lift_shown = function() return lift_shown end } }
+end
+local function at(y) return { pos = { x = 10, y = y } } end
+
+t.test("the wall above a short spine drops another lifted book, and does not lift this one", function()
+    local tapped = {}
+    local tap = load_ontap(tapped)
+    eq(tap(slot(true, false), nil, at(1020)), false, "a tap above the book falls through")
+    eq(#tapped, 0)
+    eq(tap(slot(true, false), nil, at(1200)), true, "a tap on the book itself still picks it")
+    eq(#tapped, 1)
+end)
+
+t.test("with nothing lifted, the whole column still picks the book", function()
+    local tapped = {}
+    local tap = load_ontap(tapped)
+    eq(tap(slot(false, false), nil, at(1020)), true)
+    eq(tap(slot(true, true), nil, at(1020)), true, "the lifted book's own column is its own")
 end)
 
 t.done()
