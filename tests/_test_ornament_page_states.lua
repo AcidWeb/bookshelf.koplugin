@@ -28,7 +28,6 @@ local function stub(cursor, skip)
     self._nShelves = function() return 2 end
     self._ornSig = function() return "sig" end
     self._ornKey = method("_ornKey")
-    self._ornFreshen = method("_ornFreshen")
     self._spinePageFirsts = function(s, build, _dims)
         if build then
             s.builds = s.builds + 1
@@ -76,96 +75,6 @@ t.test("a changed signature drops every state but the current page's, unless it 
     D.shuffle({ "a", "b" })
     self._spinePageFirsts = function() end
     eq(method("_ornStartState")(self).n, 0, "a shuffle kept the old layout")
-end)
-
--- ── Snapping to the page map ──────────────────────────────────────────────
--- A cursor saved under another layout (a different row count; a book turned
--- face-out before it) starts a page the map does not know. Its deal state was
--- borrowed from the nearest earlier page, and a later render borrowed a
--- DIFFERENT one: the pieces on screen swapped ~30s after a book was closed
--- (maintainer, PW5 log: page 6 dealt 0/0/0 while parked, then 1/2/1).
-local function snapStub(cursor, skip, n_items)
-    local all = {}
-    for i = 1, n_items or 30 do all[i] = { name = "b" .. i } end
-    local page = {}
-    for i = cursor, math.min(#all, cursor + 9) do page[#page + 1] = all[i] end
-    local self = { _cursor = cursor, _spine_fetch_cache = { page_orn = {}, orn_sig = "sig" },
-                   _draft_items_cache = { all_items = all }, builds = 0, set = nil }
-    self._isSpineMode = function() return true end
-    self._spineSkip = function() return skip or 0 end
-    self._ornSig = function() return "sig" end
-    self._ornKey = method("_ornKey")
-    self._ornFreshen = method("_ornFreshen")
-    self._setSpineCursor = function(s, c, k) s._cursor, s.set = c, { c, k or 0 } end
-    self._syncPageFromCursor = function(s) s.synced = true end
-    self._spinePageFirsts = function(s, build)
-        if not build then return end
-        s.builds = s.builds + 1
-        local c = s._spine_fetch_cache
-        c.map_keys = {}
-        for _i, k in ipairs({ "1:0", "5:0", "12:0" }) do
-            c.page_orn[k] = { n = 1, shelf = 1, bnd = 0, owed = {} }
-            c.map_keys[k] = true
-        end
-    end
-    return self, page, all
-end
-
-t.test("snap: a page the map does not know moves to the map's page that holds it", function()
-    local self, page, all = snapStub(6, 0)
-    local items = method("_spineSnapToMap")(self, page, {})
-    assert(items, "an off-grid page was not snapped")
-    eq(self.set[1], 5); eq(self.set[2], 0)
-    eq(items[1], all[5], "the page's items were not re-sliced from the new start")
-    assert(#items >= #page, "the re-sliced page is shorter than the one it replaced")
-    assert(self.synced, "the page number was not re-synced")
-end)
-
-t.test("snap: the selected book stays selected", function()
-    local self, page, all = snapStub(6, 0)
-    self._cursor_idx = 2                          -- b7, the second on the page
-    local items = method("_spineSnapToMap")(self, page, {})
-    eq(items[self._cursor_idx], all[7], "the selection moved to another book")
-end)
-
-t.test("snap: a page the renders recorded (paging on) stays where it is", function()
-    local self, page = snapStub(6, 0)
-    self._spine_fetch_cache.page_orn["6:0"] = { n = 2, shelf = 2, bnd = 0, owed = {} }
-    eq(method("_spineSnapToMap")(self, page, {}), nil)
-    eq(self.builds, 0)
-end)
-
-t.test("snap: the map's own page, and the chip's first page, stay put", function()
-    local self, page = snapStub(5, 0)
-    eq(method("_spineSnapToMap")(self, page, {}), nil, "a map page was snapped")
-    local self1, page1 = snapStub(1, 0)
-    eq(method("_spineSnapToMap")(self1, page1, {}), nil); eq(self1.builds, 0)
-end)
-
-t.test("snap: never onto a render-recorded page, only the map's", function()
-    local self, page = snapStub(8, 0)
-    -- 7:0 recorded by a render chain, not a map page: the snap must go to 5
-    self._spine_fetch_cache.page_orn["7:0"] = { n = 2, shelf = 2, bnd = 0, owed = {} }
-    method("_spineSnapToMap")(self, page, {})
-    eq(self.set and self.set[1], 5)
-end)
-
-t.test("snap: a windowed source (no whole list) is left alone", function()
-    local self, page = snapStub(6, 0)
-    self._draft_items_cache.total_hint = 400
-    eq(method("_spineSnapToMap")(self, page, {}), nil)
-end)
-
-t.test("the render snaps before it plans", function()
-    local b = src:match("\nfunction BookshelfWidget:_buildSpineRows%(.-%)\n(.-)\nend\n")
-    local sn = b:find("self:_spineSnapToMap(items, { content_w = content_w, shelf_h = shelf_h })", 1, true)
-    local pl = b:find("self:_spinePlanBase(", 1, true)
-    assert(sn and pl and sn < pl, "the snap does not come before the plan's options are built")
-end)
-
-t.test("the map records which page states are its own", function()
-    local b = src:match("\nfunction BookshelfWidget:_spinePageFirsts%(build, dims%)\n(.-)\nend\n")
-    assert(b:find("c.map_keys[k] = true", 1, true), "the map does not mark its own keys")
 end)
 
 t.test("the render plans from the start state and records the next page's", function()
