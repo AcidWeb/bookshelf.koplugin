@@ -99,4 +99,28 @@ t.test("the panel's text is in the bookshelf UI font", function()
         "a stock KOReader face is still used")
 end)
 
+t.test("KOReader's own gestures pass through the zoom view", function()
+    -- Side swipes for brightness, the top swipe for KOReader's menu, the
+    -- diagonal refresh: the full-screen view swallowed them (maintainer).
+    local P = dofile("lib/bookshelf_gesture_passthrough.lua")
+    local fired = {}
+    local zone = function(id) return {
+        def = { id = id },
+        gs_range = { match = function(_s, ev) return ev.ges == "swipe" end },
+        handler = function() fired[#fired + 1] = id; return true end,
+    } end
+    local fm = { _ordered_touch_zones = { zone("filemanager_swipe"), zone("my_custom") },
+                 gestures = { gestures = {} } }
+    eq(P.gesture({ ges = "swipe" }, fm), true, "a KOReader zone did not take the swipe")
+    eq(fired[1], "filemanager_swipe")
+    fired = {}
+    fm._ordered_touch_zones = { zone("my_custom") }
+    eq(P.gesture({ ges = "swipe" }, fm), false, "a zone the reader did not set up fired")
+    fm.gestures.gestures = { my_custom = true }
+    eq(P.gesture({ ges = "swipe" }, fm), true, "the reader's own gesture did not fire")
+    local z = io.open("lib/bookshelf_ornament_zoom.lua"):read("*a")
+    assert(z:find("Passthrough.gesture(", 1, true) and z:find("Passthrough.event(", 1, true),
+        "the zoom view does not pass gestures and their actions through")
+end)
+
 t.done()

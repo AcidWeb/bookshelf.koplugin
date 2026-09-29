@@ -16,7 +16,6 @@ local Blitbuffer       = require("ffi/blitbuffer")
 local Device           = require("device")
 local FrameContainer   = require("ui/widget/container/framecontainer")
 local Geom             = require("ui/geometry")
-local GestureRange     = require("ui/gesturerange")
 local InputContainer   = require("ui/widget/container/inputcontainer")
 local OverlapGroup     = require("ui/widget/overlapgroup")
 local ScrollTextWidget = require("ui/widget/scrolltextwidget")
@@ -229,22 +228,29 @@ function Zoom:_build()
     self._title, self._body = title, body
     self[1] = OverlapGroup:new{ dimen = self.dimen:copy(), allow_mirroring = false,
                                 bg, panel, picture, texts }
-    self.ges_events = {
-        TapClose = { GestureRange:new{ ges = "tap", range = self.dimen } },
-    }
+    -- No whole-screen tap range: a tap is read in handleEvent, after
+    -- KOReader's own zones have had it (a range would take corner taps too).
 end
 
--- The text scrolls under a tap or a swipe on it; any other tap closes.
+-- The text scrolls under a tap or a swipe on it; KOReader's own gestures
+-- (edge swipes for brightness, the top swipe for its menu, the diagonal
+-- refresh, corner taps) pass through to it; any other tap closes.
+local Passthrough = require("lib/bookshelf_gesture_passthrough")
 function Zoom:handleEvent(event)
-    local body = self._body
-    if body and event.handler == "onGesture" then
+    if event.handler == "onGesture" then
+        if Device.screen_saver_lock then return false end
         local ev = event.args and event.args[1]
-        local d = body.dimen
-        if ev and ev.pos and d and d.x and ev.pos:intersectWith(d) then
+        local body = self._body
+        if body and ev and ev.pos and body.dimen and body.dimen.x and ev.pos:intersectWith(body.dimen) then
             if body:handleEvent(event) then return true end
         end
+        if InputContainer.handleEvent(self, event) then return true end
+        if Passthrough.gesture(ev) then return true end
+        if ev and ev.ges == "tap" then return self:onTapClose() end
+        return false
     end
-    return InputContainer.handleEvent(self, event)
+    if InputContainer.handleEvent(self, event) then return true end
+    return Passthrough.event(event)
 end
 
 function Zoom:paintTo(bb, x, y)
