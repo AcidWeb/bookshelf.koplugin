@@ -4795,6 +4795,7 @@ function SpineShelf.rowWidget(opts)
                 if assets and SpineShelf.paintShadowAssets(bb, x, y, cols, {
                             stand_h = stand_h, width = opts.width,
                             below = opts.height - stand_h - fh, night = night,
+                            wall = surf - inset,
                         }) then
                     return
                 end

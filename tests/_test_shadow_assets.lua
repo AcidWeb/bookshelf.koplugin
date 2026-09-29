@@ -31,7 +31,8 @@ end
 local function set()
     local up = { name = "UP", getHeight = function() return 50 end }
     return { up_r = up, up_l = { name = "UPL", getHeight = function() return 50 end },
-             low_r = "LOW", low_l = "LOWL", top = "TOP", foot_l = "FL", foot_r = "FR",
+             low_r = { name = "LOW", getHeight = function() return 5 end },
+             low_l = { name = "LOWL", getHeight = function() return 5 end }, top = "TOP", foot_l = "FL", foot_r = "FR",
              side_w = 4, low = 5, wall = 3, below = 2, above = 1,
              tile = 5, cap = 2, halo = 2, foot = 2, tapers = {}, n_tapers = 0 }
 end
@@ -57,7 +58,7 @@ do
     local m = rowsOf(bb, "free")
     ok(m[8] == nil and m[9] and m[9].src.name == "taper18" and m[9].sy == 0, "taper starts one above the top")
     ok(m[26] and m[26].sy == 17, "taper ends at the wall line")
-    ok(m[27] and m[27].src == "LOW" and m[27].sy == 0, "plank part from the wall line")
+    ok(m[27] and m[27].src.name == "LOW" and m[27].sy == 0, "plank part from the wall line")
     ok(m[31] and m[31].sy == 4 and m[32] == nil, "plank part ends two below the floor")
     ok(bb.blits[1].dx == 100 and bb.blits[1].sx == 0 and bb.blits[1].w == 4, "right wedge at the edge")
 end
@@ -88,13 +89,13 @@ do
     local cols = { { x = 10, w = 5, h = 12 }, { x = 15, w = 5, h = 8 }, { x = 22, w = 5, h = 8 } }
     SA.paintRow(bb, 0, 0, cols, { stand_h = 20, width = 40, below = 2 })
     -- book 1's right wedge (edge 15) lies over book 2: only above book 2's
-    -- top (row 12) and on the plank strip (from row 20)
+    -- top (row 12); under it the contact line is the shadow
     local covered = false
     for _i, b in ipairs(bb.blits) do
         if b.dx == 15 and type(b.src) == "table" and b.src.src and b.src.src.name == "UP" then
             if b.dy + b.h > 12 then covered = true end
         end
-        if b.dx == 15 and b.src == "LOW" and b.dy < 20 then covered = true end
+        if b.dx == 15 and b.src.name == "LOW" then covered = true end
     end
     ok(not covered, "nothing painted where the shorter neighbour stands")
     -- both sides of the 2px gap paint into it: the wedges overlap
@@ -107,6 +108,30 @@ do
     local tops = 0
     for _i, b in ipairs(bb.blits) do if b.src == "TOP" then tops = tops + 1 end end
     ok(tops == 3, "one halo per book: " .. tops)
+end
+
+-- the LAST book still gets its right wedge (no neighbour must not mean
+-- "the book to the left")
+do
+    SA._cache["d100"] = set()
+    local bb = fakeBB()
+    local cols = { { x = 10, w = 5, h = 8 }, { x = 15, w = 5, h = 8 } }
+    SA.paintRow(bb, 0, 0, cols, { stand_h = 20, width = 40, below = 2 })
+    local right_end = false
+    for _i, b in ipairs(bb.blits) do
+        if b.dx == 20 and b.w == 4 and b.dy < 20 then right_end = true end
+    end
+    ok(right_end, "the last book's right wedge is painted")
+end
+
+-- the plank part stretches to the row's real wall line
+do
+    local a, bb = set(), fakeBB()
+    scaled = {}
+    SA.side(bb, a, 100, "right", 10, 30, { { 0, 4, 0, 99 } }, 7)
+    local m = rowsOf(bb, "wall")
+    ok(m[22] and m[22].src.name == "taper14" and m[23] and m[23].src.name == "taper9", "taper to the wall line 7 up")
+    ok(m[31] and m[31].sy == 8 and m[32] == nil, "plank part stretched to 9 rows")
 end
 
 -- no C blitter: nothing painted, and reported done

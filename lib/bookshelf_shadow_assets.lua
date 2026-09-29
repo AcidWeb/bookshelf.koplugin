@@ -70,12 +70,13 @@ local function tint(mask, grey, mirror, y0, h)
     return out
 end
 
--- taper(a, h, dir) -> the taper stretched to h rows (MuPDF's scaler, in C)
-local function taper(a, h, dir)
-    local key = dir .. h
+-- stretched(a, part, h, dir) -> part ("up": the taper, "low": the plank
+-- piece) stretched to h rows (MuPDF's scaler, in C), cached per height
+local function stretched(a, part, h, dir)
+    local key = part .. dir .. h
     local t = a.tapers[key]
     if t then return t end
-    local src = (dir == "left") and a.up_l or a.up_r
+    local src = a[part .. ((dir == "left") and "_l" or "_r")]
     local ok, sc = pcall(function()
         if src:getHeight() == h then return src end
         return require("ffi/mupdf").scaleBlitBuffer(src, a.side_w, h)
@@ -83,8 +84,9 @@ local function taper(a, h, dir)
     if not ok or not sc then return nil end
     a.n_tapers = a.n_tapers + 1
     if a.n_tapers > M.TAPER_CACHE then
+        local keep = { [a.up_l] = true, [a.up_r] = true, [a.low_l] = true, [a.low_r] = true }
         for k, bb in pairs(a.tapers) do
-            if bb ~= a.up_l and bb ~= a.up_r then pcall(function() bb:free() end) end
+            if not keep[bb] then pcall(function() bb:free() end) end
             a.tapers[k] = nil
         end
         a.n_tapers = 1
@@ -92,7 +94,6 @@ local function taper(a, h, dir)
     a.tapers[key] = sc
     return sc
 end
-M._taper = taper
 
 -- get(night) -> the tinted set for this screen, or nil (files missing)
 function M.get(night)
@@ -132,19 +133,22 @@ local function blit(bb, src, dx, dy, sx, sy, w, h)
     if w > 0 and h > 0 then bb:alphablitFrom(src, dx, dy, sx, sy, w, h) end
 end
 
--- side(bb, a, edge_x, dir, book_top, floor, parts): the wedge beside a book
--- whose edge is at edge_x, toward dir ("right" or "left"). It runs from
--- a.above over book_top to a.below under floor. parts: a list of
+-- side(bb, a, edge_x, dir, book_top, floor, parts, wall_h): the wedge
+-- beside a book whose edge is at edge_x, toward dir ("right" or "left"). It
+-- runs from a.above over book_top, out to the wall line wall_h above the
+-- floor (where the plank's top surface meets the wall; default a.wall), and
+-- back across the plank to a.below under the floor. parts: a list of
 -- { x0, x1, y0, y1 } (x measured from the edge, y absolute) where the
 -- wedge shows; the rest is under a neighbour. Absolute bb coordinates.
-function M.side(bb, a, edge_x, dir, book_top, floor, parts)
+function M.side(bb, a, edge_x, dir, book_top, floor, parts, wall_h)
     local W = a.side_w
+    wall_h = math.max(1, math.floor(tonumber(wall_h) or a.wall))
     local top  = book_top - a.above
-    local wall = floor - a.wall                -- taper / plank boundary
+    local wall = floor - wall_h                -- taper / plank boundary
     local bot  = floor + a.below
     local up_h = wall - top
-    local up   = up_h > 0 and taper(a, up_h, dir) or nil
-    local low  = (dir == "left") and a.low_l or a.low_r
+    local up   = up_h > 0 and stretched(a, "up", up_h, dir) or nil
+    local low  = stretched(a, "low", bot - wall, dir)
     for _i, p in ipairs(parts) do
         local x0, x1 = math.max(0, p[1]), math.min(W, p[2])
         if x1 > x0 then
@@ -158,8 +162,8 @@ function M.side(bb, a, edge_x, dir, book_top, floor, parts)
                 if r1 > r0 then blit(bb, up, dx, r0, sx, r0 - top, w, r1 - r0) end
             end
             local r0, r1 = math.max(p[3], wall, top), math.min(p[4], bot)
-            if r1 > r0 then
-                blit(bb, low, dx, r0, sx, (r0 - wall) + (a.low - (bot - wall)), w, r1 - r0)
+            if low and r1 > r0 then
+                blit(bb, low, dx, r0, sx, r0 - wall, w, r1 - r0)
             end
         end
     end
@@ -198,8 +202,9 @@ end
 
 -- paintRow(bb, ox, oy, cols, opts): the whole recess of one row.
 --   cols      recess_cols: { x, w, h, foot } left to right, row-local
---   opts      { stand_h, width, below, night }: the floor row, the row's
---             width, the plank surface rows under the floor (inset)
+--   opts      { stand_h, width, below, wall, night }: the floor row, the
+--             row's width, the plank surface rows under the floor (inset),
+--             how far above the floor the surface meets the wall
 function M.paintRow(bb, ox, oy, cols, opts)
     -- Without the C blitter an alpha blit is per-pixel Lua: no shadow beats a
     -- paint measured in seconds (Wallpaper.shadeRect's rule). Done, not
@@ -216,12 +221,15 @@ function M.paintRow(bb, ox, oy, cols, opts)
         local floor = stand_h - (c.foot or 0)
         M.top(bb, a, ox + c.x, c.w, oy + book_top)
         -- Each side: the whole wedge in the gap before the next book; over
-        -- that book, only what it leaves showing -- above it when it is
-        -- shorter, and the plank strip under the books. Wedges from both
-        -- sides of a gap overlap and multiply.
+        -- that book, only what shows above it when it is shorter (under it
+        -- the contact line is the shadow). Wedges from both sides of a gap
+        -- overlap and multiply.
         local plank_end = oy + stand_h + below
         for _s, dir in ipairs({ "right", "left" }) do
-            local nb = (dir == "right") and cols[i + 1] or cols[i - 1]
+            -- not `and cols[i + 1] or cols[i - 1]`: with no book to the
+            -- right that picks the one to the LEFT
+            local nb
+            if dir == "right" then nb = cols[i + 1] else nb = cols[i - 1] end
             local edge = (dir == "right") and (c.x + c.w) or c.x
             local room
             if nb then
@@ -237,10 +245,8 @@ function M.paintRow(bb, ox, oy, cols, opts)
                 if nb_top > book_top then
                     parts[#parts + 1] = { room, far, 0, oy + nb_top }
                 end
-                local nb_floor = stand_h - (nb.foot or 0)
-                parts[#parts + 1] = { room, far, oy + nb_floor, plank_end }
             end
-            M.side(bb, a, ox + edge, dir, oy + book_top, oy + floor, parts)
+            M.side(bb, a, ox + edge, dir, oy + book_top, oy + floor, parts, opts.wall)
         end
     end
     -- contact line: under each run of standing (not face-out) books
