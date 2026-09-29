@@ -1,17 +1,17 @@
 --[[
 Book shadows from three image masks (assets/shadows), in place of the banded
-ramps the recess painter computes. Each mask is a plain greyscale PNG whose
-value is the shadow's opacity; loaded once per screen scale and night state
-into a BB8A of the shadow colour (black by day, white in a night frame, as
-Wallpaper.shadeRect darkens or lightens) and alpha-blitted, so where two
-shadows overlap they multiply: a narrow gap is darker than either side.
+ramps the recess painter computes. Each file is a black PNG whose alpha is
+the shadow's opacity; loaded once per screen scale and night state as a
+BB8A (black by day, white in a night frame, as Wallpaper.shadeRect darkens
+or lightens) and alpha-blitted, so where two shadows overlap they multiply:
+a narrow gap is darker than either side.
 
   side  the wedge beside a book, drawn for its RIGHT side and mirrored for
         the left. Its outline runs from just above the book's top corner,
-        out and down to the wall line, then back across the plank to just
-        below the bottom corner. The taper (top corner to wall line) is
-        stretched to each book's height, cached per height; the plank part
-        is fixed.
+        out and down to the wall line (where the plank's surface meets the
+        wall), then back to the book's bottom corner. The taper is stretched
+        to the book's height and joined to the plank part, one buffer per
+        size, cached.
   top   the halo above a spine: uniform across, tiled to the spine's width.
   foot  the contact line on the plank surface under a run of books, with a
         fade-in cap at each end.
@@ -26,8 +26,8 @@ local M = {}
 -- dp layout of the files; keep in step with shadowgen.py
 M.DP = { side = 10, up = 96, wall = 10, below = 0, above = 2,
          halo = 6, tile = 48, cap = 5, foot = 5 }
--- stretched tapers kept per set (a page holds a few dozen book heights)
-M.TAPER_CACHE = 96
+-- joined wedges kept per set (a page holds a few dozen book heights)
+M.WEDGE_CACHE = 96
 
 M._cache = {}
 
@@ -37,8 +37,11 @@ local function pluginRoot()
     return dir or "."
 end
 
--- mask(path, w, h) -> BB8 of the mask at w x h, or nil
-local function loadMask(path, w, h)
+-- load(path, w, h) -> the file at w x h as a BB8A (black, alpha = the
+-- shadow), or nil. The files are LA PNGs, which MuPDF decodes straight into
+-- a BB8A (black premultiplied is still black), so nothing is tinted per
+-- pixel in Lua.
+local function load(path, w, h)
     local ok_r, RenderImage = pcall(require, "ui/renderimage")
     if not ok_r then return nil end
     local ok, bb = pcall(function()
@@ -51,52 +54,88 @@ local function loadMask(path, w, h)
         end)
         if ok_s and sc then bb = sc end
     end
+    if bb:getType() ~= Blitbuffer.TYPE_BB8A then
+        logger.warn("[bookshelf] shadow asset is not grey + alpha:", path)
+        pcall(function() bb:free() end)
+        return nil
+    end
     return bb
 end
 
--- tint(mask, grey, mirror, y0, h) -> BB8A of rows [y0, y0+h): every pixel
--- `grey`, alpha = mask value
-local function tint(mask, grey, mirror, y0, h)
-    local w = mask:getWidth()
-    y0 = y0 or 0
-    h = h or (mask:getHeight() - y0)
-    local out = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A)
-    for y = 0, h - 1 do
-        for x = 0, w - 1 do
-            local a = mask:getPixel(x, y0 + y):getColor8().a
-            out:setPixel(mirror and (w - 1 - x) or x, y, Blitbuffer.Color8A(grey, a))
-        end
-    end
+-- rows(bb, y0, h) -> rows [y0, y0+h) of bb as their own BB8A (a C copy)
+local function rows(bb, y0, h)
+    local out = Blitbuffer.new(bb:getWidth(), h, Blitbuffer.TYPE_BB8A)
+    out:blitFrom(bb, 0, 0, 0, y0, bb:getWidth(), h)
     return out
 end
 
--- stretched(a, part, h, dir, w) -> part ("up": the taper, "low": the plank
--- piece) scaled to w x h (MuPDF's scaler, in C), cached per size
-local function stretched(a, part, h, dir, w)
-    w = w or a.side_w
-    local key = part .. dir .. h .. "x" .. w
-    local t = a.tapers[key]
-    if t then return t end
-    local src = a[part .. ((dir == "left") and "_l" or "_r")]
-    local ok, sc = pcall(function()
-        if src:getHeight() == h and w == a.side_w then return src end
-        return require("ffi/mupdf").scaleBlitBuffer(src, w, h)
-    end)
-    if not ok or not sc then return nil end
-    a.n_tapers = a.n_tapers + 1
-    if a.n_tapers > M.TAPER_CACHE then
-        local keep = { [a.up_l] = true, [a.up_r] = true, [a.low_l] = true, [a.low_r] = true }
-        for k, bb in pairs(a.tapers) do
-            if not keep[bb] then pcall(function() bb:free() end) end
-            a.tapers[k] = nil
-        end
-        a.n_tapers = 1
-    end
-    a.tapers[key] = sc
-    return sc
+-- mirrored(bb) -> bb flipped left to right: one C copy per column
+local function mirrored(bb)
+    local w, h = bb:getWidth(), bb:getHeight()
+    local out = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A)
+    for x = 0, w - 1 do out:blitFrom(bb, w - 1 - x, 0, x, 0, 1, h) end
+    return out
 end
 
--- get(night) -> the tinted set for this screen, or nil (files missing)
+-- lit(bb, night) -> bb itself by day; in a night frame a white copy (the
+-- grey inverted, alpha kept), as Wallpaper.shadeRect lightens there
+local function lit(bb, night)
+    if not night then return bb end
+    local out = bb:copy()
+    out:invertRect(0, 0, out:getWidth(), out:getHeight())
+    return out
+end
+
+-- Taper heights are rounded UP to this many px and the spare rows cut from
+-- the tip, where the wedge is faintest: a page's books then share a handful
+-- of stretched wedges instead of one per height.
+M.BUCKET = 4
+
+local function scaled(src, w, h)
+    if src:getWidth() == w and src:getHeight() == h then return src end
+    return require("ffi/mupdf").scaleBlitBuffer(src, w, h)
+end
+
+-- wedge(a, up_b, low_h, dir, w) -> the whole wedge, taper (up_b rows) over
+-- plank part (low_h rows), w wide, joined once into one buffer so each
+-- visible part is a single blit; cached per size
+local function wedge(a, up_b, low_h, dir, w)
+    local key = dir .. up_b .. "/" .. low_h .. "x" .. w
+    local t = a.wedges[key]
+    if t then return t end
+    local side = (dir == "left") and "_l" or "_r"
+    local ok, out = pcall(function()
+        local o = Blitbuffer.new(w, up_b + low_h, Blitbuffer.TYPE_BB8A)
+        if up_b > 0 then
+            local u = scaled(a["up" .. side], w, up_b)
+            o:blitFrom(u, 0, 0, 0, 0, w, up_b)
+            if u ~= a["up" .. side] then u:free() end
+        end
+        -- the plank part only changes with the row's wall line and the
+        -- width, so it is stretched once for all the wedges that share them
+        local lkey = side .. low_h .. "x" .. w
+        local l = a.lows[lkey]
+        if not l then
+            l = scaled(a["low" .. side], w, low_h)
+            a.lows[lkey] = l
+        end
+        o:blitFrom(l, 0, up_b, 0, 0, w, low_h)
+        return o
+    end)
+    if not ok or not out then return nil end
+    a.n_wedges = a.n_wedges + 1
+    if a.n_wedges > M.WEDGE_CACHE then
+        for k, bb in pairs(a.wedges) do
+            pcall(function() bb:free() end)
+            a.wedges[k] = nil
+        end
+        a.n_wedges = 1
+    end
+    a.wedges[key] = out
+    return out
+end
+
+-- get(night) -> the set for this screen, or nil (files missing)
 function M.get(night)
     local key = (night and "n" or "d") .. Screen:scaleBySize(100)
     local c = M._cache[key]
@@ -104,28 +143,29 @@ function M.get(night)
     local D = M.DP
     local s = function(dp) return math.max(1, Screen:scaleBySize(dp)) end
     local side_w, up = s(D.side), s(D.up)
-    local low = s(D.wall) + Screen:scaleBySize(D.below)
+    local below = Screen:scaleBySize(D.below)
+    local low = s(D.wall) + below
     local tile, cap, halo, foot = s(D.tile), s(D.cap), s(D.halo), s(D.foot)
     local dir = pluginRoot() .. "/assets/shadows/"
-    local side = loadMask(dir .. "shadow.side.png", side_w, up + low)
-    local top  = loadMask(dir .. "shadow.top.png", tile, halo)
-    local ft   = loadMask(dir .. "shadow.foot.png", cap + tile, foot)
+    local side = load(dir .. "shadow.side.png", side_w, up + low)
+    local top  = load(dir .. "shadow.top.png", tile, halo)
+    local ft   = load(dir .. "shadow.foot.png", cap + tile, foot)
     if not (side and top and ft) then
         logger.warn("[bookshelf] shadow assets missing in", dir)
+        for _k, bb in pairs({ side, top, ft }) do pcall(function() bb:free() end) end
         M._cache[key] = false
         return nil
     end
-    local grey = night and 0xFF or 0x00
+    side, top, ft = lit(side, night), lit(top, night), lit(ft, night)
+    local up_r, low_r = rows(side, 0, up), rows(side, up, low)
     c = {
-        up_r = tint(side, grey, false, 0, up), up_l = tint(side, grey, true, 0, up),
-        low_r = tint(side, grey, false, up, low), low_l = tint(side, grey, true, up, low),
-        top = tint(top, grey),
-        foot_l = tint(ft, grey), foot_r = tint(ft, grey, true),
-        side_w = side_w, low = low, wall = s(D.wall), below = Screen:scaleBySize(D.below),
+        up_r = up_r, up_l = mirrored(up_r), low_r = low_r, low_l = mirrored(low_r),
+        top = top, foot_l = ft, foot_r = mirrored(ft),
+        side_w = side_w, low = low, wall = s(D.wall), below = below,
         above = s(D.above), tile = tile, cap = cap, halo = halo, foot = foot,
-        tapers = {}, n_tapers = 0,
+        wedges = {}, n_wedges = 0, lows = {},
     }
-    for _k, bb in pairs({ side, top, ft }) do pcall(function() bb:free() end) end
+    pcall(function() side:free() end)
     M._cache[key] = c
     return c
 end
@@ -143,32 +183,27 @@ end
 -- wedge shows; the rest is under a neighbour. fit: squeeze the wedge to
 -- that width (the room left at a shelf's end) instead of cutting it off.
 -- Absolute bb coordinates.
-function M.side(bb, a, edge_x, dir, book_top, floor, parts, wall_h, fit)
+function M.side(bb, a, edge_x, dir, book_top, floor, parts, wall_h, fit, n)
     local W = a.side_w
-    if fit and fit < W then W = math.max(1, math.floor(fit)) else fit = nil end
+    if fit and fit < W then W = math.max(1, math.floor(fit)) end
     wall_h = math.max(1, math.floor(tonumber(wall_h) or a.wall))
     local top  = book_top - a.above
     local wall = floor - wall_h                -- taper / plank boundary
     local bot  = floor + a.below
     local up_h = wall - top
-    local up   = up_h > 0 and stretched(a, "up", up_h, dir, W) or nil
-    local low  = stretched(a, "low", bot - wall, dir, W)
-    for _i, p in ipairs(parts) do
+    local up_b = up_h > 0 and (math.ceil(up_h / M.BUCKET) * M.BUCKET) or 0
+    local src  = wedge(a, up_b, bot - wall, dir, W)
+    if not src then return end
+    local origin = wall - up_b                 -- the wedge buffer's row 0
+    for i = 1, n or #parts do
+        local p = parts[i]
         local x0, x1 = math.max(0, p[1]), math.min(W, p[2])
         if x1 > x0 then
             local sx, dx
             if dir == "left" then sx, dx = W - x1, edge_x - x1
             else sx, dx = x0, edge_x + x0 end
-            local w = x1 - x0
-            -- the taper rows [top, wall), then the plank rows [wall, bot)
-            if up then
-                local r0, r1 = math.max(p[3], top), math.min(p[4], wall)
-                if r1 > r0 then blit(bb, up, dx, r0, sx, r0 - top, w, r1 - r0) end
-            end
-            local r0, r1 = math.max(p[3], wall, top), math.min(p[4], bot)
-            if low and r1 > r0 then
-                blit(bb, low, dx, r0, sx, r0 - wall, w, r1 - r0)
-            end
+            local r0, r1 = math.max(p[3], top, origin), math.min(p[4], bot)
+            if r1 > r0 then blit(bb, src, dx, r0, sx, r0 - origin, x1 - x0, r1 - r0) end
         end
     end
 end
@@ -204,6 +239,9 @@ function M.foot(bb, a, x0, x1, y, h, lcap, rcap)
     if rcap > 0 then blit(bb, a.foot_r, x1, y, a.tile, 0, rcap, h) end
 end
 
+local DIRS  = { "right", "left" }
+local PARTS = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } }
+
 -- paintRow(bb, ox, oy, cols, opts): the whole recess of one row.
 --   cols      recess_cols: { x, w, h, foot } left to right, row-local
 --   opts      { stand_h, width, below, wall, night }: the floor row, the
@@ -229,7 +267,8 @@ function M.paintRow(bb, ox, oy, cols, opts)
         -- the contact line is the shadow). Wedges from both sides of a gap
         -- overlap and multiply.
         local plank_end = oy + stand_h + below
-        for _s, dir in ipairs({ "right", "left" }) do
+        for _s = 1, 2 do
+            local dir = DIRS[_s]
             -- not `and cols[i + 1] or cols[i - 1]`: with no book to the
             -- right that picks the one to the LEFT
             local nb
@@ -242,16 +281,19 @@ function M.paintRow(bb, ox, oy, cols, opts)
                 room = (dir == "right") and (width - edge) or edge
             end
             room = math.max(0, room)
-            local parts = { { 0, room, 0, plank_end } }
+            -- the visible parts, in two reused tables (a row has ~50 sides)
+            local p1, np = PARTS[1], 1
+            p1[1], p1[2], p1[3], p1[4] = 0, room, 0, plank_end
             if nb then
-                local far = room + nb.w
                 local nb_top = stand_h - math.min(nb.h, stand_h)
                 if nb_top > book_top then
-                    parts[#parts + 1] = { room, far, 0, oy + nb_top }
+                    local p2 = PARTS[2]
+                    p2[1], p2[2], p2[3], p2[4] = room, room + nb.w, 0, oy + nb_top
+                    np = 2
                 end
             end
-            M.side(bb, a, ox + edge, dir, oy + book_top, oy + floor, parts, opts.wall,
-                   (not nb) and room or nil)
+            M.side(bb, a, ox + edge, dir, oy + book_top, oy + floor, PARTS, opts.wall,
+                   (not nb) and room or nil, np)
         end
     end
     -- contact line: under each run of standing (not face-out) books
