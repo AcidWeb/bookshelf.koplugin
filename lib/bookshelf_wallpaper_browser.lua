@@ -1,0 +1,232 @@
+--[[
+The wallpaper picker: every picture the shelf can show behind it, the
+reader's own (the wallpapers folder and the extra folders) and the packs'
+(a pack's theme/wallpaper), one per page, shown as large as the page allows.
+Opened from "Default wallpaper image" and "Full screen shelves image"; a tap
+uses that picture there and closes. On the ornament collection's screen
+(LibraryModal), like the plank picker.
+
+A pack's wallpaper is an ordinary choice (bookshelf_theme_pack
+chooseWallpaper): stored like any other, it takes the pack's full screen and
+dark variants by itself, and the reader's own picture comes back if the pack
+is switched off.
+]]
+local BookshelfSettings = require("lib/bookshelf_settings_store")
+local ok_i, I18n = pcall(require, "lib/bookshelf_i18n")
+local _ = (ok_i and I18n and I18n.gettext) or function(s) return s end
+
+local WB = {}
+WB.ALL, WB.YOURS = "__all", "__yours"
+
+local function WP() return require("lib/bookshelf_wallpaper") end
+local function TP() return require("lib/bookshelf_theme_pack") end
+
+-- entries(key, chip) -> what the picker lists for that setting and tab:
+--   { kind = "same" | "none" | "own" | "pack", name, label, path, pack }
+-- All: (Same as default), None, the reader's own, then the packs'. Yours:
+-- the same without the packs'. A pack's tab: its wallpaper alone.
+function WB.entries(key, chip)
+    local out = {}
+    if chip ~= WB.ALL and chip ~= WB.YOURS then
+        for _i, e in ipairs(TP().wallpaperEntries()) do
+            if e.pack == chip then
+                out[#out + 1] = { kind = "pack", name = e.name, label = e.label, path = e.path,
+                                  pack = e.pack, pack_off = e.pack_off }
+            end
+        end
+        return out
+    end
+    if key == WP().FULL_SETTING then out[#out + 1] = { kind = "same", label = _("Same as default") } end
+    out[#out + 1] = { kind = "none", label = _("None") }
+    for _i, e in ipairs(WP().list()) do
+        out[#out + 1] = { kind = "own", name = e.name, label = e.label, path = e.path }
+    end
+    if chip == WB.ALL then
+        for _i, e in ipairs(TP().wallpaperEntries()) do
+            out[#out + 1] = { kind = "pack", name = e.name, label = e.label, path = e.path,
+                              pack = e.pack, pack_off = e.pack_off }
+        end
+    end
+    return out
+end
+
+-- inUse(key, item) -> is this what the setting holds now. The full screen
+-- image has three states: unset (Same as default), false (None), a name.
+function WB.inUse(key, item)
+    local v = BookshelfSettings.read(key)
+    if item.kind == "same" then return v == nil end
+    if item.kind == "none" then
+        if key == WP().FULL_SETTING then return v == false end
+        return not (type(v) == "string" and v ~= "")
+    end
+    return v == item.name
+end
+
+-- choose(key, item): store the choice (the old list menu's semantics: None
+-- is false, Same as default is unset), and drop the decoded bitmap.
+function WB.choose(key, item)
+    if item.kind == "same" then
+        BookshelfSettings.delete(key)
+    elseif item.kind == "none" then
+        BookshelfSettings.save(key, false)
+    else
+        TP().chooseWallpaper(key, item.name)
+    end
+    if BookshelfSettings.flush then BookshelfSettings.flush() end
+    pcall(function() WP().free() end)
+end
+
+-- Decoded previews, a few at a time: one per page, so a page turn is one
+-- decode, and going back a page or two is free.
+local _previews, _order = {}, {}
+local PREVIEW_KEEP = 3
+local function preview(path, w, h)
+    local key = path .. "|" .. w .. "x" .. h
+    if _previews[key] then return _previews[key] end
+    local RenderImage = require("ui/renderimage")
+    local ok, bb = pcall(function() return RenderImage:renderImageFile(path, false) end)
+    if not ok or not bb then return nil end
+    local iw, ih = bb:getWidth(), bb:getHeight()
+    local s = math.min(w / iw, h / ih)
+    local tw, th = math.max(1, math.floor(iw * s)), math.max(1, math.floor(ih * s))
+    local ok_s, sc = pcall(function() return RenderImage:scaleBlitBuffer(bb, tw, th) end)
+    if not ok_s or not sc then return nil end
+    _previews[key] = sc
+    _order[#_order + 1] = key
+    while #_order > PREVIEW_KEEP do
+        local old = table.remove(_order, 1)
+        if _previews[old] then pcall(function() _previews[old]:free() end) end
+        _previews[old] = nil
+    end
+    return sc
+end
+
+local function renderCell(key, item, dimen)
+    local Blitbuffer      = require("ffi/blitbuffer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local Font            = require("ui/font")
+    local FrameContainer  = require("ui/widget/container/framecontainer")
+    local Geom            = require("ui/geometry")
+    local ImageWidget     = require("ui/widget/imagewidget")
+    local Size            = require("ui/size")
+    local Space           = require("lib/bookshelf_space")
+    local TextWidget      = require("lib/bookshelf_colour_text")
+    local TextBoxWidget   = require("ui/widget/textboxwidget")
+    local VerticalGroup   = require("ui/widget/verticalgroup")
+    local VerticalSpan    = require("ui/widget/verticalspan")
+    local T               = require("ffi/util").template
+    local border, pad = Size.border.default, Space.padding.default
+    local inner_w = dimen.w - 2 * (border + pad)
+    local name = item.label
+    if item.kind == "pack" then name = T(_("%1 (pack)"), item.label) end
+    local lines = VerticalGroup:new{ align = "center",
+        TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = inner_w } }
+    if WB.inUse(key, item) then
+        lines[#lines + 1] = TextWidget:new{ text = _("In use"), face = Font:getFace("cfont", 14), max_width = inner_w }
+    elseif item.pack_off then
+        lines[#lines + 1] = TextWidget:new{ text = _("Pack off"), face = Font:getFace("cfont", 14), max_width = inner_w }
+    end
+    local text_h = lines:getSize().h
+    local box_h = math.max(1, dimen.h - 2 * (border + pad) - text_h - Space.padding.small)
+    local pic
+    if item.path then
+        local bb = preview(item.path, inner_w, box_h)
+        if bb then
+            pic = ImageWidget:new{ image = bb, image_disposable = false, original_in_nightmode = true }
+        end
+    end
+    if not pic then
+        -- None / Same as default: a plain frame the size of a picture, with
+        -- where the reader's pictures come from under None.
+        local sw, sh = require("device").screen:getWidth(), require("device").screen:getHeight()
+        local fw = inner_w
+        local fh = math.min(box_h, math.floor(fw * sh / sw))
+        if fh == box_h then fw = math.floor(fh * sw / sh) end
+        local hint
+        if item.kind == "none" then
+            local Wallpaper = WP()
+            local dir, user = Wallpaper.dir and Wallpaper.dir() or "?", Wallpaper.userDir and Wallpaper.userDir()
+            if #Wallpaper.list() == 0 then
+                hint = T(_("No images in %1"), dir)
+            elseif user then
+                hint = T(_("Images are loaded from %1 and %2"), dir, user)
+            else
+                hint = T(_("Images are loaded from %1"), dir)
+            end
+        elseif item.kind == "same" then
+            hint = _("Full screen shelves show the default wallpaper.")
+        end
+        pic = FrameContainer:new{
+            bordersize = Size.border.thin, padding = 0, margin = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            CenterContainer:new{ dimen = Geom:new{ w = fw - 2 * Size.border.thin, h = fh - 2 * Size.border.thin },
+                hint and TextBoxWidget:new{ text = hint, face = Font:getFace("cfont", 16),
+                                            width = math.floor(fw * 0.8), alignment = "center" }
+                     or VerticalSpan:new{ width = 1 } },
+        }
+    end
+    local inner_h = dimen.h - 2 * (border + pad)
+    return FrameContainer:new{
+        bordersize = 0, padding = pad, margin = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h },
+            VerticalGroup:new{ align = "center",
+                CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = box_h }, pic },
+                VerticalSpan:new{ width = Space.padding.small },
+                lines,
+            } },
+    }
+end
+
+-- show(key, on_change): the picker for that setting. on_change() runs after
+-- a choice, so the menu row and the shelf can catch up.
+function WB.show(key, on_change)
+    local LibraryModal = require("lib/bookshelf_library_modal")
+    local UIManager    = require("ui/uimanager")
+    local T            = require("ffi/util").template
+    local self = { chip = WB.ALL }
+    local function items() return WB.entries(key, self.chip) end
+    self.items = items()
+    local modal
+    local function close() if modal then UIManager:close(modal); modal = nil end end
+    local function chips()
+        local out = {
+            { key = WB.ALL, label = _("All"), is_active = self.chip == WB.ALL },
+            { key = WB.YOURS, label = _("Yours"), is_active = self.chip == WB.YOURS },
+        }
+        for _i, e in ipairs(TP().wallpaperEntries()) do
+            out[#out + 1] = { key = e.pack, label = e.pack_off and T(_("%1 (off)"), e.pack) or e.pack,
+                              is_active = self.chip == e.pack }
+        end
+        return out
+    end
+    local config = {
+        title = (key == WP().FULL_SETTING) and _("Full screen shelves image") or _("Default wallpaper image"),
+        no_search = true,
+        grid_cols = function() return 1 end,
+        cells_per_page = function() return 1 end,
+        -- The grid's height is rows_per_page cards of 64dp (LibraryModal):
+        -- enough of them that the one picture fills most of the screen.
+        rows_per_page = function()
+            local Screen = require("device").screen
+            return math.max(3, math.floor(Screen:getHeight() * 0.6 / Screen:scaleBySize(64)))
+        end,
+        chip_strip = chips,
+        on_chip_tap = function(k) self.chip = k; self.items = items() end,
+        cell_renderer = function(item, dimen) return renderCell(key, item, dimen) end,
+        on_cell_tap = function(item)
+            WB.choose(key, item)
+            close()
+            if on_change then pcall(on_change) end
+            UIManager:setDirty("all", "full")
+        end,
+        item_count = function() return #self.items end,
+        item_at = function(i) return self.items[i] end,
+        footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
+    }
+    modal = LibraryModal:new{ config = config }
+    UIManager:show(modal)
+    return modal
+end
+
+return WB

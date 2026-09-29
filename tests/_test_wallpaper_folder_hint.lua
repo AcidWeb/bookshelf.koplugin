@@ -8,46 +8,22 @@
 -- add their own would only ever be seen by someone who had first deleted the
 -- shipped one (maintainer).
 --
--- It sits at the END, after a divider: a footnote to the list, not a rival to
--- the pictures the reader came here to choose between.
+-- Since 5.3 the picker is a browser (bookshelf_wallpaper_browser), and the
+-- line is on the None card, which comes first on every tab of the reader's
+-- own pictures.
 --
 -- Usage (from plugin root): lua tests/_test_wallpaper_folder_hint.lua
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local helpers = dofile("tests/_helpers.lua")
 local t = helpers.runner()
-local src = io.open("lib/bookshelf_settings.lua"):read("*a")
-
-local body = src:match("\nfunction Settings:_wallpaperSubItems%(key%)(.-)\nend\n")
-    or src:match("\nfunction Settings:_wallpaperSubItems%((.-)\nend\n")
-assert(body, "_wallpaperSubItems moved or was renamed")
+local src = io.open("lib/bookshelf_wallpaper_browser.lua"):read("*a")
 
 t.test("the folder is named whether or not there are pictures", function()
-    assert(body:find("folderHint", 1, true), "no always-on folder hint")
-    -- After the loop that lists the pictures, not inside the empty branch.
-    local at_empty = body:find("No images in", 1, true)
-    local at_hint  = body:find("items[#items + 1] = folderHint()", 1, true)
-    assert(at_hint, "the hint is never appended")
-    assert(at_empty and at_hint > at_empty,
-        "the hint must come after the empty-folder branch, so a populated "
-        .. "folder reaches it too")
-end)
-
-t.test("it is a footnote: disabled, last, and below a divider", function()
-    local hint = body:match("local function folderHint%(%)(.-)\n    end")
-    assert(hint, "folderHint moved")
-    assert(hint:find("enabled = false", 1, true),
-        "the hint must not look pickable")
-    assert(hint:find("Wallpaper.dir()", 1, true),
-        "the hint must name the real folder, not a guess at it")
-    assert(body:find("separator = (_i == #list) or nil", 1, true),
-        "no divider between the last picture and the footnote")
-end)
-
-t.test("the empty-folder wording still exists for an empty folder", function()
-    -- Two different sentences on purpose: one explains an absence, the other
-    -- explains where to add more.
-    assert(body:find("No images in", 1, true), "the empty case lost its message")
-    assert(body:find("Images are loaded from", 1, true), "the footnote lost its message")
+    local none = src:match('if item%.kind == "none" then(.-)\n        elseif')
+    assert(none, "the None card's hint moved")
+    assert(none:find("Images are loaded from %1", 1, true), "no always-on folder hint")
+    assert(none:find("No images in %1", 1, true), "the empty case lost its message")
+    assert(none:find("Wallpaper.dir", 1, true), "the hint must name the real folder, not a guess at it")
 end)
 
 t.done()

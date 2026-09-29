@@ -1797,6 +1797,11 @@ t.test("a wallpaper name that no longer resolves reads as none", function()
         BookshelfSettings = { read = function() return "screensavers:bg_ss27.png" end },
         Wallpaper = { pathFor = function() return nil end },
         type = type,
+        -- A pack's wallpaper is named by its pack (5.3); these names are not.
+        require = function(m)
+            if m == "lib/bookshelf_theme_pack" then return { isPackName = function() return false end } end
+            return require(m)
+        end,
     }
     local fn = assert(load("return function(setting, fallback)\n" .. body .. "\nend",
         "label", "t", env))

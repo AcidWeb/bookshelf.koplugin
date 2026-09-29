@@ -1493,8 +1493,31 @@ function Settings:_wallpaperMenu()
     local function wallpaperLabel(setting, fallback)
         local name = BookshelfSettings.read(setting)
         if type(name) ~= "string" or name == "" then return fallback end
+        -- A pack's wallpaper is named by its pack; with the pack off the shelf
+        -- shows the reader's own from before it, so the row names that.
+        local TP = require("lib/bookshelf_theme_pack")
+        if TP.isPackName(name) then
+            if TP.variantName(name, false, false) then
+                return T(_("%1 (pack)"), name:match("^theme%-pack\1([^\1]+)") or "?")
+            end
+            name = BookshelfSettings.read(setting .. "_own")
+            if type(name) ~= "string" or name == "" or TP.isPackName(name) then return fallback end
+        end
         if not Wallpaper.pathFor(name) then return fallback end
         return name:match("^(.+)%.[^%.]+$") or name
+    end
+    -- The picture rows open the wallpaper picker (large previews, the packs'
+    -- pictures beside the reader's own).
+    local function openPicker(key)
+        return function(touchmenu_instance)
+            require("lib/bookshelf_wallpaper_browser").show(key, function()
+                if self._bw and self._bw._rebuild then
+                    self._bw:_rebuild()
+                    UIManager:setDirty(self._bw, "ui")
+                end
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end)
+        end
     end
 
     local items = {
@@ -1506,9 +1529,8 @@ function Settings:_wallpaperMenu()
                 return T(_("Default wallpaper image: %1"),
                          wallpaperLabel(Wallpaper.SETTING, _("None")))
             end,
-            sub_item_table_func = function()
-                return self:_wallpaperSubItems(Wallpaper.SETTING)
-            end,
+            keep_menu_open = true,
+            callback = openPicker(Wallpaper.SETTING),
         },
         {
             text_func = function()
@@ -1519,9 +1541,8 @@ function Settings:_wallpaperMenu()
                 .. "view is wall-to-wall covers and spines, where a backdrop "
                 .. "that reads well behind the top panel is often too busy. "
                 .. "A shelf with its own picture keeps it in both views."),
-            sub_item_table_func = function()
-                return self:_wallpaperSubItems(Wallpaper.FULL_SETTING)
-            end,
+            keep_menu_open = true,
+            callback = openPicker(Wallpaper.FULL_SETTING),
         },
         {
             text = _("Invert wallpaper in night mode"),
@@ -1718,118 +1739,6 @@ function Settings:_scrimSubItems()
 end
 
 
--- _wallpaperSubItems() - the LIBRARY default wallpaper.
---
--- "None" first and always, so turning it off never depends on finding a row
--- among a long list of files. Everything else is whatever is in the folder;
--- when that is empty the list says so rather than showing a lone None and
--- leaving the reader wondering whether the feature is broken.
--- key: which image this picker sets -- Wallpaper.SETTING for the library
--- default, Wallpaper.FULL_SETTING for full screen shelves. One builder, so
--- the two lists cannot drift in behaviour or ordering.
-function Settings:_wallpaperSubItems(key)
-    local Wallpaper = require("lib/bookshelf_wallpaper")
-    key = key or Wallpaper.SETTING
-    -- Its own copy: markDirty is a nested local in the sibling sub-item
-    -- builders, not a file-level function, so naming it here would read a nil
-    -- global and only fail when a reader tapped a row.
-    local function apply()
-        -- Drop the decoded bitmap. bg() keys on the path so a DIFFERENT image
-        -- would re-decode anyway, but choosing None leaves nothing to ask for
-        -- and the old ~2MB would otherwise sit there for the session.
-        pcall(function() Wallpaper.free() end)
-        if self._bw and self._bw._rebuild then
-            self._bw:_rebuild()
-            UIManager:setDirty(self._bw, "ui")
-        end
-    end
-    local items = {}
-    -- The full screen image has THREE states, so it needs a row for each:
-    -- unset (follow the default), false (no picture here), or a filename.
-    -- Without this row a reader who picked one could never get back to
-    -- following the default -- None would only ever mean "bare".
-    if key == Wallpaper.FULL_SETTING then
-        items[#items + 1] = {
-            text = _("Same as default"),
-            checked_func = function()
-                return BookshelfSettings.read(key) == nil
-            end,
-            radio = true,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                BookshelfSettings.delete(key)
-                BookshelfSettings.flush()
-                apply()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-        }
-    end
-    items[#items + 1] = {
-        text = _("None"),
-        checked_func = function()
-            local v = BookshelfSettings.read(key)
-            if key == Wallpaper.FULL_SETTING then return v == false end
-            return not (type(v) == "string" and v ~= "")
-        end,
-        radio = true,
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            BookshelfSettings.save(key, false)
-            BookshelfSettings.flush()
-            apply()
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-        end,
-    }
-    -- WHERE THE PICTURES COME FROM, shown whether or not there are any.
-    --
-    -- It used to appear only when the folder was empty, on the reasoning that
-    -- a reader with pictures already knows where they live. Bundling one
-    -- breaks that: the folder is never empty on a fresh install, so the line
-    -- that names the folder would never be seen by the readers who most need
-    -- it -- they would have to delete the shipped picture to find out how to
-    -- add their own (maintainer).
-    --
-    -- A disabled row at the END rather than the top: it is a footnote to the
-    -- list, and the reader is here to pick a picture first.
-    local function folderHint()
-        local dir = Wallpaper.dir() or "?"
-        local user = Wallpaper.userDir()
-        return {
-            text    = user and T(_("Images are loaded from %1 and %2"), dir, user)
-                           or T(_("Images are loaded from %1"), dir),
-            enabled = false,
-        }
-    end
-    local list = Wallpaper.list()
-    if #list == 0 then
-        items[#items + 1] = {
-            text = T(_("No images in %1"), Wallpaper.dir() or "?"),
-            enabled = false,
-        }
-        return items
-    end
-    for _i, item in ipairs(list) do
-        items[#items + 1] = {
-            text = item.label,
-            checked_func = function()
-                return BookshelfSettings.read(key) == item.name
-            end,
-            radio = true,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                BookshelfSettings.save(key, item.name)
-                BookshelfSettings.flush()
-                apply()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-            -- Divider above the footnote, so it reads as a note rather than
-            -- as one more thing that might be pickable.
-            separator = (_i == #list) or nil,
-        }
-    end
-    items[#items + 1] = folderHint()
-    return items
-end
 
 -- ── The colour picker, shared ──────────────────────────────────────────────
 --
