@@ -24,7 +24,7 @@ local Screen     = Device.screen
 local M = {}
 
 -- dp layout of the files; keep in step with shadowgen.py
-M.DP = { side = 14, up = 96, wall = 10, below = 3, above = 2,
+M.DP = { side = 10, up = 96, wall = 10, below = 3, above = 2,
          halo = 6, tile = 48, cap = 5, foot = 5 }
 -- stretched tapers kept per set (a page holds a few dozen book heights)
 M.TAPER_CACHE = 96
@@ -70,16 +70,17 @@ local function tint(mask, grey, mirror, y0, h)
     return out
 end
 
--- stretched(a, part, h, dir) -> part ("up": the taper, "low": the plank
--- piece) stretched to h rows (MuPDF's scaler, in C), cached per height
-local function stretched(a, part, h, dir)
-    local key = part .. dir .. h
+-- stretched(a, part, h, dir, w) -> part ("up": the taper, "low": the plank
+-- piece) scaled to w x h (MuPDF's scaler, in C), cached per size
+local function stretched(a, part, h, dir, w)
+    w = w or a.side_w
+    local key = part .. dir .. h .. "x" .. w
     local t = a.tapers[key]
     if t then return t end
     local src = a[part .. ((dir == "left") and "_l" or "_r")]
     local ok, sc = pcall(function()
-        if src:getHeight() == h then return src end
-        return require("ffi/mupdf").scaleBlitBuffer(src, a.side_w, h)
+        if src:getHeight() == h and w == a.side_w then return src end
+        return require("ffi/mupdf").scaleBlitBuffer(src, w, h)
     end)
     if not ok or not sc then return nil end
     a.n_tapers = a.n_tapers + 1
@@ -133,22 +134,25 @@ local function blit(bb, src, dx, dy, sx, sy, w, h)
     if w > 0 and h > 0 then bb:alphablitFrom(src, dx, dy, sx, sy, w, h) end
 end
 
--- side(bb, a, edge_x, dir, book_top, floor, parts, wall_h): the wedge
+-- side(bb, a, edge_x, dir, book_top, floor, parts, wall_h, fit): the wedge
 -- beside a book whose edge is at edge_x, toward dir ("right" or "left"). It
 -- runs from a.above over book_top, out to the wall line wall_h above the
 -- floor (where the plank's top surface meets the wall; default a.wall), and
 -- back across the plank to a.below under the floor. parts: a list of
 -- { x0, x1, y0, y1 } (x measured from the edge, y absolute) where the
--- wedge shows; the rest is under a neighbour. Absolute bb coordinates.
-function M.side(bb, a, edge_x, dir, book_top, floor, parts, wall_h)
+-- wedge shows; the rest is under a neighbour. fit: squeeze the wedge to
+-- that width (the room left at a shelf's end) instead of cutting it off.
+-- Absolute bb coordinates.
+function M.side(bb, a, edge_x, dir, book_top, floor, parts, wall_h, fit)
     local W = a.side_w
+    if fit and fit < W then W = math.max(1, math.floor(fit)) else fit = nil end
     wall_h = math.max(1, math.floor(tonumber(wall_h) or a.wall))
     local top  = book_top - a.above
     local wall = floor - wall_h                -- taper / plank boundary
     local bot  = floor + a.below
     local up_h = wall - top
-    local up   = up_h > 0 and stretched(a, "up", up_h, dir) or nil
-    local low  = stretched(a, "low", bot - wall, dir)
+    local up   = up_h > 0 and stretched(a, "up", up_h, dir, W) or nil
+    local low  = stretched(a, "low", bot - wall, dir, W)
     for _i, p in ipairs(parts) do
         local x0, x1 = math.max(0, p[1]), math.min(W, p[2])
         if x1 > x0 then
@@ -246,7 +250,8 @@ function M.paintRow(bb, ox, oy, cols, opts)
                     parts[#parts + 1] = { room, far, 0, oy + nb_top }
                 end
             end
-            M.side(bb, a, ox + edge, dir, oy + book_top, oy + floor, parts, opts.wall)
+            M.side(bb, a, ox + edge, dir, oy + book_top, oy + floor, parts, opts.wall,
+                   (not nb) and room or nil)
         end
     end
     -- contact line: under each run of standing (not face-out) books

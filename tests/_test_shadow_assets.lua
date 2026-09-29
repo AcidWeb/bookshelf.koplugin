@@ -10,7 +10,7 @@ package.loaded["device"] = { screen = { scaleBySize = function(_s, v) return v e
 local scaled = {}
 package.loaded["ffi/mupdf"] = { scaleBlitBuffer = function(src, w, h)
     scaled[#scaled + 1] = h
-    return { name = "taper" .. h, src = src, getHeight = function() return h end }
+    return { name = "taper" .. h, src = src, w = w, getHeight = function() return h end }
 end }
 
 local SA = dofile("lib/bookshelf_shadow_assets.lua")
@@ -132,6 +132,20 @@ do
     local m = rowsOf(bb, "wall")
     ok(m[22] and m[22].src.name == "taper14" and m[23] and m[23].src.name == "taper9", "taper to the wall line 7 up")
     ok(m[31] and m[31].sy == 8 and m[32] == nil, "plank part stretched to 9 rows")
+end
+
+-- a shelf end with less room than the wedge: squeezed to fit, not cut off
+do
+    SA._cache["d100"] = set()
+    local bb = fakeBB()
+    SA.paintRow(bb, 0, 0, { { x = 10, w = 5, h = 8 } }, { stand_h = 20, width = 17, below = 2 })
+    local squeezed, cut = false, false
+    for _i, b in ipairs(bb.blits) do
+        if b.dx == 15 and type(b.src) == "table" and b.src.w then
+            if b.src.w == 2 and b.w == 2 and b.sx == 0 then squeezed = true else cut = true end
+        end
+    end
+    ok(squeezed and not cut, "row end: the wedge squeezed into 2px")
 end
 
 -- no C blitter: nothing painted, and reported done
