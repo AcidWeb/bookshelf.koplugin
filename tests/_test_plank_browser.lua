@@ -75,4 +75,11 @@ t.test("a page of tall designs never frees a preview still on show", function()
     eq(freed > 0, true, "the oversized attempts are freed, not kept")
 end)
 
+t.test("the picker opens on the page of the plank in use", function()
+    with_packs = true; chosen = "Planks/theme/plank.Walnut"
+    local e = PB.entries(PB.ALL)
+    eq(PB.startPage(e, 2), 2); eq(PB.startPage(e, 6), 1)
+    chosen = "nothing"; eq(PB.startPage(e, 2), 1)
+end)
+
 t.done()

@@ -47,6 +47,15 @@ function PB.inUse(o)
     return c ~= nil and TP().plankChoice() == c
 end
 
+-- startPage(items, per_page) -> the page showing the plank in use, so the
+-- picker opens on the current choice.
+function PB.startPage(items, per_page)
+    for i, o in ipairs(items) do
+        if PB.inUse(o) then return math.ceil(i / math.max(1, per_page)) end
+    end
+    return 1
+end
+
 -- showsMoreHint() -> true when no pack has planks: most readers only ever
 -- have Oak and the colour, so they get one quiet line saying where more come
 -- from, and nothing else (maintainer).
@@ -240,7 +249,8 @@ function PB.show(opts)
         item_at = function(i) return self.items[i] end,
         footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
     }
-    modal = LibraryModal:new{ config = config }
+    modal = LibraryModal:new{ config = config,
+                              page = PB.startPage(self.items, config.cells_per_page()) }
     UIManager:show(modal)
     return modal
 end

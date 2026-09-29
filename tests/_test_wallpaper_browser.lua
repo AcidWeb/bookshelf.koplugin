@@ -85,4 +85,12 @@ t.test("choosing an off pack's wallpaper switches the pack on, or nothing would 
     eq(switched_on[#switched_on], "Japan")
 end)
 
+t.test("the picker opens on the page of the wallpaper in use", function()
+    store = { wallpaper_default = "leaves.png" }
+    local e = WB.entries("wallpaper_default", WB.ALL)
+    eq(WB.startPage("wallpaper_default", e), 2)
+    store = {}
+    eq(WB.startPage("wallpaper_default", e), 1, "nothing chosen: None, the first page")
+end)
+
 t.done()

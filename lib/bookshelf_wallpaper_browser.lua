@@ -62,6 +62,15 @@ function WB.inUse(key, item)
     return v == item.name
 end
 
+-- startPage(key, items) -> the page (one picture per page) showing the
+-- wallpaper in use, so the picker opens on the current choice.
+function WB.startPage(key, items)
+    for i, item in ipairs(items) do
+        if WB.inUse(key, item) then return i end
+    end
+    return 1
+end
+
 -- choose(key, item): store the choice (the old list menu's semantics: None
 -- is false, Same as default is unset), and drop the decoded bitmap.
 function WB.choose(key, item)
@@ -233,7 +242,7 @@ function WB.show(key, on_change)
         item_at = function(i) return self.items[i] end,
         footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
     }
-    modal = LibraryModal:new{ config = config }
+    modal = LibraryModal:new{ config = config, page = WB.startPage(key, self.items) }
     UIManager:show(modal)
     return modal
 end
