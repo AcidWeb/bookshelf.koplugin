@@ -64,6 +64,17 @@ t.test("no map (a windowed source): the nearest earlier known page, never a cras
     eq(method("_ornStartState")(self).n, 4)
 end)
 
+t.test("a borrowed state is kept: the page deals from it on every later render", function()
+    -- PW5: page 6 dealt from one borrowed state while parked and from
+    -- another half a minute after the book closed, so its pieces swapped on
+    -- screen (maintainer). Once a page has borrowed, that is its state.
+    local self = stub(7, 0)
+    self._spine_fetch_cache.orn_sig = "sig"
+    eq(method("_ornStartState")(self).n, 9, "test premise: the nearest earlier page (5:0) is borrowed")
+    self._spine_fetch_cache.page_orn["6:0"] = { n = 4, shelf = 3, bnd = 1, owed = {} }
+    eq(method("_ornStartState")(self).n, 9, "a later render borrowed a different state")
+end)
+
 t.test("a changed signature drops every state but the current page's, unless it was a shuffle", function()
     local self, D = stub(5, 0)
     self._spine_fetch_cache.page_orn = { ["5:0"] = { n = 3, shelf = 2, bnd = 1, owed = {} },
@@ -99,12 +110,19 @@ t.test("a refetch of the same list keeps the page states; a changed list drops t
     -- turn after half a minute's reading rebuild the whole page map.
     local fetch = method("_spineCachedFetch")
     local list = { { filepath = "/a" }, { filepath = "/b" }, { filepath = "/c" } }
-    local self = { chip = "all", _drilldown_path = nil }
+    local self = { chip = "all", _drilldown_path = nil, _cursor = 2 }
     self._fetchChipItems = function() local o = {} for i, x in ipairs(list) do o[i] = x end return o end
     self._spineItemsSig = method("_spineItemsSig")
+    self._anchorSpineCursor = method("_anchorSpineCursor")
+    self._setSpineCursor = self._setSpineCursor or function(s, c, k) s._cursor, s._skip = c, k or 0 end
+    self._spineSkip = self._spineSkip or function(s) return s._skip or 0 end
+    self._ornKey = self._ornKey or method("_ornKey")
+    self._spineSkip = function() return 0 end
+    self._ornKey = method("_ornKey")
     fetch(self, 400)
     local c = self._spine_fetch_cache
-    c.page_orn, c.orn_sig, c.orn_epoch = { ["2:0"] = { n = 5, shelf = 2, bnd = 0, owed = {} } }, "s", 0
+    c.page_orn, c.orn_sig, c.orn_epoch = { ["2:0"] = { n = 5, shelf = 2, bnd = 0, owed = {} },
+                                           ["9:0"] = { n = 8, shelf = 4, bnd = 1, owed = {} } }, "s", 0
     c.at = 0                                     -- expired
     fetch(self, 400)
     assert(self._spine_fetch_cache ~= c, "test premise: the cache was not refetched")
@@ -113,7 +131,62 @@ t.test("a refetch of the same list keeps the page states; a changed list drops t
     self._spine_fetch_cache.at = 0
     table.remove(list, 2)
     fetch(self, 400)
-    eq(self._spine_fetch_cache.page_orn, nil, "a changed list kept stale page states")
+    -- A changed list (a book closed: its status, its progress) re-learns
+    -- every page but the one on screen, which keeps dealing as it did: the
+    -- shelf must not reshuffle under the reader (maintainer).
+    local po = self._spine_fetch_cache.page_orn
+    eq(po and po["2:0"] and po["2:0"].n, 5, "a changed list reshuffled the page on screen")
+    eq(po and po["9:0"], nil, "a changed list kept another page's stale state")
+end)
+
+-- ── A reordered list keeps the page's first book ───────────────────────────
+-- Home sorts by last opened: opening a book moves it to the front, and every
+-- book before its old place shifts along one. The cursor is a POSITION, so
+-- the page's first book changed under the reader a few seconds after a book
+-- closed (maintainer: "keep the first book on the shelf stable").
+local function anchorRun(before, after, cursor)
+    local fetch = method("_spineCachedFetch")
+    local list = {}
+    for i, n in ipairs(before) do list[i] = { filepath = "/" .. n } end
+    local self = { chip = "all", _cursor = cursor }
+    self._fetchChipItems = function() local o = {} for i, x in ipairs(list) do o[i] = x end return o end
+    self._spineItemsSig = method("_spineItemsSig")
+    self._anchorSpineCursor = method("_anchorSpineCursor")
+    self._setSpineCursor = self._setSpineCursor or function(s, c, k) s._cursor, s._skip = c, k or 0 end
+    self._spineSkip = self._spineSkip or function(s) return s._skip or 0 end
+    self._ornKey = self._ornKey or method("_ornKey")
+    self._spineSkip = function(s) return s._skip or 0 end
+    self._setSpineCursor = function(s, c, k) s._cursor, s._skip = c, k or 0 end
+    self._ornKey = method("_ornKey")
+    fetch(self, 400)
+    local c = self._spine_fetch_cache
+    c.page_orn, c.orn_sig = { [cursor .. ":0"] = { n = 5, shelf = 2, bnd = 0, owed = {} } }, "s"
+    c.at = 0
+    list = {}
+    for i, n in ipairs(after) do list[i] = { filepath = "/" .. n } end
+    fetch(self, 400)
+    return self
+end
+
+t.test("reordered: the page keeps its first book", function()
+    -- g (after the page) opened: it moves to the front, d shifts from 4 to 5
+    local self = anchorRun({ "a", "b", "c", "d", "e", "f", "g", "h" },
+                           { "g", "a", "b", "c", "d", "e", "f", "h" }, 4)
+    eq(self._cursor, 5, "the page no longer starts at d")
+    local po = self._spine_fetch_cache.page_orn
+    eq(po and po["5:0"] and po["5:0"].n, 5, "the page's deal state did not move with it")
+end)
+
+t.test("reordered: the page's own first book opened, the page starts at the next one", function()
+    local self = anchorRun({ "a", "b", "c", "d", "e", "f", "g", "h" },
+                           { "d", "a", "b", "c", "e", "f", "g", "h" }, 4)
+    eq(self._cursor, 5, "the page jumped with the book that moved to the front")
+end)
+
+t.test("reordered: a book opened from before the page leaves it where it was", function()
+    local self = anchorRun({ "a", "b", "c", "d", "e", "f", "g", "h" },
+                           { "b", "a", "c", "d", "e", "f", "g", "h" }, 4)
+    eq(self._cursor, 4)
 end)
 
 t.test("a per-book change expires the fetch, and the same list keeps its page states", function()
@@ -124,6 +197,10 @@ t.test("a per-book change expires the fetch, and the same list keeps its page st
     local self = { chip = "all" }
     self._fetchChipItems = function() return { list[1], list[2] } end
     self._spineItemsSig = method("_spineItemsSig")
+    self._anchorSpineCursor = method("_anchorSpineCursor")
+    self._setSpineCursor = self._setSpineCursor or function(s, c, k) s._cursor, s._skip = c, k or 0 end
+    self._spineSkip = self._spineSkip or function(s) return s._skip or 0 end
+    self._ornKey = self._ornKey or method("_ornKey")
     fetch(self, 400)
     self._spine_fetch_cache.page_orn = { ["2:0"] = { n = 3, shelf = 2, bnd = 0, owed = {} } }
     expire(self)
@@ -143,6 +220,10 @@ t.test("an open-ended feed neither reads nor writes another chip's page states",
     local self = { chip = "opds", _spine_fetch_cache = { key = "all|", items = {}, at = os.time(), page_orn = {} } }
     self._fetchChipItems = function() return { opds_open_ended = true } end
     self._spineItemsSig = method("_spineItemsSig")
+    self._anchorSpineCursor = method("_anchorSpineCursor")
+    self._setSpineCursor = self._setSpineCursor or function(s, c, k) s._cursor, s._skip = c, k or 0 end
+    self._spineSkip = self._spineSkip or function(s) return s._skip or 0 end
+    self._ornKey = self._ornKey or method("_ornKey")
     fetch(self, 400)
     eq(self._spine_fetch_live, false, "the open-ended fetch left the cache marked live")
     local st_self = stub(9, 0)

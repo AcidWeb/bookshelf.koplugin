@@ -6386,12 +6386,62 @@ function BookshelfWidget:_spineCachedFetch(n)
     -- turn after the TTL would rebuild the whole page map to find its start.
     local sig = self:_spineItemsSig(items)
     local keep = (c and c.key == key and c.items_sig == sig) and c or nil
+    -- A CHANGED list (a book just closed: its status, its progress) drops the
+    -- other pages' states, which it may have moved, but the page on screen
+    -- keeps dealing as it did: the shelf must not reshuffle under the reader
+    -- a few seconds after a book closes (maintainer).
+    local page_orn = keep and keep.page_orn or nil
+    if not keep and c and c.key == key then
+        local here = self:_ornKey(self._cursor or 1, self:_spineSkip())
+        local st = c.page_orn and c.page_orn[here]
+        -- The cursor is a POSITION; the page is its first BOOK. A list that
+        -- came back reordered (Home sorts by last opened, so opening a book
+        -- moves it to the front and shifts every book before its old place
+        -- along one) keeps the page on its first book (maintainer: the shelf
+        -- must not shift under the reader).
+        self:_anchorSpineCursor(c.items, items)
+        if st then
+            page_orn = { [self:_ornKey(self._cursor or 1, self:_spineSkip())] = st }
+            keep = c
+        end
+    end
     self._spine_fetch_live = true
     self._spine_fetch_cache = { key = key, items = items, at = os.time(), items_sig = sig,
-                                page_orn = keep and keep.page_orn or nil,
+                                page_orn = page_orn,
                                 orn_sig = keep and keep.orn_sig or nil,
                                 orn_epoch = keep and keep.orn_epoch or nil }
     return items, nil
+end
+
+-- _anchorSpineCursor(old, new): after a refetch that changed the list, put
+-- the cursor back on the page's first book. The anchor is the first book of
+-- the old page that moved by at most one place: a single book moved to the
+-- front (Home's last-opened sort) shifts the books before its old place by
+-- exactly one and the rest not at all, so the old first book is found where
+-- it now is -- unless it IS the book that moved, which is skipped, and the
+-- page starts at the book that followed it. Anything more reordered than
+-- that keeps the cursor where it was.
+function BookshelfWidget:_anchorSpineCursor(old, new)
+    if type(old) ~= "table" or type(new) ~= "table" then return end
+    local cur, skip = self._cursor or 1, self:_spineSkip()
+    if cur <= 1 and skip == 0 then return end
+    local function id(it)
+        return type(it) == "table" and (it.filepath or it.path or it.name or it.text) or it
+    end
+    local at = {}
+    for j = 1, #new do
+        local k = id(new[j])
+        if k ~= nil and at[k] == nil then at[k] = j end
+    end
+    for i = cur, math.min(#old, cur + 40) do
+        local j = at[id(old[i])]
+        if j and math.abs(j - i) <= 1 then
+            if j ~= cur or i ~= cur then
+                self:_setSpineCursor(j, (i == cur) and skip or 0)
+            end
+            return
+        end
+    end
 end
 
 -- _expireSpineFetch(): the next fetch goes to the source again (a book's
@@ -6588,7 +6638,13 @@ function BookshelfWidget:_ornStartState(dims)
         end
     end
     logger.warn("[bookshelf] ornaments: no deal state for page", key, best and "(nearest earlier)" or "(from the start)")
-    return best and Deck.copyState(best) or Deck.newState()
+    -- Kept: once a page has borrowed a state, that is its state. Borrowing
+    -- afresh on the next render found a different page nearer by (the map
+    -- complete by then, or a page recorded since) and the pieces on screen
+    -- swapped half a minute after a book was closed (maintainer, PW5).
+    local st = best and Deck.copyState(best) or Deck.newState()
+    c.page_orn[key] = Deck.copyState(st)
+    return st
 end
 
 -- _dropOrnPages(keep_current): after a change to a piece's size or padding,
