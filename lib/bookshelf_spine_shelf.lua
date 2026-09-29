@@ -30,6 +30,7 @@ local logger         = require("logger")
 local BFont          = require("lib/bookshelf_fonts")
 local CoverProgress  = require("lib/bookshelf_cover_progress")
 local SpineLayout    = require("lib/bookshelf_spine_layout")
+local RoundCorner    = require("lib/bookshelf_round_corner")
 
 local SpineShelf = {}
 
@@ -2471,10 +2472,12 @@ function FaceOutFeet:paintTo(bb, x, y)
         SpineShelf.fillLiftGap(bb, x, y + h - hl, hl, hl, x - 1)
         SpineShelf.fillLiftGap(bb, x + w - hl, y + h - hl, hl, hl, x - 1)
     else
-        -- Standing: the corner takes the shelf directly below the cover, as
-        -- the spines' feet do -- the contact shade whichever painter drew it
-        -- (the band above, or the mask shadows' line), over a design or not.
-        SpineShelf.nickFromBelow(bb, x, y + h, w, hl)
+        -- Standing: the corners ROUND into the shelf directly below the
+        -- cover -- the contact shade whichever painter drew it (the band
+        -- above, or the mask shadows' line), over a design or not -- with the
+        -- border following the curve, so the cover inside rounds too
+        -- (maintainer). Radius two hairlines; the card's border is one.
+        RoundCorner.apply(bb, x, y + h, w, 2 * hl, hl)
     end
 end
 

@@ -366,7 +366,7 @@ t.test("a lifted face-out no longer asks _behindAt for its corners", function()
         "the lifted case still takes _behindAt's page white")
 end)
 
-t.test("a standing face-out takes its nick from the shelf below it", function()
+t.test("a standing face-out takes its corners from the shelf below it", function()
     -- It used to paint a COMPUTED plank shade into the corner. Over a plank
     -- design, or under the mask shadows' contact line, that colour is not
     -- what surrounds the corner: on the PW5 it came out 43 against a 105
@@ -374,9 +374,12 @@ t.test("a standing face-out takes its nick from the shelf below it", function()
     -- border and could not be seen (maintainer). The spines' feet already
     -- copy the row below; the face-out now does the same, which is the
     -- contact shade whichever painter drew it.
+    -- Since then ROUNDED rather than nicked (maintainer): an anti-aliased
+    -- outer and inner edge, the colours still taken from the screen -- the
+    -- shelf below and the cover's own border (lib/bookshelf_round_corner).
     local b = feetBody()
-    assert(b:find("SpineShelf.nickFromBelow(bb, x, y + h, w, hl)", 1, true),
-        "the standing face-out does not take its nick from the shelf below")
+    assert(b:find("RoundCorner.apply(bb, x, y + h, w, 2 * hl, hl)", 1, true),
+        "the standing face-out does not round its corners from the shelf below")
     assert(not b:find("_behindAt(self.plank, y + h, false)", 1, true),
         "the standing face-out still paints a computed shade into its corners")
 end)
