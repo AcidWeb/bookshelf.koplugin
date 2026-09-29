@@ -161,6 +161,8 @@ Each book is drawn from what Bookshelf already knows about it:
 
 Long-press a shelf and pick **Spines** under Show as, or hold the page range in the footer to cycle to it. The same dialog has the settings below it.
 
+Tap a spine and the book lifts off the shelf (and shows in the top panel); tap it again to open it, or tap empty space anywhere on the shelf to put it back.
+
 **Face out.** Some books turn to show their cover, the way a shop dresses a shelf. Choose which: favourites, the first in each series, what you are currently reading, all books, or none.
 
 **Grouping.** On a grouped shelf (series, authors, genres) there are no folders to drill into -- the groups are flattened onto the shelf and each run gets a label at the shelf's edge. Everything is out where you can see it.
@@ -169,7 +171,9 @@ Long-press a shelf and pick **Spines** under Show as, or hold the page range in 
 
 **Ornaments.** Drop PNG or SVG files into the `koreader/settings/bookshelf/ornaments` folder (beside the wallpapers) and they turn up in the gaps, standing on the plank like the books. A potted plant and a cactus are seeded there to start you off; delete them if you would rather not see them and they stay deleted.
 
-A folder of ornaments inside `ornaments` is a **pack**, which you can switch on and off as one. **menu -> Wallpaper, ornaments and colours -> Ornaments** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on, long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
+A folder of ornaments inside `ornaments` is a **pack**, which you can switch on and off as one. **menu > Wallpaper, ornaments and colours > Ornament collection** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on (the box in its corner is ticked while it is on), long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
+
+**Themes from packs.** A pack can also bring a wallpaper, planks and colours. Each is chosen where its kind is chosen: the pack's wallpaper appears in the wallpaper picker, its planks in the **Shelf plank** picker, and its colours as a **Color theme** at the top of Accent colours. **Apply pack theme**, on the pack's tab in the Ornament collection, uses all of them at once. It says what it will change first, and the same button then reads **Undo pack theme** and puts your own wallpaper, plank and colours back exactly. A pack switched off lends nothing, and your own choices come back.
 
 Ready-made ornament packs, drawn to sit on the plank at the right size on colour and black and white screens, are in the [Ko-fi shop](https://ko-fi.com/andyhazz/shop). Unzip a pack's folder into `ornaments` and it gets its own tab. Packs need Bookshelf 5.2 or later.
 
@@ -183,12 +187,14 @@ Shape is up to you. A piece stands at 80% of the books' height and no wider than
 
 ```json
 { "owl.png": { "scale": 1.2, "lift": -0.05 },
-  "bunting.png": { "hang": true } }
+  "bunting.png": { "lift": 1, "tap": "zoom" } }
 ```
 
 For a PNG, the bottom edge of the image is the plank surface and the whole image is scaled to one fixed height against the books, so transparent space above the picture makes it stand smaller, and space at the sides keeps it off the books. `template.svg` carries the SVG conventions in its comments: the bottom of the viewBox is the plank surface, and the renderer is small, so bold solid shapes work and text, filters and masks do not.
 
-**Shelf plank colour** is under **menu -> Wallpaper, ornaments and colours -> Accent colours**. The lit top surface and the shaded front edge are both tinted from that one colour; the default is light oak.
+A pack's theme lives in a `theme` folder inside the pack: `wallpaper.png` (or `.jpg`), with optional `wallpaper.full.png` for full screen shelves, `wallpaper.dark.png` for dark mode and `wallpaper.full.dark.png` for both; a plank as `plank.<Name>.middle.png` (repeated along the shelf) with optional `plank.<Name>.left.png` and `plank.<Name>.right.png` for its ends, and as many named planks as you like; and `colours.json`, with `day` and `night` sets of the accent colours.
+
+**Shelf plank** is in **menu > Wallpaper, ornaments and colours**, and in **Accent colours**. It opens the plank picker, each plank shown as the shelf draws it: **Plain color** (it opens the colour dialog as well, and the lit top surface and the shaded front edge are both tinted from that one colour), the built-in **Oak** (the default), then any planks your packs bring, with a tab per pack. The one in use is marked.
 
 Spines are not available for OPDS catalogues, which have no local page counts or cover art to measure.
 
@@ -468,15 +474,15 @@ Everything that decides how the shelf looks now lives in one place: **menu -> Wa
 
 ### Wallpaper
 
-- **Default wallpaper image** -- a picture behind the whole shelf. Drop your own into `koreader/settings/bookshelf/wallpapers` (the menu tells you the path and offers to create it) and they appear in the list. One is bundled: **Leafy wallpaper**.
+- **Default wallpaper image** -- a picture behind the whole shelf, chosen in a picker that shows each one large, a page at a time, with **All**, **Yours** and a tab per pack that brings a wallpaper. Drop your own into `koreader/settings/bookshelf/wallpapers` (the picker's **None** page tells you the path) and they appear there. One is bundled: **Leafy wallpaper**.
 - **Wallpaper folder** -- a folder of your own to take pictures from as well, for wallpapers you already keep somewhere else. Its pictures are listed alongside the standard folder's, and nothing in it is changed. Long-press the row to stop using it.
 - **Full screen shelves image** -- a different picture for full screen shelves. That view is wall-to-wall covers and spines, where a backdrop that reads well behind the top panel is often too busy.
 - **Background colour** -- the page ground. Useful on its own with no wallpaper at all, and it is what shows through anywhere the picture is kept out.
-- **Panel shading** -- how much the top panel and the footer are shaded so their buttons stay legible over a picture: **Transparent**, **Light**, **Heavy** (the default) or **Solid**. Transparent reads well over a plain texture and poorly over a busy photograph; Solid hides the picture behind those strips entirely.
+- **Panel shading** -- how much the top panel and the footer are shaded so their buttons stay legible over a picture: **Transparent**, **Low**, **Moderate**, **Heavy** (the default) or **Solid**. Transparent reads well over a plain texture and poorly over a busy photograph; Solid hides the picture behind those strips entirely.
 
-### Ornaments
+### Ornaments and planks
 
-**Ornaments** opens the ornament browser -- see [Spines](#spines).
+**Ornament collection** opens the ornament browser, and **Shelf plank** the plank picker -- see [Spines](#spines).
 
 ### Shelf theme
 
@@ -486,7 +492,7 @@ Everything that decides how the shelf looks now lives in one place: **menu -> Wa
 
 ### Accent colours
 
-The rest of the palette sits under **Accent colours**, grouped by what it affects. Bookshelf keeps **independent day-mode and night-mode palettes** -- the top row shows which one you're editing ("Editing day-mode colours" / "Editing night-mode colours") and tapping it flips night mode so you can set each theme. Anything you leave unset uses a sensible default for that mode.
+The rest of the palette sits under **Accent colours**, grouped by what it affects. At the top, **Color theme** is **Your own** or a pack's colours; while a pack's are in use the rows show them and cannot be changed, and choosing Your own brings yours back as they were. Bookshelf keeps **independent day-mode and night-mode palettes** -- the top row shows which one you're editing ("Editing day-mode colours" / "Editing night-mode colours") and tapping it flips night mode so you can set each theme. Anything you leave unset uses a sensible default for that mode.
 
 Each colour is chosen as a "% black on screen" value (so it reads the same way in both modes), and long-pressing a row resets just that colour. The pickers:
 
@@ -497,7 +503,7 @@ Each colour is chosen as a "% black on screen" value (so it reads the same way i
 - **Border color** -- one shared colour for cover frames, badge borders, the bookmark/star halos, the cardboard edge on folder and stack cards, and placeholder (no-image) covers.
 - **Folder overlay background** -- the cardboard fill behind folder and stack cards.
 - **Folder text color** -- the label text on those cards (the card outline follows Border colour).
-- **Shelf plank colour** -- the plank the Spines style stands its books on; the lit top surface and the shaded front edge are both tinted from it.
+- **Shelf plank** -- the plank the Spines style stands its books on: plain colour, Oak or a pack's (see [Spines](#spines)).
 - **Shelf menu background** -- the solid bar behind the shelf menu. White by day and black at night unless you change it.
 - **Micro-module background** -- the card behind each micro-module.
 - **Reset to default colors** -- restore the whole palette for the current mode.
