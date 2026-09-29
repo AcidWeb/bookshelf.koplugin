@@ -73,4 +73,11 @@ t.test("Accent colors starts with a Color theme row; no override rows remain", f
     assert(not tp:find("function M.withOverride", 1, true), "withOverride still exists")
 end)
 
+t.test("a Color theme from an off pack is marked, and choosing it switches the pack on", function()
+    local body = settings:match("function Settings:_colorsSubItems%(.-\nend\n")
+    local row = body and body:match("local theme_row = {(.-)\n    }\n")
+    assert(row and row:find("isPackOff(p)", 1, true), "an off pack is not marked")
+    assert(row:find("setPackOff(p, false)", 1, true), "choosing it does not switch the pack on")
+end)
+
 t.done()

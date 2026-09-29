@@ -128,4 +128,19 @@ t.test("with nothing lifted, the whole column still picks the book", function()
     eq(tap(slot(true, true), nil, at(1020)), true, "the lifted book's own column is its own")
 end)
 
+t.test("a tap on the hero's blank area leaves the previewed book as it is", function()
+    local b = src:match("\n(function BookshelfWidget:_dropLiftOnTap%(.-\nend)\n")
+    assert(b, "no _dropLiftOnTap")
+    local env = setmetatable({ BookshelfWidget = {} }, { __index = _G })
+    local chunk = assert((loadstring or load)(b, "=_dropLiftOnTap", "t", env))
+    if setfenv then setfenv(chunk, env) end
+    chunk()
+    local dropped = 0
+    local w = { _hero_card = { dimen = { x = 0, y = 0, w = 1236, h = 480 } },
+                _dropLift = function() dropped = dropped + 1; return true end }
+    eq(env.BookshelfWidget._dropLiftOnTap(w, { ges = "tap", pos = { x = 600, y = 300 } }), false)
+    eq(dropped, 0)
+    eq(env.BookshelfWidget._dropLiftOnTap(w, { ges = "tap", pos = { x = 600, y = 900 } }), true)
+end)
+
 t.done()

@@ -57,20 +57,40 @@ function PB.showsMoreHint()
     return true
 end
 
--- Rendered previews, per plank and size: a page is a handful of planks, and
--- flicking between tabs shows the same ones again.
+-- Rendered previews, one per plank, width, card height and night mode: a
+-- page is a handful of planks, and flicking between tabs shows the same ones
+-- again. Only the preview that fits is kept; a design too tall for its card
+-- is rendered again smaller and the oversized one freed at once, so the
+-- cache never outgrows a page and never frees a preview still on screen (a
+-- page holds at most 6, the cache 12).
 local _previews, _order = {}, {}
 local PREVIEW_KEEP = 12
-local function preview(o, w, row_h)
-    local design = (o.kind ~= "colour") and o.plank or nil
-    local key = (design and design.middle or "colour") .. "|" .. w .. "x" .. row_h
-    -- The colour follows the setting, so it is never cached.
-    if design and _previews[key] then return _previews[key], false end
+local function render(design, w, row_h)
     local ok, bb = pcall(function()
         return require("lib/bookshelf_spine_shelf").plankPreview(design, w, row_h)
     end)
-    if not ok or not bb then return nil end
-    if not design then return bb, true end
+    return ok and bb or nil
+end
+
+-- _fit(o, w, row_h, box_h) -> bb, disposable: the option's preview at most
+-- box_h tall, starting from a row row_h tall. disposable: the caller's to
+-- free (the plain colour, which follows the setting and is never cached).
+function PB._fit(o, w, row_h, box_h)
+    local design = (o.kind ~= "colour") and o.plank or nil
+    local night = require("device").screen.night_mode and "n" or "d"
+    local key = design and table.concat({ design.middle or "?", w, box_h, night }, "|")
+    if key and _previews[key] then return _previews[key], false end
+    local bb = render(design, w, row_h)
+    local tries = 0
+    while bb and bb:getHeight() > box_h and row_h > 40 and tries < 4 do
+        local h = bb:getHeight()
+        pcall(function() bb:free() end)
+        row_h = math.floor(row_h * box_h / h)
+        bb = render(design, w, row_h)
+        tries = tries + 1
+    end
+    if not bb then return nil end
+    if not key then return bb, true end
     _previews[key] = bb
     _order[#_order + 1] = key
     while #_order > PREVIEW_KEEP do
@@ -143,15 +163,7 @@ local function renderCell(o, dimen)
     local row_h = math.floor(Screen:getHeight() / 4)
     local function plank_h(h) return SpineShelf.plankSurface(h) + SpineShelf.plankFace(h) end
     while row_h > 40 and plank_h(row_h) * 1.4 > box_h do row_h = math.floor(row_h * 0.9) end
-    local bb, disposable = preview(o, inner_w, row_h)
-    -- A design painting well beyond its plank: smaller until it fits.
-    local tries = 0
-    while bb and bb:getHeight() > box_h and row_h > 40 and tries < 4 do
-        if disposable then bb:free() end
-        row_h = math.floor(row_h * box_h / bb:getHeight())
-        bb, disposable = preview(o, inner_w, row_h)
-        tries = tries + 1
-    end
+    local bb, disposable = PB._fit(o, inner_w, row_h, box_h)
     local pic
     if bb then pic = ImageWidget:new{ image = bb, image_disposable = disposable } end
     -- The title row above its plank, the pair packed to the top of the card,

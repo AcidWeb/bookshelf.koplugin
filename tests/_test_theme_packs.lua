@@ -408,8 +408,8 @@ end)
 t.test("the shelf maps a pack wallpaper to its variant and falls back to the reader's own", function()
     local w = io.open("lib/bookshelf_widget.lua"):read("*a")
     local b = w:match("function BookshelfWidget:_wallpaperName%(%)(.-)\nend\n")
-    assert(b and b:find("TP.variantName(", 1, true), "pack names are not mapped to their variant")
-    assert(b:find('.. "_own"', 1, true), "no fallback to the reader's own wallpaper")
+    -- The mapping and fallbacks themselves are pinned by the shownWallpaper tests.
+    assert(b and b:find("TP.shownWallpaper(full,", 1, true), "the shelf does not ask shownWallpaper")
     assert(not b:find("TP.wallpaperName(", 1, true), "the borrowed-wallpaper path is still there")
     assert(w:find("TP.isDarkName(", 1, true), "_wallpaperWidget does not skip the invert for a dark variant")
     assert(w:find('bookshelf_theme_pack").migrate()', 1, true), "the old borrowed wallpaper is not migrated")
@@ -493,6 +493,91 @@ t.test("the confirmation names what will change", function()
     mkplank(d, "Planks", "Walnut"); mkplank(d, "Planks", "Ash")
     TP.invalidate()
     assert(TP.applySummary("Planks"):find("a plank you choose", 1, true))
+end)
+
+t.test("Undo keeps what the reader chose after Apply, and restores the rest", function()
+    local TP, d, settings = setup()
+    TP._plugin_root = "."
+    mkwall(d, "Japan"); mkplank(d, "Japan", "Gallery"); mkcolours(d, "Japan")
+    TP.invalidate()
+    settings.wallpaper_default = "leaves.png"
+    TP.choosePlank("colour")
+    TP.applyPackTheme("Japan")
+    TP.chooseWallpaper("wallpaper_default", "sea.png")
+    TP.choosePlank("oak")
+    eq(TP.appliedPack(), "Japan", "the colours are still Japan's: Undo still has work to do")
+    TP.undoPackTheme()
+    eq(settings.wallpaper_default, "sea.png"); eq(TP.plankChoice(), "oak")
+    eq(TP.activeColoursPack(), nil, "what Apply set and nobody changed goes back")
+end)
+
+t.test("once the reader has replaced everything Apply set, the button is Apply again", function()
+    local TP, d, settings = setup()
+    TP._plugin_root = "."
+    mkwall(d, "Japan"); mkplank(d, "Japan", "Gallery")
+    TP.invalidate()
+    TP.applyPackTheme("Japan")
+    TP.chooseWallpaper("wallpaper_default", "sea.png"); TP.choosePlank("oak")
+    eq(TP.appliedPack(), nil)
+end)
+
+t.test("a deleted pack's snapshot is not reused by the next Apply", function()
+    local TP, d, settings = setup()
+    mkwall(d, "Japan"); mkwall(d, "Autumn")
+    TP.invalidate()
+    settings.wallpaper_default = "leaves.png"
+    TP.applyPackTheme("Japan")
+    os.execute("rm -rf '" .. d .. "/Japan'"); TP.invalidate()
+    TP.chooseWallpaper("wallpaper_default", "sea.png")
+    TP.applyPackTheme("Autumn")
+    TP.undoPackTheme()
+    eq(settings.wallpaper_default, "sea.png")
+end)
+
+t.test("Undo puts Plank designs back off when Apply switched them on", function()
+    local TP, d = setup()
+    TP._plugin_root = "."
+    mkplank(d, "Japan", "Gallery")
+    TP.invalidate()
+    TP.setDesignsOn(false)
+    TP.applyPackTheme("Japan")
+    eq(TP.designsOn(), true)
+    TP.undoPackTheme()
+    eq(TP.designsOn(), false)
+end)
+
+t.test("a pack of several planks applies no plank, so there is nothing to undo there", function()
+    local TP, d = setup()
+    TP._plugin_root = "."
+    mkplank(d, "Planks", "Walnut"); mkplank(d, "Planks", "Ash")
+    TP.invalidate()
+    TP.applyPackTheme("Planks")
+    eq(TP.appliedPack(), nil, "the tab must not offer Undo for a plank the picker chose")
+end)
+
+t.test("shownWallpaper: a full screen pack pick over Same as default falls back to the default", function()
+    local TP, d, settings, packs_off = setup()
+    touch(d .. "/Japan/theme/wallpaper.png"); touch(d .. "/Japan/theme/wallpaper.full.png")
+    TP.invalidate()
+    settings.wallpaper_default = "leaves.png"
+    local jp = TP.wallpaperEntries()[1].name
+    TP.chooseWallpaper("wallpaper_full", jp)
+    eq(TP.shownWallpaper(true, false), "theme-pack\1Japan\1wallpaper.full.png", "the pack's full variant")
+    eq(TP.shownWallpaper(false, false), "leaves.png", "the default view is untouched")
+    packs_off["Japan"] = true
+    eq(TP.shownWallpaper(true, false), "leaves.png", "pack off: the default, not nothing")
+end)
+
+t.test("shownWallpaper: a pack default switched off shows the reader's own, in both views", function()
+    local TP, d, settings, packs_off = setup()
+    touch(d .. "/Japan/theme/wallpaper.png")
+    TP.invalidate()
+    settings.wallpaper_default = "leaves.png"
+    TP.chooseWallpaper("wallpaper_default", TP.wallpaperEntries()[1].name)
+    packs_off["Japan"] = true
+    eq(TP.shownWallpaper(false, false), "leaves.png"); eq(TP.shownWallpaper(true, false), "leaves.png")
+    settings.wallpaper_full = false
+    eq(TP.shownWallpaper(true, false), nil, "full screen None stays None")
 end)
 
 t.done()

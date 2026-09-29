@@ -27,6 +27,8 @@ package.loaded["lib/bookshelf_theme_pack"] = {
     isPackName = function(n) return type(n) == "string" and n:sub(1, 11) == "theme-pack\1" end,
     chooseWallpaper = function(k, n) chosen[#chosen + 1] = { k, n }; store[k] = n end,
 }
+local switched_on = {}
+package.loaded["lib/bookshelf_ornaments"] = { setPackOff = function(p, off) if not off then switched_on[#switched_on + 1] = p end end }
 local WB = dofile("lib/bookshelf_wallpaper_browser.lua")
 
 t.test("default wallpaper, All: None, the reader's own, then the packs'", function()
@@ -66,12 +68,21 @@ t.test("a tap stores the choice: None, Same as default, a picture", function()
     WB.choose("wallpaper_default", e[3]); eq(chosen[#chosen][2], "theme-pack\1Japan\1wallpaper.png")
     local f = WB.entries("wallpaper_full", WB.ALL)
     WB.choose("wallpaper_full", f[1]); eq(store.wallpaper_full, nil)
+    store.wallpaper_full_own = "x.png"; store.wallpaper_default_own = "y.png"
+    WB.choose("wallpaper_full", f[1]); eq(store.wallpaper_full_own, nil, "Same as default leaves no own behind")
+    WB.choose("wallpaper_default", e[1]); eq(store.wallpaper_default_own, nil, "None leaves no own behind")
 end)
 
 t.test("the None card says where the pictures come from", function()
     local src = io.open("lib/bookshelf_wallpaper_browser.lua"):read("*a")
     assert(src:find('_("Images are loaded from %1")', 1, true), "the folder hint is gone")
     assert(src:find('_("No images in %1")', 1, true), "the empty-folder message is gone")
+end)
+
+t.test("choosing an off pack's wallpaper switches the pack on, or nothing would show", function()
+    store = {}
+    WB.choose("wallpaper_default", { kind = "pack", name = "theme-pack\1Japan\1wallpaper.png", pack = "Japan", pack_off = true })
+    eq(switched_on[#switched_on], "Japan")
 end)
 
 t.done()

@@ -2592,11 +2592,19 @@ function Settings:_colorsSubItems()
                 checked_func = function() return TP.activeColoursPack() == nil end,
                 callback = function() TP.setColoursPack(nil); markDirty() end,
             } }
+            local Orn = require("lib/bookshelf_ornaments")
             for _i, p in ipairs(TP.colourThemes()) do
                 sub[#sub + 1] = {
-                    text = p,
+                    -- An off pack lends nothing: marked, and choosing it
+                    -- switches the pack on (as the pickers do).
+                    text_func = function()
+                        return Orn.isPackOff(p) and T(_("%1 (off)"), p) or p
+                    end,
                     checked_func = function() return TP.activeColoursPack() == p end,
-                    callback = function() TP.setColoursPack(p); markDirty() end,
+                    callback = function()
+                        if Orn.isPackOff(p) then Orn.setPackOff(p, false) end
+                        TP.setColoursPack(p); markDirty()
+                    end,
                 }
             end
             return sub

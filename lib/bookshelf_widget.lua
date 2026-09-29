@@ -3639,22 +3639,17 @@ function BookshelfWidget:_wallpaperName()
         -- ONLY thing that can change the picture now -- the per-shelf override
         -- is gone, so moving between chips never changes what is behind them.
         local full = self._expanded and true or false
-        local n = Wallpaper.resolveFor(BookshelfSettings.read(Wallpaper.FULL_SETTING),
-                                       BookshelfSettings.read(Wallpaper.SETTING), full)
         -- A pack's wallpaper is a choice like any other; its name picks the
         -- pack's variant for this view (full screen, dark). Its pack off or
-        -- gone: the reader's own choice from before it (bookshelf_theme_pack).
+        -- gone: the reader's own choice from before it, or for full screen
+        -- the default's (bookshelf_theme_pack.shownWallpaper).
         local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
-        if ok_t and TP and TP.isPackName(n) then
+        if ok_t and TP and TP.shownWallpaper then
             local dark = require("lib/bookshelf_cover_progress").theme()
-            local v = TP.variantName(n, full, dark and true or false)
-            if v then return v end
-            local key = (full and BookshelfSettings.read(Wallpaper.FULL_SETTING) ~= nil)
-                        and Wallpaper.FULL_SETTING or Wallpaper.SETTING
-            local own = BookshelfSettings.read(key .. "_own")
-            return (type(own) == "string" and not TP.isPackName(own)) and own or nil
+            return TP.shownWallpaper(full, dark and true or false)
         end
-        return n
+        return Wallpaper.resolveFor(BookshelfSettings.read(Wallpaper.FULL_SETTING),
+                                    BookshelfSettings.read(Wallpaper.SETTING), full)
     end)
     return ok and name or nil
 end
@@ -13390,6 +13385,14 @@ end
 -- drop the book back onto the shelf").
 function BookshelfWidget:_dropLiftOnTap(ev)
     if not ev or ev.ges ~= "tap" then return false end
+    -- The shelf's empty space, not the hero's: a tap on the previewed book's
+    -- own card (its description, say) must not swap it for another book.
+    local hd = self._hero_card and self._hero_card.dimen
+    local p = ev.pos
+    if hd and hd.y and p and p.x >= hd.x and p.x < hd.x + hd.w
+            and p.y >= hd.y and p.y < hd.y + hd.h then
+        return false
+    end
     return self:_dropLift()
 end
 

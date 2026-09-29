@@ -419,41 +419,61 @@ end
 -- change, and saves what it replaces, so the same button then undoes it
 -- exactly: "I applied a theme and want my plank back" (maintainer).
 --
--- The snapshot is taken once: applying a second pack keeps the ORIGINAL
--- values, so Undo returns to the reader's own look, not the first pack's.
+-- Undo puts back only what Apply set and the reader has not changed since:
+-- a wallpaper or plank chosen in its picker afterwards is theirs, and stays.
+-- The snapshot is per part (wallpaper, plank, colours), each part's values
+-- from before Apply beside what Apply left there. A second pack applied over
+-- the first keeps the ORIGINAL values of the parts the first still holds, so
+-- Undo returns to the reader's own look, not the first pack's. Once nothing
+-- Apply set is still there, or its pack is gone, the snapshot is spent.
 M.APPLIED_SETTING = "theme_applied"
-local SNAP = { plank = M.PLANK_SETTING, wood = M.WOOD_SETTING, wallpaper = "wallpaper_default",
-               wallpaper_own = "wallpaper_default_own", colours = M.COLOURS_SETTING }
+local GROUPS = {
+    plank     = { M.PLANK_SETTING, M.WOOD_SETTING, M.DESIGNS_OFF_SETTING },
+    wallpaper = { "wallpaper_default", "wallpaper_default_own" },
+    colours   = { M.COLOURS_SETTING },
+}
 -- A saved nil, which a settings table cannot hold as a value.
 local NIL_MARK = "\0nil"
+local function enc(v) if v == nil then return NIL_MARK end return v end
+local function dec(v) if v == NIL_MARK then return nil end return v end
+
+local function packExists(pack)
+    local _all, packs = orn().listAll()
+    for _i, p in ipairs(packs or {}) do if p == pack then return true end end
+    return false
+end
+
+-- held(s, keys) -> Apply set this part and it is still what Apply left.
+local function held(s, keys)
+    local a = s.applied[keys[1]]
+    return a ~= nil and read(keys[1]) == dec(a)
+end
+
+local function liveSnapshot()
+    local s = read(M.APPLIED_SETTING)
+    if type(s) ~= "table" or type(s.before) ~= "table" or type(s.applied) ~= "table" then return nil end
+    if not packExists(s.pack) then return nil end
+    for _g, keys in pairs(GROUPS) do
+        if held(s, keys) then return s end
+    end
+    return nil
+end
 
 function M.appliedPack()
-    local s = read(M.APPLIED_SETTING)
-    return type(s) == "table" and s.pack or nil
+    local s = liveSnapshot()
+    return s and s.pack or nil
 end
 
-local function snapshot(pack)
-    local s = read(M.APPLIED_SETTING)
-    if type(s) ~= "table" or type(s.values) ~= "table" then
-        s = { values = {} }
-        for k, key in pairs(SNAP) do
-            local v = read(key)
-            if v == nil then v = NIL_MARK end
-            s.values[k] = v
-        end
-    end
-    s.pack = pack
-    save(M.APPLIED_SETTING, s)
-end
-
--- undoPackTheme(): every saved value back as it was, unset ones unset.
+-- undoPackTheme(): each part Apply set, and nobody changed since, back as it
+-- was before (unset values unset).
 function M.undoPackTheme()
-    local s = read(M.APPLIED_SETTING)
-    if type(s) ~= "table" then return end
-    for k, key in pairs(SNAP) do
-        local v = s.values and s.values[k]
-        if v == NIL_MARK then v = nil end
-        save(key, v)
+    local s = liveSnapshot()
+    if s then
+        for _g, keys in pairs(GROUPS) do
+            if held(s, keys) then
+                for _i, k in ipairs(keys) do save(k, dec(s.before[k])) end
+            end
+        end
     end
     save(M.APPLIED_SETTING, nil)
     M._plank_memo = nil
@@ -477,7 +497,16 @@ end
 -- applyPackTheme(pack) -> { wallpaper, colours, plank, pick_plank }: what it
 -- did (pick_plank: the pack has several planks, the caller opens the picker).
 function M.applyPackTheme(pack)
-    snapshot(pack)
+    local s = liveSnapshot() or { before = {}, applied = {} }
+    s.pack = pack
+    -- A part this Apply may change keeps its original values only while an
+    -- earlier Apply's still holds; otherwise what is there now is the
+    -- reader's own.
+    for _g, keys in pairs(GROUPS) do
+        if not held(s, keys) then
+            for _i, k in ipairs(keys) do s.before[k] = enc(read(k)); s.applied[k] = nil end
+        end
+    end
     orn().setPackOff(pack, false)
     local th = M.theme(pack)
     local r = { wallpaper = false, colours = false, plank = false, pick_plank = false }
@@ -490,6 +519,12 @@ function M.applyPackTheme(pack)
     local planks = th.planks or {}
     if #planks == 1 then M.choosePlank(planks[1].id); r.plank = true
     elseif #planks > 1 then r.pick_plank = true end
+    for g, did in pairs({ wallpaper = r.wallpaper, plank = r.plank, colours = r.colours }) do
+        if did then
+            for _i, k in ipairs(GROUPS[g]) do s.applied[k] = enc(read(k)) end
+        end
+    end
+    save(M.APPLIED_SETTING, s)
     M._plank_memo = nil
     return r
 end
@@ -571,6 +606,31 @@ function M.chooseWallpaper(key, name)
         save(key .. "_own", nil)
     end
     save(key, name)
+end
+
+-- shownWallpaper(is_full, is_dark) -> the wallpaper name the shelf shows in
+-- this view. Full screen: None stays None; its own choice wins, a pack's as
+-- that pack's variant, else the reader's own from before it; with neither,
+-- whatever the default shows ("Same as default"). The default: its choice, a
+-- pack's as its variant for this view, else the reader's own from before it.
+function M.shownWallpaper(is_full, is_dark)
+    local function layer(key, full_view)
+        local v = read(key)
+        if not M.isPackName(v) then
+            return (type(v) == "string" and v ~= "") and v or nil
+        end
+        local shown = M.variantName(v, full_view, is_dark)
+        if shown then return shown end
+        local own = read(key .. "_own")
+        return (type(own) == "string" and own ~= "" and not M.isPackName(own)) and own or nil
+    end
+    if is_full then
+        local fv = read("wallpaper_full")
+        if fv == false then return nil end
+        local n = layer("wallpaper_full", true)
+        if n then return n end
+    end
+    return layer("wallpaper_default", is_full)
 end
 
 -- migrate(): the 5.3 betas "lent" a pack's wallpaper over the reader's own

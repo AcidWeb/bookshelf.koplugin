@@ -65,11 +65,20 @@ end
 -- choose(key, item): store the choice (the old list menu's semantics: None
 -- is false, Same as default is unset), and drop the decoded bitmap.
 function WB.choose(key, item)
+    -- A key's _own is the reader's picture from before a pack's; with no
+    -- pack chosen it would only come back later by surprise.
     if item.kind == "same" then
         BookshelfSettings.delete(key)
+        BookshelfSettings.delete(key .. "_own")
     elseif item.kind == "none" then
         BookshelfSettings.save(key, false)
+        BookshelfSettings.delete(key .. "_own")
     else
+        -- An off pack lends nothing, so choosing its wallpaper switches it
+        -- on (as the plank picker does), or the tap would change nothing.
+        if item.pack_off and item.pack then
+            require("lib/bookshelf_ornaments").setPackOff(item.pack, false)
+        end
         TP().chooseWallpaper(key, item.name)
     end
     if BookshelfSettings.flush then BookshelfSettings.flush() end
