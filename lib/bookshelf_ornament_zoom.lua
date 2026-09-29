@@ -14,7 +14,6 @@ anywhere outside the text, closes it; a tap or swipe on the text scrolls it.
 ]]
 local Blitbuffer       = require("ffi/blitbuffer")
 local Device           = require("device")
-local Font             = require("ui/font")
 local FrameContainer   = require("ui/widget/container/framecontainer")
 local Geom             = require("ui/geometry")
 local GestureRange     = require("ui/gesturerange")
@@ -49,6 +48,16 @@ function M.fit(aspect, w, h)
     local fw, fh = w, math.floor(w / aspect)
     if fh > h then fh, fw = h, math.floor(h * aspect) end
     return math.max(1, fw), math.max(1, fh)
+end
+
+-- panelBox(sw, margin, pad, title_w, has_info) -> x, w of the panel. With
+-- info it spans the screen inside the margins; a piece with only its name
+-- gets a panel just wide enough for it, centred under the piece (maintainer).
+function M.panelBox(sw, margin, pad, title_w, has_info)
+    local full = sw - 2 * margin
+    if has_info then return margin, full end
+    local w = math.min(full, title_w + 2 * pad)
+    return math.floor((sw - w) / 2), w
 end
 
 -- cropFit(aspect, box, w, h) -> W, H, crop: the file's size so that its
@@ -127,26 +136,33 @@ function Zoom:_build()
     local strength = (bw and bw.wallpaperScrimStrength and bw:wallpaperScrimStrength()) or 0
 
     -- The panel: the name, then the info in a scrolling area no taller than
-    -- a third of the screen (the piece gets the rest).
-    local pw = sw - 2 * margin
+    -- a third of the screen (the piece gets the rest). In the bookshelf UI
+    -- font, as the rest of the shelf's text.
+    local BFont = require("lib/bookshelf_fonts")
+    local tface, tbold = BFont:getFace("infofont", 22, { bold = true })
+    local info = M.infoText(self.entry)
+    local name = M.titleOf(self.entry)
+    local natural = 0
+    pcall(function()
+        local probe = require("lib/bookshelf_colour_text"):new{ text = name, face = tface, bold = tbold }
+        natural = probe:getSize().w
+        probe:free()
+    end)
+    local px, pw = M.panelBox(sw, margin, pad, natural, info ~= nil)
     local tw = pw - 2 * pad
-    local title = TextBoxWidget:new{
-        text = M.titleOf(self.entry), face = Font:getFace("tfont", 22),
-        width = tw, fgcolor = ink, bold = true,
-    }
+    local TitleBox = TextBoxWidget
     if painted then
         local ok, TTB = pcall(require, "lib/bookshelf_transparent_text")
-        if ok then
-            title:free()
-            title = TTB:new{ text = M.titleOf(self.entry), face = Font:getFace("tfont", 22),
-                             width = tw, fgcolor = ink, bold = true }
-        end
+        if ok then TitleBox = TTB end
     end
+    local title = TitleBox:new{
+        text = name, face = tface, bold = tbold, width = tw, fgcolor = ink,
+        alignment = info and "left" or "center",
+    }
     local body
-    local info = M.infoText(self.entry)
     local gap = math.floor(pad * 0.75)
     if info then
-        local face = Font:getFace("cfont", 18)
+        local face = BFont:getFace("infofont", 18)
         -- Only as tall as the text needs, up to the cap.
         local probe = TextBoxWidget:new{ text = info, face = face, width = tw - Screen:scaleBySize(12),
                                          for_measurement_only = true }
@@ -161,7 +177,7 @@ function Zoom:_build()
     end
     local th = title:getSize().h
     local ph = pad + th + (body and (gap + body:getSize().h) or 0) + pad
-    local px, py = margin, sh - margin - ph
+    local py = sh - margin - ph
 
     -- The piece, as large as the space above the panel allows.
     local aw, ah = sw - 2 * margin, py - 2 * margin

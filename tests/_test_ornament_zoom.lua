@@ -81,4 +81,22 @@ t.test("the drawing, not the file's padding, fills the space", function()
     eq(c2.x, 0); eq(c2.y, 0); eq(c2.w, W2); eq(c2.h, H2); eq(W2, 1000)
 end)
 
+t.test("a name-only panel fits its title and is centred; an info panel is full width", function()
+    local Z = load()
+    local px, pw = Z.panelBox(1236, 50, 12, 300, false)
+    eq(pw, 324, "the name-only panel is not its title's width plus padding")
+    eq(px, math.floor((1236 - 324) / 2), "the name-only panel is not centred")
+    px, pw = Z.panelBox(1236, 50, 12, 300, true)
+    eq(px, 50); eq(pw, 1136)
+    px, pw = Z.panelBox(1236, 50, 12, 5000, false)         -- a very long name
+    eq(px, 50); eq(pw, 1136, "a long name ran past the screen")
+end)
+
+t.test("the panel's text is in the bookshelf UI font", function()
+    local z = io.open("lib/bookshelf_ornament_zoom.lua"):read("*a")
+    assert(z:find('BFont:getFace("infofont"', 1, true), "the panel does not use the bookshelf UI font")
+    assert(not z:find('Font:getFace("tfont"', 1, true) and not z:find('Font:getFace("cfont"', 1, true),
+        "a stock KOReader face is still used")
+end)
+
 t.done()
