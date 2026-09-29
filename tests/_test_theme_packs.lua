@@ -199,49 +199,6 @@ t.test("every colour read consults the borrowed theme; the menu reads the reader
     assert(pg and pg:find("colourOverride(", 1, true), "page ground ignores the theme")
 end)
 
-t.test("withOverride: a first line while active, the rest greyed; tapping restores", function()
-    local TP = setup()
-    local items = { { text = "a" }, { text = "b", enabled_func = function() return true end } }
-    local plain = TP.withOverride(items, nil, function() end)
-    eq(#plain, 2, "nothing borrowed: menu unchanged")
-    local turned_off = false
-    local out = TP.withOverride({ { text = "a" }, { text = "b" }, { text = "c" } },
-                                "Xmas wallpaper active - tap to deactivate",
-                                function() turned_off = true end, { [3] = true })
-    eq(#out, 4); eq(out[1].text, "Xmas wallpaper active - tap to deactivate")
-    eq(out[2].enabled_func(), false); eq(out[4].enabled_func == nil or out[4].enabled_func(), true)
-    local menu = { item_table = out, updateItems = function() end }
-    out[1].callback(menu)
-    eq(turned_off, true); eq(#menu.item_table, 3, "the line is gone")
-    eq(out[2].enabled_func(), true, "rows live again")
-end)
-
-t.test("withOverride: the line goes when tapped wherever the menu put it", function()
-    -- The wallpaper rows are copied into "Wallpaper, ornaments and colours"
-    -- after the theme row, so the line is not the menu's first item; tapping
-    -- it switched the pack's wallpaper off but the line stayed (maintainer).
-    local TP = setup()
-    local out = TP.withOverride({ { text = "a" } }, "Japan wallpaper active - tap to deactivate",
-                                function() end)
-    local shown = { { text = "Theme" }, out[1], out[2], { text = "Ornaments" } }
-    local menu = { item_table = shown, updateItems = function() end }
-    out[1].callback(menu)
-    eq(#shown, 3, "the line is still in the menu")
-    for _i, it in ipairs(shown) do
-        assert(it.text ~= "Japan wallpaper active - tap to deactivate", "the line is still in the menu")
-    end
-end)
-
-t.test("withOverride leaves a row marked _theme_keep live (another part's own line)", function()
-    local TP = setup()
-    local out = TP.withOverride({ { text = "a" }, { text = "plank", _theme_keep = true } },
-                                "X colors active - tap to deactivate", function() end)
-    eq(out[2].enabled_func(), false)
-    eq(out[3].enabled_func == nil or out[3].enabled_func(), true)
-end)
-
-
-
 t.test("borrowed colours cost no file checks per read within the scan TTL", function()
     local TP, d = setup()
     touch(d .. "/A/theme/colours.json", '{"day": {"text": "#101010"}}')

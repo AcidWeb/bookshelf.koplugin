@@ -2465,7 +2465,7 @@ function Settings:_colorsSubItems()
         (function()
             local row = self:_plankRow(markDirty)
             row.separator = true   -- end of the covers and the shelf itself band
-            row._theme_keep = true  -- a colour theme does not grey it out
+            row._plank_row = true   -- a pack's colors do not make it read-only
             return row
         end)(),
         {
@@ -2575,16 +2575,45 @@ function Settings:_colorsSubItems()
             end,
         },
     }
-    -- While a pack lends its colors, say so first and grey the color rows
-    -- (they edit the reader's OWN colors, which show again when the pack's are
-    -- off). The day/night editing switch stays live (bookshelf_theme_pack).
+    -- The Color theme: the reader's own colors or a pack's, chosen here (a
+    -- pack's Apply pack theme chooses it too). While a pack's are in use the
+    -- rows below show them and are read-only: they edit the reader's OWN
+    -- colors, which come back exactly when Your own is chosen. The day/night
+    -- switch (row 1) and the plank row stay live.
     local TP = require("lib/bookshelf_theme_pack")
-    local pack = TP.activeColoursPack()
-    return TP.withOverride(items, pack and T(_("%1 colors active - tap to deactivate"), pack),
-        function()
-            TP.setColoursPack(nil)
-            markDirty()
-        end, { [1] = true })
+    local theme_row = {
+        text_func = function()
+            return T(_("Color theme: %1"), TP.activeColoursPack() or _("Your own"))
+        end,
+        help_text = _("Your own colors, or a pack's. While a pack's colors are in use the rows below show them; choosing Your own brings yours back exactly as they were."),
+        sub_item_table_func = function()
+            local sub = { {
+                text = _("Your own"),
+                checked_func = function() return TP.activeColoursPack() == nil end,
+                callback = function() TP.setColoursPack(nil); markDirty() end,
+            } }
+            for _i, p in ipairs(TP.colourThemes()) do
+                sub[#sub + 1] = {
+                    text = p,
+                    checked_func = function() return TP.activeColoursPack() == p end,
+                    callback = function() TP.setColoursPack(p); markDirty() end,
+                }
+            end
+            return sub
+        end,
+        separator = true,
+    }
+    for i, it in ipairs(items) do
+        if i > 1 and not it._plank_row then
+            local was = it.enabled_func
+            it.enabled_func = function()
+                if TP.activeColoursPack() then return false end
+                return was == nil or was()
+            end
+        end
+    end
+    table.insert(items, 1, theme_row)
+    return items
 end
 
 -- _showScaleNudge(touchmenu_instance, spec) -- the font-scale nudge dialog.

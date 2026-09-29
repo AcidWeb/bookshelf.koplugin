@@ -63,4 +63,14 @@ t.test("the collection shows ornaments only, and offers Apply pack theme", funct
     assert(apply and apply:find('bookshelf_plank_browser").show(', 1, true), "several planks do not open the picker")
 end)
 
+t.test("Accent colors starts with a Color theme row; no override rows remain", function()
+    local body = settings:match("function Settings:_colorsSubItems%(.-\nend\n")
+    assert(body and body:find('_("Color theme: %1")', 1, true), "no Color theme row")
+    assert(body:find("table.insert(items, 1, theme_row)", 1, true), "the row is not first")
+    assert(not settings:find("withOverride", 1, true), "withOverride is still used")
+    assert(not settings:find("active - tap to deactivate", 1, true), "an override row is still there")
+    local tp = io.open("lib/bookshelf_theme_pack.lua"):read("*a")
+    assert(not tp:find("function M.withOverride", 1, true), "withOverride still exists")
+end)
+
 t.done()

@@ -606,40 +606,4 @@ function M.isDarkName(name)
     return stem == "wallpaper.dark" or stem == "wallpaper.full.dark"
 end
 
--- withOverride(items, label, on_deactivate, keep) -> the menu with, while a
--- part is borrowed (label non-nil), a first row saying so; tapping it turns
--- the part off, removes itself and brings the greyed rows back. keep[i]: rows
--- that stay live (the day/night editing switch, the shelf theme); a row with
--- _theme_keep stays live too (another borrowed part's own override row).
-function M.withOverride(items, label, on_deactivate, keep)
-    if not label then return items end
-    local active = true
-    local out = {}
-    local line = { text = label, keep_menu_open = true, separator = true }
-    out[1] = line
-    for i, it in ipairs(items) do
-        if not ((keep and keep[i]) or it._theme_keep) then
-            local was = it.enabled_func
-            it.enabled_func = function()
-                if active then return false end
-                return was == nil or was()
-            end
-        end
-        out[#out + 1] = it
-    end
-    line.callback = function(touchmenu_instance)
-        active = false
-        on_deactivate()
-        -- Wherever the menu put it: a menu that copies these rows in after
-        -- its own (the wallpaper rows under "Wallpaper, ornaments and
-        -- colours") has the line further down, and it stayed there.
-        local tbl = touchmenu_instance and touchmenu_instance.item_table
-        for i = #(tbl or {}), 1, -1 do
-            if tbl[i] == line then table.remove(tbl, i) end
-        end
-        if touchmenu_instance and touchmenu_instance.updateItems then touchmenu_instance:updateItems() end
-    end
-    return out
-end
-
 return M
