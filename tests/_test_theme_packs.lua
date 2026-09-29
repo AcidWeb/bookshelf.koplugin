@@ -272,6 +272,22 @@ t.test("withOverride: a first line while active, the rest greyed; tapping restor
     eq(out[2].enabled_func(), true, "rows live again")
 end)
 
+t.test("withOverride: the line goes when tapped wherever the menu put it", function()
+    -- The wallpaper rows are copied into "Wallpaper, ornaments and colours"
+    -- after the theme row, so the line is not the menu's first item; tapping
+    -- it switched the pack's wallpaper off but the line stayed (maintainer).
+    local TP = setup()
+    local out = TP.withOverride({ { text = "a" } }, "Japan wallpaper active - tap to deactivate",
+                                function() end)
+    local shown = { { text = "Theme" }, out[1], out[2], { text = "Ornaments" } }
+    local menu = { item_table = shown, updateItems = function() end }
+    out[1].callback(menu)
+    eq(#shown, 3, "the line is still in the menu")
+    for _i, it in ipairs(shown) do
+        assert(it.text ~= "Japan wallpaper active - tap to deactivate", "the line is still in the menu")
+    end
+end)
+
 t.test("withOverride leaves a row marked _theme_keep live (another part's own line)", function()
     local TP = setup()
     local out = TP.withOverride({ { text = "a" }, { text = "plank", _theme_keep = true } },

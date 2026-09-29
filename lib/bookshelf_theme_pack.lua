@@ -454,8 +454,13 @@ function M.withOverride(items, label, on_deactivate, keep)
     line.callback = function(touchmenu_instance)
         active = false
         on_deactivate()
+        -- Wherever the menu put it: a menu that copies these rows in after
+        -- its own (the wallpaper rows under "Wallpaper, ornaments and
+        -- colours") has the line further down, and it stayed there.
         local tbl = touchmenu_instance and touchmenu_instance.item_table
-        if tbl and tbl[1] == line then table.remove(tbl, 1) end
+        for i = #(tbl or {}), 1, -1 do
+            if tbl[i] == line then table.remove(tbl, i) end
+        end
         if touchmenu_instance and touchmenu_instance.updateItems then touchmenu_instance:updateItems() end
     end
     return out
