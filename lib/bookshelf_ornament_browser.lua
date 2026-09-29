@@ -44,8 +44,8 @@ local function O() return require("lib/bookshelf_ornaments") end
 
 -- An ornament's PICTURE is faded while it will not be placed, whether switched
 -- off itself or through its pack: the grid reads as "what the shelf uses".
--- Only the picture: the "Off" / "Pack off" label under it is what says why,
--- so it stays at full strength (maintainer).
+-- Only the picture: the checkbox over it (and "Pack off" under it) is what
+-- says why, so they stay at full strength (maintainer).
 local Faded = Widget:extend{ child = nil, fade = 0.6 }
 function Faded:getSize() return self.child:getSize() end
 function Faded:paintTo(bb, x, y)
@@ -75,10 +75,10 @@ function Browser._renderCell(item, dimen)
     local state_face = Font:getFace("cfont", 13)
     local inner_w = dimen.w - 2 * (border + pad)
     local label = TextWidget:new{ text = O().displayName(e), face = label_face, max_width = inner_w }
-    -- The state line is there only on a card that is off (its picture is
-    -- faded too); a card that is on gives its picture that room.
-    local state = (item.off or item.pack_off) and TextWidget:new{
-        text = item.off and _("Off") or _("Pack off"),
+    -- On or off is the checkbox in the corner; the only state line left is
+    -- a pack that is off, which a piece's own box cannot say.
+    local state = item.pack_off and TextWidget:new{
+        text = _("Pack off"),
         face = state_face, fgcolor = Blitbuffer.COLOR_BLACK, max_width = inner_w,
     } or nil
     local text_h = label:getSize().h + (state and state:getSize().h or 0)
@@ -119,7 +119,14 @@ function Browser._renderCell(item, dimen)
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h }, body },
     }
-    return card
+    -- The checkbox, over the card's top right corner: ticked when the piece
+    -- is on, grey when its pack is off (a tap switches the pack on too).
+    local Marks = require("lib/bookshelf_marks")
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local box = Marks.Check:new{ checked = not item.off, enabled = not item.pack_off }
+    local cs, bs = card:getSize(), box:getSize()
+    box.overlap_offset = { cs.w - bs.w - border - Space.padding.small, border + Space.padding.small }
+    return OverlapGroup:new{ dimen = Geom:new{ w = cs.w, h = cs.h }, card, box }
 end
 
 function Browser:_items()

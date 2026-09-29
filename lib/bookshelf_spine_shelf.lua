@@ -3095,8 +3095,8 @@ function PlankDesign:paintTo(bb, x, y)
     end
 end
 -- plankPreview(design, w, row_h) -> a Blitbuffer of the plank as a row
--- row_h tall paints it, cropped to the plank and the design's bands above and
--- below it (design nil: the plain colour plank). For the plank picker; drawn
+-- row_h tall paints it, cropped to the plank and whatever the design paints
+-- above and below it (design nil: the plain colour plank). For the plank picker; drawn
 -- offscreen, so the design's ends sit at the preview's own edges. The caller
 -- frees it.
 function SpineShelf.plankPreview(design, w, row_h)
@@ -3107,9 +3107,21 @@ function SpineShelf.plankPreview(design, w, row_h)
     if design then
         PlankDesign:new{ dimen = Geom:new{ w = w, h = row_h }, design = design }:paintTo(canvas, 0, 0)
     end
-    local top = math.max(0, row_h - 2 * p)
-    local out = Blitbuffer.new(w, row_h + p - top, Blitbuffer.TYPE_BBRGB32)
-    out:blitFrom(canvas, 0, 0, 0, top, w, row_h + p - top)
+    -- Trimmed to the rows anything was painted on: most designs leave the
+    -- bands above and below the plank empty, and a picker of planks is
+    -- tighter without them. Sampled every few columns; the ground is white.
+    local function painted(y)
+        for x = 0, w - 1, 6 do
+            local c = canvas:getPixel(x, y):getColorRGB32()
+            if c.r < 250 or c.g < 250 or c.b < 250 then return true end
+        end
+        return false
+    end
+    local top, bot = math.max(0, row_h - 2 * p), row_h + p - 1
+    while top < bot and not painted(top) do top = top + 1 end
+    while bot > top and not painted(bot) do bot = bot - 1 end
+    local out = Blitbuffer.new(w, bot - top + 1, Blitbuffer.TYPE_BBRGB32)
+    out:blitFrom(canvas, 0, 0, 0, top, w, bot - top + 1)
     canvas:free()
     return out
 end

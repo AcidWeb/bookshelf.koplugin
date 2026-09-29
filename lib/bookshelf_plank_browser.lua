@@ -113,26 +113,48 @@ local function renderCell(o, dimen)
     local VerticalGroup   = require("ui/widget/verticalgroup")
     local VerticalSpan    = require("ui/widget/verticalspan")
     local T               = require("ffi/util").template
-    local pad = Space.padding.default
+    local pad = Space.padding.small
     local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
     local name = nameOf(o)
     if o.kind == "pack" then name = T(_("%1 (%2)"), name, o.pack) end
-    local status
-    if PB.inUse(o) then status = _("In use")
-    elseif o.pack_off then status = _("Pack off") end
+    -- The one in use is marked by its radio mark (below), so the only
+    -- words under a plank are its name, and why it would not show.
+    local status = o.pack_off and _("Pack off") or nil
     local lines = VerticalGroup:new{ align = "center",
         TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = inner_w } }
     if status then
         lines[#lines + 1] = TextWidget:new{ text = status, face = Font:getFace("cfont", 14), max_width = inner_w }
     end
-    -- A row the height of a four-row shelf: the plank as most shelves show it.
-    local row_h = math.floor(Screen:getHeight() / 4)
-    local bb, disposable = preview(o, inner_w, row_h)
     local box_h = math.max(1, inner_h - lines:getSize().h - Space.padding.small)
+    -- A row the height of a four-row shelf: the plank as most shelves show
+    -- it. Smaller when the card is too short for it (plankPreview trims to
+    -- what was painted: the plank and its shadow, and a design's snow or
+    -- icicles), so it is never squashed or spilt onto the name.
+    local SpineShelf = require("lib/bookshelf_spine_shelf")
+    local row_h = math.floor(Screen:getHeight() / 4)
+    local function plank_h(h) return SpineShelf.plankSurface(h) + SpineShelf.plankFace(h) end
+    while row_h > 40 and plank_h(row_h) * 1.4 > box_h do row_h = math.floor(row_h * 0.9) end
+    local bb, disposable = preview(o, inner_w, row_h)
+    -- A design painting well beyond its plank: smaller until it fits.
+    local tries = 0
+    while bb and bb:getHeight() > box_h and row_h > 40 and tries < 4 do
+        if disposable then bb:free() end
+        row_h = math.floor(row_h * box_h / bb:getHeight())
+        bb, disposable = preview(o, inner_w, row_h)
+        tries = tries + 1
+    end
     local pic
     if bb then
-        pic = ImageWidget:new{ image = bb, image_disposable = disposable,
-                               width = inner_w, height = math.min(box_h, bb:getHeight()) }
+        local ph = math.min(box_h, bb:getHeight())
+        local Marks = require("lib/bookshelf_marks")
+        local OverlapGroup = require("ui/widget/overlapgroup")
+        local radio = Marks.Radio:new{ checked = PB.inUse(o) }
+        local rs = radio:getSize().w
+        -- On the plank's left end.
+        radio.overlap_offset = { Space.padding.default + rs, math.floor((ph - rs) / 2) }
+        pic = OverlapGroup:new{ dimen = Geom:new{ w = inner_w, h = ph },
+            ImageWidget:new{ image = bb, image_disposable = disposable },
+            radio }
     end
     return FrameContainer:new{
         bordersize = 0, padding = pad, margin = 0,
@@ -184,7 +206,7 @@ function PB.show(opts)
         title = _("Shelf plank"),
         no_search = true,
         grid_cols = function() return 1 end,
-        cells_per_page = function() return landscape() and 3 or 4 end,
+        cells_per_page = function() return landscape() and 4 or 6 end,
         -- The grid's height is rows_per_page cards of 64dp (LibraryModal).
         rows_per_page = function()
             return math.max(3, math.floor(Screen:getHeight() * 0.6 / Screen:scaleBySize(64)))

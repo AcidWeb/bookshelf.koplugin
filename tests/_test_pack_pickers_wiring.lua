@@ -37,4 +37,14 @@ t.test("Performance tweaks names the plank from plankRowLabel", function()
     assert(not settings:find("plank colour dialog or the ornaments browser", 1, true), "old help text")
 end)
 
+t.test("pickers mark the choice with painted marks, not words", function()
+    local pb = io.open("lib/bookshelf_plank_browser.lua"):read("*a")
+    assert(pb:find("Marks.Radio:new{ checked = PB.inUse(o) }", 1, true), "no radio mark on a plank")
+    assert(not pb:find('_("In use")', 1, true), "the plank picker still says In use")
+    local ob = io.open("lib/bookshelf_ornament_browser.lua"):read("*a")
+    assert(ob:find("Marks.Check:new{ checked = not item.off, enabled = not item.pack_off }", 1, true),
+        "no checkbox on an ornament card")
+    assert(not ob:find('_("Off")', 1, true), "the card still says Off")
+end)
+
 t.done()
