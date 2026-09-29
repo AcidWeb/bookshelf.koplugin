@@ -222,19 +222,31 @@ function M.wallpaperFile(w, is_full, is_dark)
 end
 
 -- A borrowed part whose pack or file has gone: clear the key, fall back.
+-- A pack that is switched off lends nothing, but keeps the key, so switching
+-- it back on brings its part back; a pack (or part) that is gone clears it.
 local function activeFor(key, part)
     local pack = read(key)
     if type(pack) ~= "string" or pack == "" then return nil end
     local th = M.theme(pack)
-    if th.exists and th[part] then return pack end
-    save(key, nil)
-    return nil
+    if not (th.exists and th[part]) then save(key, nil); return nil end
+    if orn().isPackOff(pack) then return nil end
+    return pack
 end
 
 function M.activeWallpaperPack() return activeFor(M.WALLPAPER_SETTING, "wallpaper") end
 function M.setWallpaperPack(pack) save(M.WALLPAPER_SETTING, pack) end
 function M.activeColoursPack() return activeFor(M.COLOURS_SETTING, "colours") end
 function M.setColoursPack(pack) save(M.COLOURS_SETTING, pack) end
+
+-- colourThemes() -> the packs with a colours.json, for the Color theme row.
+function M.colourThemes()
+    local _all, packs = orn().listAll()
+    local out = {}
+    for _i, p in ipairs(packs or {}) do
+        if M.theme(p).colours then out[#out + 1] = p end
+    end
+    return out
+end
 
 -- The plugin's root (one level up from lib/), for the built-in plank's files;
 -- the idiom Wallpaper.seedSource uses. A seam for the tests.
@@ -260,18 +272,10 @@ function M.builtinPlank()
              middle = middle, left = f("left"), right = f("right") }
 end
 
-function M.woodOn()
-    local v = read(M.WOOD_SETTING)
-    if v == "oak" then return true end
-    if v ~= nil then return false end
-    return read("spine_plank_color") == nil and read("spine_plank_color_night") == nil
-end
-function M.setWood(on)
-    save(M.WOOD_SETTING, on and "oak" or false)
-    -- Choosing Oak is choosing a plank: it shows, even with designs off.
-    if on and not M.designsOn() then M.setDesignsOn(true) end
-    M._plank_memo = nil
-end
+-- woodOn() / setWood(on): kept for callers that still think in "the Oak
+-- switch"; the plank is one choice now (plankChoice / choosePlank).
+function M.woodOn() return M.plankChoice() == "oak" end
+function M.setWood(on) M.choosePlank(on and "oak" or "colour") end
 
 -- plankLabel(p) -> what menus call a plank: its name, or its pack's.
 function M.plankLabel(p) return p and (p.name or p.pack) or nil end
@@ -301,7 +305,10 @@ function M.chosenPlank()
     local now = M._clock()
     local memo = M._plank_memo
     if memo and M.SCAN_TTL > 0 and (now - memo.at) < M.SCAN_TTL then return memo.v end
-    local v = M._activePlank() or (M.woodOn() and M.builtinPlank()) or nil
+    local c = M.plankChoice()
+    local v
+    if c == "oak" then v = M.builtinPlank()
+    elseif c ~= "colour" then v = M._packPlank(c) end
     M._plank_memo = { at = now, v = v }
     return v
 end
@@ -318,37 +325,78 @@ function M.setDesignsOn(on)
     M._plank_memo = nil
 end
 
-function M._activePlank()
+-- The plank is ONE choice (theme_plank_pack): a pack plank's id, "oak", or
+-- false for the plain colour. Unset: Oak on a fresh install, the reader's own
+-- colour if they ever set one (plank_wood = false, or a plank colour), so an
+-- upgrade never changes a shelf. A pack's plank is never chosen by installing
+-- its pack: only by the plank picker or Apply pack theme (maintainer).
+
+-- _packPlank(id) -> that pack plank, when its pack is on and it is there.
+function M._packPlank(id)
     local O = orn()
     local _all, packs = O.listAll()
-    local ok_list = {}
     for _i, p in ipairs(packs or {}) do
         if not O.isPackOff(p) then
             for _j, pl in ipairs(M.theme(p).planks or {}) do
-                if not O.isOff(pl.id) then ok_list[#ok_list + 1] = pl end
+                if pl.id == id then return pl end
             end
         end
     end
-    local chosen = read(M.PLANK_SETTING)
-    if chosen == false then return nil end
-    for _i, pl in ipairs(ok_list) do if pl.id == chosen then return pl end end
-    return ok_list[1]
+    return nil
 end
 
--- setPlankOn(id, on): switch one plank design; switching one on makes it the
--- one shown.
-function M.setPlankOn(id, on)
-    local O = orn()
-    local cur = M._activePlank()
-    O.setOff(id, not on)
-    if on then
-        save(M.PLANK_SETTING, id)
-        -- Choosing a plank shows it, even with designs off (Performance tweaks).
-        if not M.designsOn() then M.setDesignsOn(true) end
-    elseif cur and cur.id == id then
-        save(M.PLANK_SETTING, false)        -- none, not the next in line
+local function fallbackChoice()
+    local wood = read(M.WOOD_SETTING)
+    if wood == "oak" then return "oak" end
+    if wood == false then return "colour" end
+    if read("spine_plank_color") ~= nil or read("spine_plank_color_night") ~= nil then
+        return "colour"
     end
+    return "oak"
+end
+
+-- plankChoice() -> "colour" | "oak" | a pack plank's id: what shows (a pack
+-- plank whose pack is off or gone reads as the fallback, and comes back when
+-- the pack is on again).
+function M.plankChoice()
+    local v = read(M.PLANK_SETTING)
+    if v == false then return "colour" end
+    if v == "oak" then return "oak" end
+    if type(v) == "string" and M._packPlank(v) then return v end
+    return fallbackChoice()
+end
+
+-- choosePlank(choice): the reader's pick. Choosing a design shows it, even
+-- with designs off (Performance tweaks); choosing the colour does not touch
+-- that switch.
+function M.choosePlank(choice)
+    -- Not `and false or choice`: false is falsy, so that saved the word.
+    local v = choice
+    if choice == "colour" then v = false end
+    save(M.PLANK_SETTING, v)
+    save(M.WOOD_SETTING, nil)          -- folded into the one choice
+    if choice ~= "colour" and not M.designsOn() then M.setDesignsOn(true) end
     M._plank_memo = nil
+end
+
+-- plankOptions() -> the plank picker's entries, in order: the colour, Oak,
+-- then each pack's planks (packs A-Z; a pack that is off is listed, marked).
+function M.plankOptions()
+    local O = orn()
+    local out = { { kind = "colour" }, { kind = "oak", plank = M.builtinPlank() } }
+    local _all, packs = O.listAll()
+    local sorted = {}
+    for _i, p in ipairs(packs or {}) do sorted[#sorted + 1] = p end
+    table.sort(sorted)
+    for _i, p in ipairs(sorted) do
+        local pls = {}
+        for _j, pl in ipairs(M.theme(p).planks or {}) do pls[#pls + 1] = pl end
+        table.sort(pls, function(a, b) return (a.name or "") < (b.name or "") end)
+        for _j, pl in ipairs(pls) do
+            out[#out + 1] = { kind = "pack", pack = p, plank = pl, pack_off = O.isPackOff(p) or nil }
+        end
+    end
+    return out
 end
 
 -- invertHex("#RRGGBB") -> its negative, same shape. What

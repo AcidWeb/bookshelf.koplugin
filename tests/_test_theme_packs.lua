@@ -187,19 +187,6 @@ t.test("colour override: day as written, night pre-inverted, plank never", funct
     eq(TP.colourOverride("ink_color", false), nil)
 end)
 
-t.test("plank: on by default when one pack has it, one at a time, follows the pack", function()
-    local TP, d, settings, packs_off = setup()
-    touch(d .. "/A/theme/plank.middle.png"); touch(d .. "/B/theme/plank.middle.png")
-    touch(d .. "/B/theme/plank.oak.middle.png")
-    TP.setWood(false)                -- pack planks alone; the built-in oak has its own test
-    local function shown() local p = TP.activePlank(); return p and p.id end
-    eq(shown(), "A/theme/plank", "unset: the first plank there is")
-    TP.setPlankOn("B/theme/plank.oak", true); eq(shown(), "B/theme/plank.oak")
-    TP.setPlankOn("B/theme/plank.oak", false); eq(shown(), nil,
-        "switching the shown plank off shows none, not the next one")
-    TP.setPlankOn("A/theme/plank", true); packs_off["A"] = true
-    eq(shown(), "B/theme/plank", "a switched-off pack's plank never shows; the next one does")
-end)
 
 t.test("borrowed wallpaper resolves through a theme name, dark variant flagged", function()
     local TP, d = setup()
@@ -297,21 +284,6 @@ t.test("withOverride leaves a row marked _theme_keep live (another part's own li
 end)
 
 
-t.test("activePlank is cached for the scan TTL; setPlankOn and invalidate() drop it", function()
-    local TP, d = setup()
-    touch(d .. "/A/theme/plank.middle.png")
-    TP.setWood(false)                -- pack planks alone
-    TP.SCAN_TTL = 15
-    local now = 1000; TP._clock = function() return now end
-    local calls = 0
-    local real = TP._orn.listAll
-    TP._orn.listAll = function(...) calls = calls + 1; return real(...) end
-    eq(TP.activePlank().pack, "A"); eq(TP.activePlank().pack, "A")
-    eq(calls, 1, "a page turn must not re-list the ornaments folder")
-    TP.setPlankOn("A/theme/plank", false); eq(TP.activePlank(), nil, "a switch is seen at once")
-    TP.setPlankOn("A/theme/plank", true); TP.invalidate(); eq(TP.activePlank().pack, "A")
-    now = now + 16; TP.activePlank(); eq(calls >= 3, true, "and it expires")
-end)
 
 t.test("borrowed colours cost no file checks per read within the scan TTL", function()
     local TP, d = setup()
@@ -345,45 +317,13 @@ t.test("the browser: a tap redraws only itself; the shelf and a full repaint wai
         and closed:find('setDirty("all", "full")', 1, true),
         "closing must flush, rebuild the shelf once, and repaint fully when the plank or wallpaper changed")
     local st = io.open("lib/bookshelf_settings.lua"):read("*a")
-    local row = st:match("TP%.setPlankOn%(p%.id, false%).-return")
+    local row = st:match('TP%.choosePlank%("colour"%).-return')
     assert(row and row:find('setDirty("all", "full")', 1, true),
         "the plank row's deactivate must repaint fully too")
 end)
 
 
-t.test("built-in Oak: shows when switched on, under any pack plank, and comes back when a pack plank goes", function()
-    local TP, d, settings = setup()
-    TP._plugin_root = "."            -- the repo's own assets/planks/oak
-    TP.setWood(false)
-    eq(TP.activePlank(), nil, "wood off, no packs: the coloured plank")
-    TP.setWood(true)
-    local p = TP.activePlank()
-    assert(p and p.builtin, "wood on: the built-in plank")
-    eq(p.name, "Oak"); eq(TP.plankLabel(p), "Oak")
-    assert(p.middle:match("assets/planks/oak/plank%.middle%.png$") and io.open(p.middle, "rb"), "ships in the plugin")
-    assert(p.left and p.right, "with both ends")
-    touch(d .. "/Woods/theme/plank.birch.middle.png")
-    TP.invalidate()
-    eq(TP.activePlank().id, "Woods/theme/plank.birch", "a pack plank overrides the built-in Oak")
-    TP.setPlankOn("Woods/theme/plank.birch", false)
-    assert(TP.activePlank().builtin, "switching the pack plank off falls back to Oak, not the coloured plank")
-    TP.setWood(false)
-    eq(TP.activePlank(), nil, "and Oak off leaves the coloured plank")
-    eq(settings[TP.WOOD_SETTING], false)
-end)
 
-t.test("unset, the Oak is on unless the reader picked a plank colour of their own", function()
-    local TP, _d, settings = setup()
-    TP._plugin_root = "."
-    eq(TP.woodOn(), true, "never touched: the new default oak, on upgrade as on a new install")
-    settings["spine_plank_color"] = { hex = "#806040" }
-    eq(TP.woodOn(), false, "a day plank colour they picked stays")
-    settings["spine_plank_color"] = nil; settings["spine_plank_color_night"] = { grey = 90 }
-    eq(TP.woodOn(), false, "so does a night one")
-    TP.setWood(true); eq(TP.woodOn(), true, "an explicit choice wins either way")
-    TP.setWood(false); settings["spine_plank_color_night"] = nil
-    eq(TP.woodOn(), false)
-end)
 
 t.test("the plank colour dialogs carry the Oak switch (palette tile and greyscale button)", function()
     local st = io.open("lib/bookshelf_settings.lua"):read("*a")
@@ -396,39 +336,114 @@ t.test("the plank colour dialogs carry the Oak switch (palette tile and greyscal
     assert(pal:find("special_tile", 1, true), "the palette cannot show a custom tile")
 end)
 
-t.test("Performance tweaks can switch plank designs off; choosing a plank switches them back on", function()
-    -- Maintainer: optional things turned on by default get a switch in
-    -- Performance tweaks (a plank design costs ~35ms a spine tap on a PW5),
-    -- and it must not stop a reader choosing a plank.
-    local TP, d, settings = setup()
-    TP._plugin_root = "."
-    touch(d .. "/Woods/theme/plank.birch.middle.png")
-    TP.invalidate()
-    TP.setPlankOn("Woods/theme/plank.birch", true)
-    eq(TP.activePlank().id, "Woods/theme/plank.birch")
-    TP.setDesignsOn(false)
-    eq(TP.activePlank(), nil, "designs off: none drawn")
-    eq(TP.chosenPlank().id, "Woods/theme/plank.birch", "but the menu still knows which is chosen")
-    eq(TP.designsOn(), false)
-    TP.setPlankOn("Woods/theme/plank.birch", true)
-    eq(TP.designsOn(), true, "choosing a pack plank switches designs back on")
-    eq(TP.activePlank().id, "Woods/theme/plank.birch")
-    TP.setDesignsOn(false)
-    TP.setWood(true)
-    eq(TP.designsOn(), true, "choosing Oak switches designs back on")
-    TP.setDesignsOn(false)
-    TP.setWood(false)
-    eq(TP.designsOn(), false, "switching Oak OFF is not a choice of plank")
-    eq(settings[TP.DESIGNS_OFF_SETTING], true)
-    TP.setDesignsOn(true)
-    eq(settings[TP.DESIGNS_OFF_SETTING], nil, "on is the default, stored as nothing")
-end)
 
 t.test("the Performance tweaks row names the design in use", function()
     local st = io.open("lib/bookshelf_settings.lua"):read("*a")
     local perf = st:match("function Settings:_performanceSubItems%(%)(.-)\nend\n")
     assert(perf and perf:find("TP.chosenPlank()", 1, true), "the row does not say which plank is in use")
     assert(perf:find("TP.setDesignsOn(", 1, true), "the row does not switch designs")
+end)
+
+
+-- ── The plank: one choice (theme_plank_pack) ─────────────────────────────
+t.test("plank choice: a fresh install is Oak; an own plank colour stays a colour", function()
+    local TP, _d, settings = setup()
+    TP._plugin_root = "."
+    eq(TP.plankChoice(), "oak")
+    assert(TP.activePlank().builtin, "Oak is not what shows")
+    settings["spine_plank_color"] = { hex = "#806040" }
+    TP.forgetChoice()
+    eq(TP.plankChoice(), "colour", "an upgrader's own plank colour was replaced")
+    settings["spine_plank_color"] = nil; settings["spine_plank_color_night"] = { grey = 90 }
+    eq(TP.plankChoice(), "colour", "so was a night one")
+    settings["spine_plank_color_night"] = nil; settings[TP.WOOD_SETTING] = false
+    eq(TP.plankChoice(), "colour", "an Oak switched off before stays off")
+end)
+
+t.test("plank choice: installing a pack's plank does not switch it on", function()
+    local TP, d = setup()
+    TP._plugin_root = "."
+    touch(d .. "/Planks/theme/plank.Walnut.middle.png")
+    TP.invalidate()
+    eq(TP.plankChoice(), "oak")
+    assert(TP.activePlank().builtin)
+end)
+
+t.test("choosePlank: a pack plank, Oak or the colour; a design choice switches designs on", function()
+    local TP, d, settings = setup()
+    TP._plugin_root = "."
+    touch(d .. "/Planks/theme/plank.Walnut.middle.png")
+    TP.invalidate()
+    TP.setDesignsOn(false)
+    TP.choosePlank("Planks/theme/plank.Walnut")
+    eq(TP.plankChoice(), "Planks/theme/plank.Walnut")
+    eq(TP.designsOn(), true)
+    eq(TP.activePlank().name, "Walnut")
+    TP.setDesignsOn(false)
+    eq(TP.activePlank(), nil, "designs off: none drawn")
+    eq(TP.chosenPlank().name, "Walnut", "but the menu still knows which is chosen")
+    TP.choosePlank("colour")
+    eq(TP.designsOn(), false, "choosing the colour is not a choice of design")
+    TP.setDesignsOn(true)
+    eq(TP.activePlank(), nil)
+    TP.choosePlank("oak")
+    assert(TP.activePlank().builtin)
+    eq(settings[TP.WOOD_SETTING], nil, "plank_wood is folded into the one choice")
+end)
+
+t.test("a chosen plank's pack switched off falls back, and comes back when it is on", function()
+    local TP, d, _s, packs_off = setup()
+    TP._plugin_root = "."
+    touch(d .. "/Planks/theme/plank.Walnut.middle.png")
+    TP.invalidate()
+    TP.choosePlank("Planks/theme/plank.Walnut")
+    packs_off["Planks"] = true
+    TP.forgetChoice()
+    eq(TP.plankChoice(), "oak")
+    packs_off["Planks"] = nil
+    TP.forgetChoice()
+    eq(TP.plankChoice(), "Planks/theme/plank.Walnut")
+end)
+
+t.test("plankOptions: the colour, Oak, then each pack's planks by pack", function()
+    local TP, d, _s, packs_off = setup()
+    TP._plugin_root = "."
+    touch(d .. "/Planks/theme/plank.Walnut.middle.png"); touch(d .. "/Planks/theme/plank.Ash.middle.png")
+    touch(d .. "/Japan/theme/plank.Gallery.middle.png")
+    packs_off["Planks"] = true
+    TP.invalidate()
+    local o = TP.plankOptions()
+    eq(o[1].kind, "colour"); eq(o[2].kind, "oak")
+    eq(o[3].pack, "Japan"); eq(o[4].plank.name, "Ash"); eq(o[5].plank.name, "Walnut")
+    eq(o[4].pack_off, true, "a pack that is off is still listed, marked")
+end)
+
+t.test("activePlank is cached for the scan TTL; a choice is seen at once", function()
+    local TP, d = setup()
+    TP._plugin_root = "."
+    touch(d .. "/A/theme/plank.middle.png")
+    local now, calls = 0, 0
+    TP._clock = function() return now end
+    TP.SCAN_TTL = 15
+    local real = TP.theme
+    TP.theme = function(p) calls = calls + 1; return real(p) end
+    TP.choosePlank("A/theme/plank")
+    eq(TP.activePlank().pack, "A"); eq(TP.activePlank().pack, "A")
+    TP.choosePlank("colour"); eq(TP.activePlank(), nil, "a choice is seen at once")
+    TP.choosePlank("A/theme/plank"); eq(TP.activePlank().pack, "A")
+    now = now + 16; TP.activePlank(); eq(calls >= 2, true, "and it expires")
+end)
+
+t.test("a pack that is off lends no colour theme; switched on it does again", function()
+    local TP, d, _s, packs_off = setup()
+    touch(d .. "/Japan/theme/colours.json", '{"day":{"text":"#112233"},"night":{}}')
+    TP.invalidate()
+    TP.setColoursPack("Japan")
+    packs_off["Japan"] = true
+    eq(TP.activeColoursPack(), nil)
+    packs_off["Japan"] = nil
+    eq(TP.activeColoursPack(), "Japan")
+    eq(TP.colourThemes()[1], "Japan")
 end)
 
 t.done()

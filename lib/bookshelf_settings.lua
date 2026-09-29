@@ -2570,7 +2570,7 @@ function Settings:_colorsSubItems()
                 local TP = require("lib/bookshelf_theme_pack")
                 local ok_p, p = pcall(TP.activePlank)
                 if ok_p and p and not p.builtin then
-                    TP.setPlankOn(p.id, false)
+                    TP.choosePlank("colour")
                     markDirty()
                     UIManager:setDirty("all", "full")   -- the band under the last row
                     if touchmenu_instance then touchmenu_instance:updateItems() end

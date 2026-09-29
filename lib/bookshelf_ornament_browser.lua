@@ -159,7 +159,7 @@ end
 function Browser:_toggle(item)
     if item.entry.is_plank then
         if item.off and item.pack_off then O().setPackOff(item.pack, false) end
-        require("lib/bookshelf_theme_pack").setPlankOn(item.entry.name, item.off)
+        require("lib/bookshelf_theme_pack").choosePlank(item.off and item.entry.name or "colour")
     else
         O().setOff(item.entry.name, not item.off)
     end
