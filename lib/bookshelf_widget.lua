@@ -633,7 +633,13 @@ function BookshelfWidget:handleEvent(event)
 
         local fm = require("apps/filemanager/filemanager").instance
         local ev = event.args[1]
-        if fm then return GestureZones.tryFMZones(ev, fm) end
+        -- A tap nothing took (empty shelf, the wall between rows, a gap
+        -- between spines) drops a lifted book back onto the shelf. Last, so
+        -- KOReader's corner taps and the reader's own zones keep theirs.
+        if fm then
+            if GestureZones.tryFMZones(ev, fm) then return true end
+            return self:_dropLiftOnTap(ev)
+        end
         -- Hot parking: no FileManager exists while a reader is parked
         -- beneath the shelf. A menu-intent gesture (the reader's top-strip
         -- menu zones) converts on the spot: finish the deferred close and
@@ -647,9 +653,10 @@ function BookshelfWidget:handleEvent(event)
                 Park.finishToMenu()
                 return true
             end
-            return GestureZones.tryReaderZones(ev, rui)
+            if GestureZones.tryReaderZones(ev, rui) then return true end
+            return self:_dropLiftOnTap(ev)
         end
-        return false
+        return self:_dropLiftOnTap(ev)
     end
 
     if InputContainer.handleEvent(self, event) then return true end
@@ -13325,6 +13332,41 @@ end
 -- the same book highlights in the 2-row grid, the expanded grid, and previews
 -- in the hero. Priority: live d-pad focus cell > a pending expanded tap
 -- (open-double's first tap) > the hero preview book. nil = nothing selected.
+-- _dropLift() -> true when it put a lifted book back on the shelf: the first
+-- tap of "tap twice to open", or the book the hero is previewing (the hero
+-- goes back to the book being read, as the Currently reading chip does).
+-- Only a lift that shows on this page: a previewed book elsewhere is left
+-- as it is. A d-pad cursor is not a lift; the keys move it.
+function BookshelfWidget:_dropLift()
+    if self._cursor_idx then return false end
+    local fp = self:_selectedFilepath()
+    local rect = fp and self:_shelfSlotRect(fp)
+    if not rect then return false end
+    if self._tap_selected_fp then
+        self._tap_selected_fp = nil
+        self:_repaintSelectionHighlight(fp, nil)
+        return true
+    end
+    self._hero_mode = "current"
+    self._preview_book = nil
+    self:_rebuildRefreshHeroAndChips()
+    -- The hero band is refreshed above; the row the book stood out of is not
+    -- in it (see the Currently reading chip).
+    local pad = math.max(Screen:scaleBySize(12), self._spine_lift_headroom or 0)
+    rect.y = math.max(0, rect.y - pad)
+    rect.h = rect.h + pad
+    UIManager:setDirty(self, function() return "ui", rect, self.dithered end)
+    return true
+end
+
+-- _dropLiftOnTap(ev): a plain tap that nothing else took drops a lifted
+-- book (maintainer: "tapping anywhere off the book in empty space should
+-- drop the book back onto the shelf").
+function BookshelfWidget:_dropLiftOnTap(ev)
+    if not ev or ev.ges ~= "tap" then return false end
+    return self:_dropLift()
+end
+
 function BookshelfWidget:_selectedFilepath()
     if self._cursor_idx and self._page_items then
         local ci = self._page_items[self._cursor_idx]
