@@ -269,11 +269,6 @@ function M.builtinPlank()
              middle = middle, left = f("left"), right = f("right") }
 end
 
--- woodOn() / setWood(on): kept for callers that still think in "the Oak
--- switch"; the plank is one choice now (plankChoice / choosePlank).
-function M.woodOn() return M.plankChoice() == "oak" end
-function M.setWood(on) M.choosePlank(on and "oak" or "colour") end
-
 -- plankLabel(p) -> what menus call a plank: its name, or its pack's.
 function M.plankLabel(p) return p and (p.name or p.pack) or nil end
 
@@ -374,6 +369,19 @@ function M.choosePlank(choice)
     save(M.WOOD_SETTING, nil)          -- folded into the one choice
     if choice ~= "colour" and not M.designsOn() then M.setDesignsOn(true) end
     M._plank_memo = nil
+end
+
+-- plankRowLabel() -> what the Shelf plank row and Performance tweaks name:
+-- "Oak", "Walnut (Planks)", or nil for the plain colour (the caller shows the
+-- colour's value).
+function M.plankRowLabel()
+    local c = M.plankChoice()
+    if c == "colour" then return nil end
+    local p
+    if c == "oak" then p = M.builtinPlank() else p = M._packPlank(c) end
+    if not p then return nil end
+    if p.pack and p.name then return p.name .. " (" .. p.pack .. ")" end
+    return M.plankLabel(p)
 end
 
 -- plankOptions() -> the plank picker's entries, in order: the colour, Oak,

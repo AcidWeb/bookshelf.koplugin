@@ -291,34 +291,24 @@ t.test("the browser: a tap redraws only itself; the shelf and a full repaint wai
     assert(closed and closed:find("endDeferred", 1, true) and closed:find("on_change", 1, true)
         and closed:find('setDirty("all", "full")', 1, true),
         "closing must flush, rebuild the shelf once, and repaint fully when the plank or wallpaper changed")
-    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
-    local row = st:match('TP%.choosePlank%("colour"%).-return')
-    assert(row and row:find('setDirty("all", "full")', 1, true),
-        "the plank row's deactivate must repaint fully too")
+    local pb = io.open("lib/bookshelf_plank_browser.lua"):read("*a")
+    local tap = pb:match("on_cell_tap = function%(o%).-\n        end,")
+    assert(tap and tap:find('setDirty("all", "full")', 1, true),
+        "the plank picker's choice must repaint fully too")
 end)
 
 
 
 
-t.test("the plank colour dialogs carry the Oak switch (palette tile and greyscale button)", function()
-    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
-    local row = st:match('pickColor%("spine_plank_color".-end,')
-    assert(st:find("_pickPlank(", 1, true), "the plank row does not open the plank dialog")
-    local pp = st:match("function Settings:_pickPlank%(.-\nend\n")
-    assert(pp and pp:find("special_tile", 1, true), "no Oak tile in the colour palette")
-    assert(pp:find("extra_button", 1, true) or pp:find("text_func", 1, true), "no Oak switch in the greyscale dialog")
-    local pal = io.open("lib/bookshelf_color_palette.lua"):read("*a")
-    assert(pal:find("special_tile", 1, true), "the palette cannot show a custom tile")
+t.test("plankRowLabel: Oak, a pack plank with its pack, nil for the colour", function()
+    local TP, d = setup()
+    TP._plugin_root = "."
+    touch(d .. "/Planks/theme/plank.Walnut.middle.png")
+    TP.invalidate()
+    TP.choosePlank("oak"); eq(TP.plankRowLabel(), "Oak")
+    TP.choosePlank("Planks/theme/plank.Walnut"); eq(TP.plankRowLabel(), "Walnut (Planks)")
+    TP.choosePlank("colour"); eq(TP.plankRowLabel(), nil)
 end)
-
-
-t.test("the Performance tweaks row names the design in use", function()
-    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
-    local perf = st:match("function Settings:_performanceSubItems%(%)(.-)\nend\n")
-    assert(perf and perf:find("TP.chosenPlank()", 1, true), "the row does not say which plank is in use")
-    assert(perf:find("TP.setDesignsOn(", 1, true), "the row does not switch designs")
-end)
-
 
 -- ── The plank: one choice (theme_plank_pack) ─────────────────────────────
 t.test("plank choice: a fresh install is Oak; an own plank colour stays a colour", function()

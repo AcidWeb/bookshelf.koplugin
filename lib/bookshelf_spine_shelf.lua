@@ -3094,6 +3094,26 @@ function PlankDesign:paintTo(bb, x, y)
         end
     end
 end
+-- plankPreview(design, w, row_h) -> a Blitbuffer of the plank as a row
+-- row_h tall paints it, cropped to the plank and the design's bands above and
+-- below it (design nil: the plain colour plank). For the plank picker; drawn
+-- offscreen, so the design's ends sit at the preview's own edges. The caller
+-- frees it.
+function SpineShelf.plankPreview(design, w, row_h)
+    local p = SpineShelf.plankSurface(row_h) + SpineShelf.plankFace(row_h)
+    local canvas = Blitbuffer.new(w, row_h + p, Blitbuffer.TYPE_BBRGB32)
+    canvas:fill(Blitbuffer.COLOR_WHITE)
+    ShelfPlank:new{ dimen = Geom:new{ w = w, h = row_h } }:paintTo(canvas, 0, 0)
+    if design then
+        PlankDesign:new{ dimen = Geom:new{ w = w, h = row_h }, design = design }:paintTo(canvas, 0, 0)
+    end
+    local top = math.max(0, row_h - 2 * p)
+    local out = Blitbuffer.new(w, row_h + p - top, Blitbuffer.TYPE_BBRGB32)
+    out:blitFrom(canvas, 0, 0, 0, top, w, row_h + p - top)
+    canvas:free()
+    return out
+end
+
 function SpineShelf.plankDesignWidget(w, h)
     local design = SpineShelf.activePlankDesign()
     if not design then return nil end
