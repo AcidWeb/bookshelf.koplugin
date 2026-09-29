@@ -365,6 +365,65 @@ t.test("a full-row piece on every shelf still leaves every page a book", functio
     end
 end)
 
+t.test("a one-row page squeezes its end piece so the page's book fits", function()
+    -- Device (1 row, a wide framed print as the row's end piece): the page
+    -- may not stand empty, so its first book was forced in beside the piece
+    -- at full size and a face-out ran past the end of the plank. The piece
+    -- shrinks instead -- only as far as the book needs.
+    local D = fresh()
+    local function wide(e)
+        e.size = function(kind, en, no, stand, cap)
+            local w = (kind == "rowend") and 250 or 40
+            if cap then w = math.min(w, cap) end
+            return { entry = en, w = w, kind = kind, no = no }
+        end
+        return e
+    end
+    for _i, paginating in ipairs({ false, true }) do
+        local es = shelf(6, 120, nil)
+        local rows, h = run(D, wide(env(D, D.newState(), "always", es, paginating, 1,
+                                         paginating and math.huge or 1, cards("a"))))
+        for r, row in ipairs(rows) do
+            assert(row.last >= row.first, "row " .. r .. " holds no book")
+            local used = 0
+            for i = row.first, row.last do used = used + es[i].w end
+            local pl = h.row_orn[r]
+            if pl then used = used + pl.w + 8 end
+            assert(used <= 300, (paginating and "pagination" or "render")
+                .. ": row " .. r .. " overflows: " .. used)
+        end
+        local pl = h.row_orn[1]
+        assert(pl and pl.w == 172, "the piece shrank only to the room left: " .. tostring(pl and pl.w))
+    end
+end)
+
+t.test("a book that leaves no room for any piece: the piece is left off that row", function()
+    local D = fresh()
+    local e = env(D, D.newState(), "always", shelf(3, 295, nil), false, 1, 1, cards("a"))
+    e.size = function(kind, en, no, stand, cap)
+        local w = (kind == "rowend") and 250 or 40
+        if cap then if cap < 10 then return nil end; w = math.min(w, cap) end
+        return { entry = en, w = w, kind = kind, no = no }
+    end
+    local rows, h = run(D, e)
+    assert(rows[1].last >= rows[1].first, "the page holds no book")
+    assert(h.row_orn[1] == nil, "a piece that cannot fit is still on the row")
+end)
+
+t.test("a piece squeezed below a quarter of its width is left off instead", function()
+    -- sizeFor never refuses, so a tight squeeze would stand a speck.
+    local D = fresh()
+    local e = env(D, D.newState(), "always", shelf(3, 250, nil), false, 1, 1, cards("a"))
+    e.size = function(kind, en, no, stand, cap)
+        local w = (kind == "rowend") and 200 or 40
+        if cap then w = math.max(1, math.min(w, cap)) end
+        return { entry = en, w = w, kind = kind, no = no }
+    end
+    local rows, h = run(D, e)                 -- room 50 - pads 8: a 42px piece
+    assert(rows[1].last >= rows[1].first, "the page holds no book")
+    assert(h.row_orn[1] == nil, "a 42px scrap of a 200px piece still stands")
+end)
+
 t.test("sync reconciles the order with every piece on disk, once per scan", function()
     -- Review: reconcile had no production caller, so deleted files were never
     -- dropped, a re-added one came back to its old place, and a piece that

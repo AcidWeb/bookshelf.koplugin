@@ -210,6 +210,13 @@ function SpineLayout.fillRows(widths, avail_w, gap, empty_ok, hooks)
                 empty_run = empty_run + 1
                 limit = avail(#rows + 1, i)
             else
+                -- The book is going on this row whether it fits or not (the
+                -- row may not stand empty). If the row's end piece is what
+                -- leaves it too little room, the piece gives way: squeeze
+                -- sizes it down to what is left, or takes it off the row.
+                if w + lw > limit and hooks and hooks.squeeze then
+                    limit = hooks.squeeze(#rows + 1, w + lw) or limit
+                end
                 first, x, empty_run = i, lw + w, 0
                 if placed then placed(i, #rows + 1, true) end
                 i = i + 1

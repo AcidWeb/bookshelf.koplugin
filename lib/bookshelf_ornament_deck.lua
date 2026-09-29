@@ -268,7 +268,7 @@ end
 function M.fillHooks(env)
     local d, level, es = env.dealer, env.level, env.entries
     local per_page = math.max(1, tonumber(env.per_page) or 1)
-    local h = { row_orn = {}, page_orn = {}, dealer = d }
+    local h = { row_orn = {}, row_deal = {}, page_orn = {}, dealer = d }
     local started, dealing = 0, true
     local page_has_book = {}
     for _i, e in ipairs(es) do
@@ -293,7 +293,10 @@ function M.fillHooks(env)
             local e, no, stand = d:take(within == 1)
             if e then
                 local pl = env.size("rowend", e, no, stand)
-                if pl then pl.side = M.side(level, d.st.shelf); h.row_orn[r] = pl end
+                if pl then
+                    pl.side = M.side(level, d.st.shelf); h.row_orn[r] = pl
+                    h.row_deal[r] = { e, no, stand }
+                end
             end
         end
     end
@@ -304,6 +307,30 @@ function M.fillHooks(env)
         end
         local pl = r and h.row_orn[r]
         if pl then return env.content_w - env.space("rowend", pl) end
+        return env.content_w
+    end
+    -- squeeze(r, need) -> the row's new width, or nil: a row that has to take
+    -- a book `need` wide (it may not stand empty) gets its end piece sized
+    -- down to the room that leaves, or loses the piece when not even a small
+    -- one fits. On a one-row shelf a wide piece otherwise put a face-out past
+    -- the plank's end (maintainer). The card stays dealt either way, so
+    -- both passes still agree on every later slot.
+    function h.squeeze(r, need)
+        local pl, deal = h.row_orn[r], h.row_deal[r]
+        if not pl or not deal then return nil end
+        local room = env.content_w - need
+        local pads = env.space("rowend", pl) - pl.w
+        if pl.w + pads <= room then return nil end
+        local cap = room - pads
+        local small = cap > 0 and env.size("rowend", deal[1], deal[2], deal[3], cap) or nil
+        -- Not a scrap: under a quarter of its own width it is not the piece
+        -- any more (sizeFor never refuses a size), so it comes off the row.
+        if small and small.w * 4 >= pl.w and env.space("rowend", small) <= room then
+            small.side = pl.side
+            h.row_orn[r] = small
+            return env.content_w - env.space("rowend", small)
+        end
+        h.row_orn[r] = nil
         return env.content_w
     end
     -- isBoundary(i, r): a group boundary that counts. Not on the first book a

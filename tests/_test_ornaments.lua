@@ -982,7 +982,11 @@ t.test("json: the shelf honours padding everywhere it reserves or paints the gap
     local n = select(2, sh:gsub("SpineShelf%.ornPad%(", ""))
     assert(n >= 4, "padding is applied in only " .. n .. " places (section gap, row-end reserve, both row-end sides)")
     assert(sh:find("local stand_top = stand_h - pl.above", 1, true), "a piece does not stand on the plank")
-    eq(select(2, sh:gsub("o%.max_room = ", "")), 2, "every slot gives its whole-row ceiling (row end and bare plank; section gap)")
+    -- Two ceilings (row end and bare plank; section gap), and a third
+    -- assignment that only ever LOWERS it: the deck's squeeze, for a one-row
+    -- page whose book has to fit beside its end piece.
+    eq(select(2, sh:gsub("o%.max_room = ", "")), 3, "every slot gives its whole-row ceiling (row end and bare plank; section gap), and the squeeze caps it")
+    assert(sh:find("o.max_room = math.min(o.max_room, cap)", 1, true), "the squeeze cap no longer only lowers the ceiling")
 end)
 
 t.test("menu fix: a height nudge moves a piece, it never changes its size", function()
