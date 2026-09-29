@@ -251,7 +251,12 @@ function BookshelfWidget:init()
             tap = function(entry)
                 if not Gestures.on("ornament_tap") then return false end
                 UIManager:nextTick(function()
-                    require("lib/bookshelf_action_exec").dispatch(entry.tap, shelf)
+                    -- "zoom": the piece full screen, with its info under it.
+                    if entry.tap.zoom then
+                        require("lib/bookshelf_ornament_zoom").show(entry, shelf)
+                    else
+                        require("lib/bookshelf_action_exec").dispatch(entry.tap, shelf)
+                    end
                 end)
                 return true
             end,

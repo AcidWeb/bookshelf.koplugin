@@ -679,8 +679,14 @@ M.FIELDS = {
     pad    = { kind = "number", min = -1,  max = 2, default = 0 },
     night  = { kind = "enum", values = { invert = true, off = true } },
     mirror = { kind = "enum", values = { off = true, always = true, alternate = true }, default = "off" },
-    tap    = { kind = "table" },
+    -- A stored action ({ action, plugin, internal, label }), or "zoom": the
+    -- piece full screen with its info under it (lib/bookshelf_ornament_zoom).
+    tap    = { kind = "tap" },
+    -- Text for the zoom view: what the piece is (a print's title, artist,
+    -- notes). Without it the zoom view shows the piece's name.
+    info   = { kind = "string" },
 }
+M.INFO_MAX = 4000
 
 -- cleanField(name, v) -> a usable value, or nil when v is not one.
 function M.cleanField(name, v)
@@ -696,6 +702,12 @@ function M.cleanField(name, v)
         return (type(v) == "string" and f.values[v]) and v or nil
     elseif f.kind == "table" then
         return type(v) == "table" and v or nil
+    elseif f.kind == "tap" then
+        if v == "zoom" then return { zoom = true } end
+        return type(v) == "table" and v or nil
+    elseif f.kind == "string" then
+        if type(v) ~= "string" or v == "" then return nil end
+        return (#v > M.INFO_MAX) and v:sub(1, M.INFO_MAX) or v
     end
 end
 
@@ -742,10 +754,13 @@ local function applyLayers(e, layers)
     if night ~= nil then e.night_invert = (night == "invert") end
     e.mirror = get("mirror") or "off"
     e.tap    = get("tap")
+    e.info   = get("info")
     -- A piece that meets the shelf above (or goes behind it) wants one: the
     -- deck keeps it off a page's top shelf (Deck.dealer).
     e.reaches_above = e.lift >= 1 or nil
 end
+
+M._applyLayers = applyLayers
 
 -- The directive-only values, kept so a re-apply (a reader's nudge) starts
 -- from what the file itself says rather than from the last merge.

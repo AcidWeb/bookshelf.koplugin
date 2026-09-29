@@ -1,0 +1,253 @@
+--[[
+An ornament full screen: the "zoom" tap action (an ornaments.json record's
+"tap": "zoom", which a pack can set for all its pieces). The piece is drawn as
+large as the screen allows, with a panel under it holding its name and, when
+the record has one, its "info" text in a scrolling area -- a print's title,
+artist and notes in the Japan pack.
+
+Built the way the full-screen micro-module view is (bookshelf_micro_fullscreen):
+the shelf's wallpaper as the ground (white without one), and the panel painted
+as the shelf paints its own panels (Wallpaper.scrim in the palette's panel
+colour at the reader's panel strength), with the palette's ink for the text.
+Colours are paint-space, so night mode needs nothing of its own. Back, or a tap
+anywhere outside the text, closes it; a tap or swipe on the text scrolls it.
+]]
+local Blitbuffer       = require("ffi/blitbuffer")
+local Device           = require("device")
+local Font             = require("ui/font")
+local FrameContainer   = require("ui/widget/container/framecontainer")
+local Geom             = require("ui/geometry")
+local GestureRange     = require("ui/gesturerange")
+local InputContainer   = require("ui/widget/container/inputcontainer")
+local OverlapGroup     = require("ui/widget/overlapgroup")
+local ScrollTextWidget = require("ui/widget/scrolltextwidget")
+local TextBoxWidget    = require("ui/widget/textboxwidget")
+local UIManager        = require("ui/uimanager")
+local Widget           = require("ui/widget/widget")
+local Screen           = Device.screen
+
+local M = {}
+
+-- titleOf(entry) -> the piece's name as the browser shows it: the file name,
+-- without its pack folder or extension.
+function M.titleOf(entry)
+    local n = entry and entry.name or ""
+    return (n:match("([^/]+)$") or n):gsub("%.%w+$", "")
+end
+
+-- infoText(entry) -> the record's info, or nil (the panel then shows the
+-- name alone).
+function M.infoText(entry)
+    local t = entry and entry.info
+    if type(t) == "string" and t ~= "" then return t end
+    return nil
+end
+
+-- fit(aspect, w, h) -> the largest w x h of that aspect inside the box.
+function M.fit(aspect, w, h)
+    aspect = (aspect and aspect > 0) and aspect or 1
+    local fw, fh = w, math.floor(w / aspect)
+    if fh > h then fh, fw = h, math.floor(h * aspect) end
+    return math.max(1, fw), math.max(1, fh)
+end
+
+-- cropFit(aspect, box, w, h) -> W, H, crop: the file's size so that its
+-- DRAWING (box = contentBox's l, t, r, b fractions, or nil for the whole
+-- file) is the largest it can be inside w x h, and the crop that is that
+-- drawing. A pack's pieces carry transparent padding (their share of the
+-- tallest piece, a side margin) that would otherwise shrink them here.
+-- margin: that much of the file (a fraction) is kept around the drawing.
+function M.cropFit(aspect, box, w, h, margin)
+    aspect = (aspect and aspect > 0) and aspect or 1
+    local l, t, r, b = 0, 0, 1, 1
+    if box and box[1] then l, t, r, b = box[1], box[2], box[3], box[4] end
+    -- margin: a little of the file around the drawing, so what fades out
+    -- past its edge (a frame's soft shadow) is not cut off square
+    local m = margin or 0
+    l, t, r, b = math.max(0, l - m), math.max(0, t - m), math.min(1, r + m), math.min(1, b + m)
+    local fw, fh = math.max(0.05, r - l), math.max(0.05, b - t)
+    local dw, dh = M.fit(aspect * fw / fh, w, h)
+    local W, H = math.max(1, math.floor(dw / fw + 0.5)), math.max(1, math.floor(dh / fh + 0.5))
+    local crop = { x = math.floor(l * W + 0.5), y = math.floor(t * H + 0.5), w = dw, h = dh }
+    crop.w = math.min(crop.w, W - crop.x)
+    crop.h = math.min(crop.h, H - crop.y)
+    return W, H, crop
+end
+
+-- A scrolling text area that composites over the panel instead of painting
+-- an opaque box on it: ScrollTextWidget always builds a plain TextBoxWidget,
+-- so over a painted ground that is swapped for a TransparentTextBox of the
+-- same size (the hero's text does the same, bookshelf_transparent_text).
+local ZoomText = ScrollTextWidget:extend{ transparent = false }
+function ZoomText:init()
+    ScrollTextWidget.init(self)
+    if not self.transparent then return end
+    local ok, TTB = pcall(require, "lib/bookshelf_transparent_text")
+    if not ok then return end
+    local old = self.text_widget
+    local tw = TTB:new{
+        text = self.text, face = self.face, fgcolor = self.fgcolor,
+        width = old.width, height = old.height, dialog = self.dialog,
+        alignment = self.alignment, justified = self.justified, lang = self.lang,
+    }
+    self.text_widget = tw
+    self[1][1] = tw
+    old:free()
+end
+
+local Zoom = InputContainer:extend{ name = "bookshelf_ornament_zoom" }
+
+function M.show(entry, bw)
+    local z = Zoom:new{ entry = entry, bw = bw }
+    -- An explicit refresh, as every full-screen view here: a nil one is
+    -- dropped and nothing reaches the panel (see MicroFullscreen.open).
+    UIManager:show(z, "ui", z.dimen)
+    return z
+end
+
+function Zoom:init()
+    if Device:hasKeys() then
+        self.key_events = { Close = { { Device.input.group.Back } } }
+    end
+    self:_build()
+end
+
+function Zoom:_build()
+    local sw, sh = Screen:getWidth(), Screen:getHeight()
+    self._built_w, self._built_h = sw, sh
+    self.dimen = Geom:new{ x = 0, y = 0, w = sw, h = sh }
+    local Orn = require("lib/bookshelf_ornaments")
+    local Space = require("lib/bookshelf_space")
+    local CP = require("lib/bookshelf_cover_progress")
+    local bw = self.bw
+    local margin = math.floor(math.min(sw, sh) * 0.04)
+    local pad = Space.padding and Space.padding.large or Screen:scaleBySize(12)
+    local ink = (CP.ink and CP.ink()) or Blitbuffer.COLOR_BLACK
+    local painted = bw and bw.groundIsPainted and bw:groundIsPainted() or false
+    local strength = (bw and bw.wallpaperScrimStrength and bw:wallpaperScrimStrength()) or 0
+
+    -- The panel: the name, then the info in a scrolling area no taller than
+    -- a third of the screen (the piece gets the rest).
+    local pw = sw - 2 * margin
+    local tw = pw - 2 * pad
+    local title = TextBoxWidget:new{
+        text = M.titleOf(self.entry), face = Font:getFace("tfont", 22),
+        width = tw, fgcolor = ink, bold = true,
+    }
+    if painted then
+        local ok, TTB = pcall(require, "lib/bookshelf_transparent_text")
+        if ok then
+            title:free()
+            title = TTB:new{ text = M.titleOf(self.entry), face = Font:getFace("tfont", 22),
+                             width = tw, fgcolor = ink, bold = true }
+        end
+    end
+    local body
+    local info = M.infoText(self.entry)
+    local gap = math.floor(pad * 0.75)
+    if info then
+        local face = Font:getFace("cfont", 18)
+        -- Only as tall as the text needs, up to the cap.
+        local probe = TextBoxWidget:new{ text = info, face = face, width = tw - Screen:scaleBySize(12),
+                                         for_measurement_only = true }
+        local want = probe:getSize().h
+        probe:free()
+        local cap = math.floor(sh / 3)
+        body = ZoomText:new{
+            text = info, face = face, fgcolor = ink, width = tw,
+            height = math.max(Screen:scaleBySize(40), math.min(want, cap)),
+            dialog = self, transparent = painted,
+        }
+    end
+    local th = title:getSize().h
+    local ph = pad + th + (body and (gap + body:getSize().h) or 0) + pad
+    local px, py = margin, sh - margin - ph
+
+    -- The piece, as large as the space above the panel allows.
+    local aw, ah = sw - 2 * margin, py - 2 * margin
+    local box
+    if self.entry.path and Orn.contentBox then
+        local ok, l, t, r, b = pcall(Orn.contentBox, self.entry)
+        if ok and l then box = { l, t, r, b } end
+    end
+    local w, h, crop = M.cropFit(self.entry.aspect, box, aw, ah, 0.03)
+    local ix, iy = math.floor((sw - crop.w) / 2), margin + math.floor((ah - crop.h) / 2)
+    local night = false
+    pcall(function() night = require("lib/bookshelf_night_mode_sync").active() end)
+    local entry = self.entry
+    local picture = Widget:new{ dimen = Geom:new{ w = sw, h = sh } }
+    function picture:paintTo(b)
+        pcall(Orn.paintPlacement, b, ix, iy, { entry = entry, w = w, h = h, mirror = false, crop = crop }, night)
+    end
+
+    -- The ground: the shelf's wallpaper, or the page.
+    local bg
+    if bw and bw._wallpaperWidget then
+        local ok, wp = pcall(function() return bw:_wallpaperWidget() end)
+        if ok and wp then bg = wp end
+    end
+    if not bg then
+        bg = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE, bordersize = 0, padding = 0, margin = 0,
+            dimen = Geom:new{ w = sw, h = sh },
+            Widget:new{ dimen = Geom:new{ w = sw, h = sh } },
+        }
+    end
+    local panel = Widget:new{ dimen = Geom:new{ w = sw, h = sh } }
+    if painted and strength > 0 then
+        local colors = CP.resolvedColors and CP.resolvedColors() or {}
+        local ground = colors.panel_bg or Blitbuffer.COLOR_WHITE
+        local radius = Space.radius and Space.radius.window or 7
+        function panel:paintTo(b)
+            pcall(function()
+                require("lib/bookshelf_wallpaper").scrim(b, px, py, pw, ph, ground, strength, radius)
+            end)
+        end
+    end
+    local texts = Widget:new{ dimen = Geom:new{ w = sw, h = sh } }
+    local tx, ty = px + pad, py + pad
+    function texts:paintTo(b)
+        title:paintTo(b, tx, ty)
+        if body then body:paintTo(b, tx, ty + th + gap) end
+    end
+    self._title, self._body = title, body
+    self[1] = OverlapGroup:new{ dimen = self.dimen:copy(), allow_mirroring = false,
+                                bg, panel, picture, texts }
+    self.ges_events = {
+        TapClose = { GestureRange:new{ ges = "tap", range = self.dimen } },
+    }
+end
+
+-- The text scrolls under a tap or a swipe on it; any other tap closes.
+function Zoom:handleEvent(event)
+    local body = self._body
+    if body and event.handler == "onGesture" then
+        local ev = event.args and event.args[1]
+        local d = body.dimen
+        if ev and ev.pos and d and d.x and ev.pos:intersectWith(d) then
+            if body:handleEvent(event) then return true end
+        end
+    end
+    return InputContainer.handleEvent(self, event)
+end
+
+function Zoom:paintTo(bb, x, y)
+    if Screen:getWidth() ~= self._built_w or Screen:getHeight() ~= self._built_h then
+        self:_build()
+    end
+    InputContainer.paintTo(self, bb, x, y)
+end
+
+function Zoom:onTapClose()
+    UIManager:close(self)
+    if self.bw then UIManager:setDirty(self.bw, "ui") end
+    return true
+end
+Zoom.onClose = Zoom.onTapClose
+
+function Zoom:onCloseWidget()
+    if self._title then self._title:free() end
+    if self._body and self._body.text_widget then self._body.text_widget:free() end
+end
+
+return M

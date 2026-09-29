@@ -325,7 +325,8 @@ function M.show(entry, bw, piece)
               callback = function() set("mirror", MIRROR_NEXT[entry.mirror or "off"]) end },
             { text_func = function()
                 local tap = entry.tap
-                return tap and T(_("Tap: %1"), tap.label or _("set")) or _("Tap: none")
+                return tap and T(_("Tap: %1"), (tap.zoom and _("Zoom")) or tap.label or _("set"))
+                       or _("Tap: none")
             end, callback = function() M.chooseTap(entry, redraw) end },
         },
         {
@@ -413,6 +414,13 @@ function M.chooseTap(entry, done)
         text = _("No action"),
         callback = close(function()
             O().readerSet(entry, "tap", nil)
+            if done then done() end
+        end),
+    }, {
+        -- The piece full screen, with its info (or its name) under it.
+        text = _("Zoom"),
+        callback = close(function()
+            O().readerSet(entry, "tap", "zoom")
             if done then done() end
         end),
     }})

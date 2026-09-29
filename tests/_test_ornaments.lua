@@ -950,6 +950,28 @@ t.test("the default width cap grows with the books, never past the row", functio
     eq(O.maxWidth(0, 1135), 0)
 end)
 
+t.test("json: tap takes \"zoom\" as well as a stored action; info is text", function()
+    -- The zoom tap shows a piece full screen with its info under it; a pack
+    -- sets it for all its pieces (the Japan pack's prints).
+    local O = fresh()
+    local z = O.cleanField("tap", "zoom")
+    assert(type(z) == "table" and z.zoom == true, "\"zoom\" is not a tap action")
+    eq(O.cleanField("tap", "wobble"), nil, "an unknown word passes as a tap action")
+    local a = O.cleanField("tap", { action = "x", label = "X" })
+    eq(a and a.action, "x", "a stored action no longer passes")
+    eq(O.cleanField("info", "A print by Hokusai."), "A print by Hokusai.")
+    eq(O.cleanField("info", 12), nil, "a number passes as info")
+    eq(#O.cleanField("info", string.rep("a", 20000)), O.INFO_MAX, "info is not capped")
+end)
+
+t.test("json: a piece's info and zoom tap reach the entry", function()
+    local O = fresh()
+    local e = { name = "Pack/p.png" }
+    O._applyLayers(e, { { ["Pack/p.png"] = { tap = "zoom", info = "Notes" } } })
+    assert(e.tap and e.tap.zoom, "the zoom tap did not reach the entry")
+    eq(e.info, "Notes")
+end)
+
 t.test("json: scale sizes the piece and its cap together, up to the whole row", function()
     local O = fresh()
     local wide = { name = "w.svg", aspect = 3, overhang = 0, scale = 2 }
