@@ -1611,17 +1611,7 @@ function Settings:_wallpaperMenu()
             end,
         },
     }
-    -- While a pack lends its wallpaper, say so first and grey the rest: the
-    -- rows below set the reader's OWN picture, which shows again when the
-    -- pack's is switched off (bookshelf_theme_pack).
-    local TP = require("lib/bookshelf_theme_pack")
-    local pack = TP.activeWallpaperPack()
-    return TP.withOverride(items, pack and T(_("%1 wallpaper active - tap to deactivate"), pack),
-        function()
-            TP.setWallpaperPack(nil)
-            self:_markDirty()
-            UIManager:setDirty("all", "full")
-        end)
+    return items
 end
 
 

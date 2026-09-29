@@ -304,17 +304,6 @@ function Browser:_footerRows()
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
     if ok_t and TP and self:_isPack(self.chip) then
         local th, pack, row = TP.theme(self.chip), self.chip, {}
-        if th.wallpaper then
-            row[#row + 1] = { key = "wallpaper",
-                label_func = function()
-                    return TP.activeWallpaperPack() == pack and _("Wallpaper: on") or _("Wallpaper: off")
-                end,
-                on_tap = function()
-                    TP.setWallpaperPack(TP.activeWallpaperPack() ~= pack and pack or nil)
-                    self._full = true
-                    self:_changed()
-                end }
-        end
         if th.colours then
             row[#row + 1] = { key = "colours",
                 label_func = function()

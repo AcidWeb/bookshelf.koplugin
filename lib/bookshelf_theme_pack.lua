@@ -28,7 +28,6 @@ local logger = require("logger")
 local M = {}
 
 M.SUBDIR            = "theme"
-M.WALLPAPER_SETTING = "theme_wallpaper_pack"
 M.COLOURS_SETTING   = "theme_colours_pack"
 M.PLANK_SETTING     = "theme_plank_pack"
 -- The BUILT-IN wood plank (v5.3): "oak" (on), false (off), or unset. Shipped
@@ -233,8 +232,6 @@ local function activeFor(key, part)
     return pack
 end
 
-function M.activeWallpaperPack() return activeFor(M.WALLPAPER_SETTING, "wallpaper") end
-function M.setWallpaperPack(pack) save(M.WALLPAPER_SETTING, pack) end
 function M.activeColoursPack() return activeFor(M.COLOURS_SETTING, "colours") end
 function M.setColoursPack(pack) save(M.COLOURS_SETTING, pack) end
 
@@ -430,11 +427,63 @@ end
 -- Wallpaper.pathFor hands names carrying it to wallpaperPath.
 M.NAME_PREFIX = "theme-pack\1"
 
-function M.wallpaperName(is_full, is_dark)
-    local pack = M.activeWallpaperPack()
-    if not pack then return nil end
-    local file = M.wallpaperFile(M.theme(pack).wallpaper, is_full, is_dark)
+function M.isPackName(name)
+    return type(name) == "string" and name:sub(1, #M.NAME_PREFIX) == M.NAME_PREFIX
+end
+
+-- wallpaperEntries() -> every pack's wallpaper as a choice for the wallpaper
+-- picker ({name, label, pack, path}; a pack that is off is listed, marked).
+-- The name is the base file's: the view's variant is picked at paint time.
+function M.wallpaperEntries()
+    local O = orn()
+    local _all, packs = O.listAll()
+    local out = {}
+    for _i, p in ipairs(packs or {}) do
+        local th = M.theme(p)
+        local file = th.wallpaper and th.wallpaper.base
+        if file then
+            out[#out + 1] = { name = M.NAME_PREFIX .. p .. "\1" .. file, label = p, pack = p,
+                              path = th.dir .. "/" .. file, pack_off = O.isPackOff(p) or nil }
+        end
+    end
+    return out
+end
+
+-- variantName(name, is_full, is_dark) -> for a pack wallpaper's name, that
+-- pack's wallpaper for this view (full screen, dark), or nil when its pack is
+-- off or gone; any other name is returned as it is.
+function M.variantName(name, is_full, is_dark)
+    if not M.isPackName(name) then return name end
+    local pack = name:sub(#M.NAME_PREFIX + 1):match("^([^\1]+)\1")
+    local th = pack and M.theme(pack)
+    if not (th and th.exists and th.wallpaper) or orn().isPackOff(pack) then return nil end
+    local file = M.wallpaperFile(th.wallpaper, is_full, is_dark)
     return file and (M.NAME_PREFIX .. pack .. "\1" .. file) or nil
+end
+
+-- chooseWallpaper(key, name): store a wallpaper choice (wallpaper_default or
+-- wallpaper_full). A pack's replacing the reader's own remembers theirs in
+-- <key>_own, which the shelf shows again if the pack goes or is switched off;
+-- choosing one of their own forgets it.
+function M.chooseWallpaper(key, name)
+    local cur = read(key)
+    if M.isPackName(name) then
+        if cur ~= nil and not M.isPackName(cur) then save(key .. "_own", cur) end
+    else
+        save(key .. "_own", nil)
+    end
+    save(key, name)
+end
+
+-- migrate(): the 5.3 betas "lent" a pack's wallpaper over the reader's own
+-- (theme_wallpaper_pack); it is now an ordinary choice. Moved once.
+function M.migrate()
+    local pack = read("theme_wallpaper_pack")
+    if type(pack) ~= "string" then return end
+    for _i, e in ipairs(M.wallpaperEntries()) do
+        if e.pack == pack then M.chooseWallpaper("wallpaper_default", e.name) end
+    end
+    save("theme_wallpaper_pack", nil)
 end
 
 function M.wallpaperPath(rest)

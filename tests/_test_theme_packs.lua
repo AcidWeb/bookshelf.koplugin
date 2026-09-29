@@ -155,23 +155,18 @@ t.test("bad colours.json: good entries apply, bad ones are skipped", function()
     eq(TP.theme("B").colours, nil, "unparseable file: no colour theme, no error")
 end)
 
-t.test("borrowed wallpaper: only a pack that has one; one at a time", function()
-    local TP, d, settings = setup()
-    touch(d .. "/A/theme/wallpaper.png"); touch(d .. "/B/theme/wallpaper.png"); touch(d .. "/C/Owl.png")
-    TP.setWallpaperPack("A"); eq(TP.activeWallpaperPack(), "A")
-    TP.setWallpaperPack("B"); eq(TP.activeWallpaperPack(), "B", "a second pack replaces the first")
-    TP.setWallpaperPack("C"); eq(TP.activeWallpaperPack(), nil, "C has no wallpaper")
-    TP.setWallpaperPack(nil); eq(settings[TP.WALLPAPER_SETTING], nil)
-end)
 
 t.test("stale pack falls back and the setting is cleared", function()
     local TP, d, settings = setup()
     touch(d .. "/A/theme/wallpaper.png")
     touch(d .. "/A/theme/colours.json", '{"day": {"text": "#101010"}}')
-    TP.setWallpaperPack("A"); TP.setColoursPack("A")
+    TP.setColoursPack("A")
+    local name = TP.wallpaperEntries()[1].name
     os.execute("rm -rf '" .. d .. "/A'")
-    eq(TP.activeWallpaperPack(), nil); eq(settings[TP.WALLPAPER_SETTING], nil)
+    TP.invalidate()
+    eq(TP.variantName(name, false, false), nil, "a gone pack's wallpaper names nothing")
     eq(TP.activeColoursPack(), nil); eq(TP.colourOverride("ink_color", false), nil)
+    eq(settings[TP.COLOURS_SETTING], nil)
 end)
 
 t.test("colour override: day as written, night pre-inverted, plank never", function()
@@ -188,27 +183,7 @@ t.test("colour override: day as written, night pre-inverted, plank never", funct
 end)
 
 
-t.test("borrowed wallpaper resolves through a theme name, dark variant flagged", function()
-    local TP, d = setup()
-    touch(d .. "/Xmas/theme/wallpaper.png"); touch(d .. "/Xmas/theme/wallpaper.dark.png")
-    eq(TP.wallpaperName(false, false), nil, "nothing borrowed")
-    TP.setWallpaperPack("Xmas")
-    local n = TP.wallpaperName(false, true)
-    eq(n, TP.NAME_PREFIX .. "Xmas\1wallpaper.dark.png"); eq(TP.isDarkName(n), true)
-    eq(TP.isDarkName(TP.wallpaperName(false, false)), false)
-    eq(TP.wallpaperPath("Xmas\1wallpaper.png"), d .. "/Xmas/theme/wallpaper.png")
-    eq(TP.wallpaperPath("Xmas\1../../etc/passwd"), nil, "no path escapes")
-    eq(TP.wallpaperPath("..\1wallpaper.png"), nil)
-    eq(TP.wallpaperPath("Xmas\1missing.png"), nil)
-end)
 
-t.test("the shelf asks the theme first, and pathFor knows theme names", function()
-    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
-    assert(w:find("TP.wallpaperName(", 1, true), "_wallpaperName does not consult the theme")
-    assert(w:find("TP.isDarkName(", 1, true), "_wallpaperWidget does not skip the invert for a dark variant")
-    local wp = io.open("lib/bookshelf_wallpaper.lua"):read("*a")
-    assert(wp:find("wallpaperPath(", 1, true), "pathFor does not resolve theme names")
-end)
 
 t.test("every colour read consults the borrowed theme; the menu reads the reader's own", function()
     local cp = io.open("lib/bookshelf_cover_progress.lua"):read("*a")
@@ -444,6 +419,75 @@ t.test("a pack that is off lends no colour theme; switched on it does again", fu
     packs_off["Japan"] = nil
     eq(TP.activeColoursPack(), "Japan")
     eq(TP.colourThemes()[1], "Japan")
+end)
+
+
+-- ── A pack's wallpaper is an ordinary choice ──────────────────────────────
+t.test("pack wallpapers are listed as ordinary choices, off packs marked", function()
+    local TP, d, _s, packs_off = setup()
+    touch(d .. "/Japan/theme/wallpaper.png"); touch(d .. "/Autumn/Owl.png")
+    packs_off["Japan"] = true
+    local e = TP.wallpaperEntries()
+    eq(#e, 1); eq(e[1].pack, "Japan"); eq(e[1].pack_off, true)
+    eq(TP.isPackName(e[1].name), true); eq(TP.isPackName("leaves.png"), false)
+    eq(e[1].path, d .. "/Japan/theme/wallpaper.png")
+end)
+
+t.test("a pack wallpaper name resolves to its view's variant, and to nothing when its pack is off", function()
+    local TP, d, _s, packs_off = setup()
+    for _, f in ipairs({ "wallpaper.png", "wallpaper.full.png", "wallpaper.dark.png" }) do
+        touch(d .. "/Xmas/theme/" .. f)
+    end
+    local base = TP.wallpaperEntries()[1].name
+    eq(TP.variantName(base, false, false), base)
+    eq(TP.variantName(base, true, false), TP.NAME_PREFIX .. "Xmas\1wallpaper.full.png")
+    local dark = TP.variantName(base, false, true)
+    eq(dark, TP.NAME_PREFIX .. "Xmas\1wallpaper.dark.png"); eq(TP.isDarkName(dark), true)
+    eq(TP.wallpaperPath("Xmas\1wallpaper.png"), d .. "/Xmas/theme/wallpaper.png")
+    eq(TP.wallpaperPath("Xmas\1../../etc/passwd"), nil, "no path escapes")
+    eq(TP.wallpaperPath("..\1wallpaper.png"), nil)
+    eq(TP.wallpaperPath("Xmas\1missing.png"), nil)
+    packs_off["Xmas"] = true
+    eq(TP.variantName(base, false, false), nil)
+    eq(TP.variantName("my.png", false, false), "my.png", "a reader's own name passes through")
+end)
+
+t.test("choosing a pack wallpaper remembers the reader's own; choosing their own forgets it", function()
+    local TP, d, settings = setup()
+    touch(d .. "/Japan/theme/wallpaper.png")
+    settings["wallpaper_default"] = "leaves.png"
+    local base = TP.wallpaperEntries()[1].name
+    TP.chooseWallpaper("wallpaper_default", base)
+    eq(settings["wallpaper_default"], base); eq(settings["wallpaper_default_own"], "leaves.png")
+    TP.chooseWallpaper("wallpaper_default", base)
+    eq(settings["wallpaper_default_own"], "leaves.png", "choosing it again keeps the own one")
+    TP.chooseWallpaper("wallpaper_default", "sky.png")
+    eq(settings["wallpaper_default"], "sky.png"); eq(settings["wallpaper_default_own"], nil)
+end)
+
+t.test("migrate: a borrowed wallpaper becomes the default choice, once", function()
+    local TP, d, settings = setup()
+    touch(d .. "/Japan/theme/wallpaper.png")
+    settings["wallpaper_default"] = "leaves.png"
+    settings["theme_wallpaper_pack"] = "Japan"
+    TP.migrate()
+    eq(TP.isPackName(settings["wallpaper_default"]), true)
+    eq(settings["wallpaper_default_own"], "leaves.png")
+    eq(settings["theme_wallpaper_pack"], nil)
+    TP.migrate()
+    eq(settings["wallpaper_default_own"], "leaves.png", "a second run changes nothing")
+end)
+
+t.test("the shelf maps a pack wallpaper to its variant and falls back to the reader's own", function()
+    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
+    local b = w:match("function BookshelfWidget:_wallpaperName%(%)(.-)\nend\n")
+    assert(b and b:find("TP.variantName(", 1, true), "pack names are not mapped to their variant")
+    assert(b:find('.. "_own"', 1, true), "no fallback to the reader's own wallpaper")
+    assert(not b:find("TP.wallpaperName(", 1, true), "the borrowed-wallpaper path is still there")
+    assert(w:find("TP.isDarkName(", 1, true), "_wallpaperWidget does not skip the invert for a dark variant")
+    assert(w:find('bookshelf_theme_pack").migrate()', 1, true), "the old borrowed wallpaper is not migrated")
+    local wp = io.open("lib/bookshelf_wallpaper.lua"):read("*a")
+    assert(wp:find("wallpaperPath(", 1, true), "pathFor does not resolve theme names")
 end)
 
 t.done()

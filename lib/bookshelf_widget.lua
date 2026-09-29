@@ -237,6 +237,11 @@ function BookshelfWidget:init()
     self.width  = Screen:getWidth()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
+    -- The 5.3 betas' borrowed pack wallpaper becomes an ordinary choice, once.
+    if not BookshelfWidget._themes_migrated then
+        BookshelfWidget._themes_migrated = true
+        pcall(function() require("lib/bookshelf_theme_pack").migrate() end)
+    end
     -- An ornament on the shelf: long-press adjusts it, a tap runs its action
     -- if it has one. The pieces know nothing of this widget, so they are
     -- handed these (the live shelf's, replaced by each new one).
@@ -3622,22 +3627,27 @@ end
 function BookshelfWidget:_wallpaperName()
     local ok, name = pcall(function()
         local Wallpaper = require("lib/bookshelf_wallpaper")
-        -- A pack's borrowed wallpaper wins while it is switched on; the
-        -- reader's own choice is untouched underneath (bookshelf_theme_pack).
-        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
-        if ok_t and TP then
-            local CoverProgress = require("lib/bookshelf_cover_progress")
-            local dark = CoverProgress.theme()
-            local n = TP.wallpaperName(self._expanded and true or false, dark and true or false)
-            if n then return n end
-        end
         -- self._expanded is the full screen shelves view, which can carry its
         -- own image: see Wallpaper.resolveFor for the precedence. That is the
         -- ONLY thing that can change the picture now -- the per-shelf override
         -- is gone, so moving between chips never changes what is behind them.
-        return Wallpaper.resolveFor(BookshelfSettings.read(Wallpaper.FULL_SETTING),
-                                    BookshelfSettings.read(Wallpaper.SETTING),
-                                    self._expanded and true or false)
+        local full = self._expanded and true or false
+        local n = Wallpaper.resolveFor(BookshelfSettings.read(Wallpaper.FULL_SETTING),
+                                       BookshelfSettings.read(Wallpaper.SETTING), full)
+        -- A pack's wallpaper is a choice like any other; its name picks the
+        -- pack's variant for this view (full screen, dark). Its pack off or
+        -- gone: the reader's own choice from before it (bookshelf_theme_pack).
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        if ok_t and TP and TP.isPackName(n) then
+            local dark = require("lib/bookshelf_cover_progress").theme()
+            local v = TP.variantName(n, full, dark and true or false)
+            if v then return v end
+            local key = (full and BookshelfSettings.read(Wallpaper.FULL_SETTING) ~= nil)
+                        and Wallpaper.FULL_SETTING or Wallpaper.SETTING
+            local own = BookshelfSettings.read(key .. "_own")
+            return (type(own) == "string" and not TP.isPackName(own)) and own or nil
+        end
+        return n
     end)
     return ok and name or nil
 end
