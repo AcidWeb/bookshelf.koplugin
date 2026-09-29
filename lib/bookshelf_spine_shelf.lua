@@ -1923,6 +1923,21 @@ SpineShelf.has_wallpaper = false
 function SpineShelf.shadowsEnabled()
     return BookshelfSettings.read("spine_no_shadows", false) ~= true
 end
+-- shadowAssets() -> paint the book shadows from the image masks
+-- (lib/bookshelf_shadow_assets) instead of the banded ramps. EXPERIMENT.
+function SpineShelf.shadowAssets()
+    return BookshelfSettings.read("spine_shadow_assets", false) == true
+end
+-- paintShadowAssets(bb, x, y, cols, opts) -> true when the masks painted
+-- the row's recess; false (masks missing, or a paint error) leaves it to the
+-- banded painter.
+function SpineShelf.paintShadowAssets(bb, x, y, cols, opts)
+    local ok, done = pcall(function()
+        return require("lib/bookshelf_shadow_assets").paintRow(bb, x, y, cols, opts)
+    end)
+    if not ok then logger.warn("[bookshelf] shadow assets:", done) end
+    return ok and done == true
+end
 -- shadeDesign(bb, x, y, w, h, by) -- darken (lighten, in a night frame) a
 -- patch of a pack's plank design by `by`: how a shadow falls on a design,
 -- where on Bookshelf's own plank it would be a computed plank colour.
@@ -4775,7 +4790,14 @@ function SpineShelf.rowWidget(opts)
             local halo = Screen:scaleBySize(RECESS_HALO_DP)
             local side = Screen:scaleBySize(RECESS_SIDE_DP)
             recess = Widget:extend{}
+            local assets = SpineShelf.shadowAssets()
             function recess:paintTo(bb, x, y)
+                if assets and SpineShelf.paintShadowAssets(bb, x, y, cols, {
+                            stand_h = stand_h, width = opts.width,
+                            below = opts.height - stand_h - fh, night = night,
+                        }) then
+                    return
+                end
                 pcall(function()
                     -- Strongest at the plank's back edge, fading to nothing by
                     -- the top. plankBandT is 0 at that back edge -- its least

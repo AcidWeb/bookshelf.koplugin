@@ -19,3 +19,5 @@ assets/wallpapers           -export-ignore
 assets/wallpapers/**        -export-ignore
 assets/planks               -export-ignore
 assets/planks/**            -export-ignore
+assets/shadows              -export-ignore
+assets/shadows/**           -export-ignore
