@@ -624,6 +624,18 @@ function BookshelfWidget:handleEvent(event)
         -- unaffected.
         if Device.screen_saver_lock then return false end
 
+        -- An edge swipe or corner hold the reader gave its own action in
+        -- KOReader's Gestures runs that action, ahead of bookshelf's own use
+        -- of the gesture (GestureZones.tryUserFirst; GitHub issue 476).
+        do
+            local host = require("apps/filemanager/filemanager").instance
+            if not host then
+                local Park = require("lib/bookshelf_reader_park")
+                if Park.isParked() then host = require("apps/reader/readerui").instance end
+            end
+            if host and GestureZones.tryUserFirst(event.args[1], host) then return true end
+        end
+
         -- Children first: let our own widget tree (chevron buttons, chip
         -- strip, hero, shelf covers, swipe zones) consume the gesture
         -- before falling through to FM. KOReader's normal dispatch is

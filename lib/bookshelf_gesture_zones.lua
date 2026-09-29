@@ -61,6 +61,29 @@ function GestureZones.tryFMZones(ev, fm)
     end, fm.file_chooser)
 end
 
+-- tryUserFirst(ev, host) -> boolean
+-- The gestures a reader may have given their own action in KOReader that
+-- bookshelf also uses: edge swipes along the top and bottom (shelf and
+-- chip pages) and corner holds (book details). A configured one runs the
+-- reader's action BEFORE bookshelf's widgets see the gesture (GitHub issue
+-- 476); an unset one returns nil from the Gestures plugin and bookshelf
+-- keeps it. Taps and pinches stay bookshelf's: the corner taps are its
+-- menu buttons, the pinch its size. host: FileManager.instance, or the
+-- parked ReaderUI.
+local USER_FIRST = {
+    one_finger_swipe_top_edge_left = true, one_finger_swipe_top_edge_right = true,
+    one_finger_swipe_bottom_edge_left = true, one_finger_swipe_bottom_edge_right = true,
+    hold_top_left_corner = true, hold_top_right_corner = true,
+    hold_bottom_left_corner = true, hold_bottom_right_corner = true,
+}
+function GestureZones.tryUserFirst(ev, host)
+    if not (host and ev) or (ev.ges ~= "swipe" and ev.ges ~= "hold") then return false end
+    local user_gestures = (host.gestures and host.gestures.gestures) or {}
+    return _tryHostZones(ev, host, function(id)
+        return USER_FIRST[id] and user_gestures[id] ~= nil
+    end, host.file_chooser)
+end
+
 -- tryReaderZones(ev, rui) -> boolean
 -- Hot parking: while the shelf sits above a live ReaderUI (no FileManager
 -- exists - KOReader kills FM when a book opens), the reader hosts the
