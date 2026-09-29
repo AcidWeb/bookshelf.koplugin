@@ -58,4 +58,16 @@ t.test("the switch is offered as a performance tweak, and drops the plan when fl
         "the depth is built into the shelf plan, so a flip has to drop it")
 end)
 
+t.test("flipping the switch rebuilds the shelf on screen", function()
+    -- Dropping the plan alone left the shelf as it was until something else
+    -- rebuilt it, so the switch looked like it did nothing (maintainer).
+    -- Same as the plank-design switch beside it: rebuild, redraw, update the
+    -- tick.
+    local row = settings:match('(text = _%("Disable spine mode shadows"%).-\n        },)')
+    assert(row, "the performance row is missing")
+    assert(row:find("self._bw:_rebuild()", 1, true), "the flip does not rebuild the shelf")
+    assert(row:find('UIManager:setDirty("all"', 1, true), "the flip does not redraw")
+    assert(row:find("touchmenu_instance:updateItems()", 1, true), "the tick is not refreshed")
+end)
+
 t.done()

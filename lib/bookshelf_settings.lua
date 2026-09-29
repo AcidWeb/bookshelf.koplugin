@@ -3544,7 +3544,7 @@ function Settings:_performanceSubItems()
                 return BookshelfSettings.read("spine_no_shadows", false) == true
             end,
             keep_menu_open = true,
-            callback = function()
+            callback = function(touchmenu_instance)
                 local off = BookshelfSettings.read("spine_no_shadows", false) == true
                 BookshelfSettings.save("spine_no_shadows", not off)
                 -- The depth is built into the shelf PLAN (the recess is a
@@ -3555,6 +3555,11 @@ function Settings:_performanceSubItems()
                     local SpineShelf = require("lib/bookshelf_spine_shelf")
                     if SpineShelf.dropPlanCache then SpineShelf.dropPlanCache() end
                 end)
+                -- And the shelf on screen has to be rebuilt from it, or the
+                -- flip shows nothing until something else rebuilds it.
+                if self._bw and self._bw._rebuild then self._bw:_rebuild() end
+                UIManager:setDirty("all", "full")
+                if touchmenu_instance then touchmenu_instance:updateItems() end
             end,
         },
         {

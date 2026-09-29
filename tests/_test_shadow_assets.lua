@@ -185,6 +185,22 @@ do
     ok(b and b.dy == 29 and b.dy + b.h == 31, "halo rows 29..30, ending one row INTO the book at 30")
 end
 
+-- a contact strip shorter than the mask gets the mask STRETCHED to it, so
+-- its fade always finishes (cropping cut it off: a flat band, then a step)
+do
+    local a, bb = set(), fakeBB()
+    a.foot_l, a.foot_r, a.foot = fakeBuf("FL", 7, 4), fakeBuf("FR", 7, 4), 4
+    a.feet = {}
+    scaled = {}
+    SA.foot(bb, a, 10, 20, 30, 2, 0, 0)
+    local b = bb.blits[1]
+    ok(b and b.h == 2 and b.sy == 0 and b.src.name == "FL@7x2", "foot mask stretched to 2 rows: " .. tostring(b and b.src.name))
+    SA.foot(fakeBB(), a, 10, 20, 30, 2, 0, 0)
+    local n = 0
+    for _i, sc in ipairs(scaled) do if sc.src == "FL" then n = n + 1 end end
+    ok(n == 1, "stretched once per height: " .. n)
+end
+
 -- no C blitter: nothing painted, and reported done
 do
     local bb = fakeBB()

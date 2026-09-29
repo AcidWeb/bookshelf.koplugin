@@ -24,8 +24,8 @@ local Screen     = Device.screen
 local M = {}
 
 -- dp layout of the files; keep in step with shadowgen.py
-M.DP = { side = 10, up = 96, wall = 10, below = 0, above = 2,
-         halo = 6, tile = 48, cap = 5, foot = 5 }
+M.DP = { side = 12, up = 96, wall = 10, below = 0, above = 2,
+         halo = 6, tile = 48, cap = 5, foot = 4 }
 -- joined wedges kept per set (a page holds a few dozen book heights)
 M.WEDGE_CACHE = 96
 
@@ -233,13 +233,34 @@ end
 
 -- foot(bb, a, x0, x1, y, h, lcap, rcap): the contact line under a run
 -- [x0, x1), rows [y, y+h), with end caps lcap / rcap px wide (0: none).
+-- A strip SHORTER than the mask gets the mask stretched to it (once per
+-- height), not cropped: cropped, the fade was cut off part way, a flat band
+-- ending in a step on the plank.
+local function feet(a, h)
+    if h >= a.foot then return a.foot_l, a.foot_r end
+    a.feet = a.feet or {}
+    local f = a.feet[h]
+    if not f then
+        local ok, l, r = pcall(function()
+            return scaled(a.foot_l, a.foot_l:getWidth(), h),
+                   scaled(a.foot_r, a.foot_r:getWidth(), h)
+        end)
+        if not ok or not l then return nil end
+        f = { l, r }
+        a.feet[h] = f
+    end
+    return f[1], f[2]
+end
+
 function M.foot(bb, a, x0, x1, y, h, lcap, rcap)
     h = math.min(h, a.foot)
     if h <= 0 or x1 <= x0 then return end
+    local fl, fr = feet(a, h)
+    if not fl then return end
     lcap = math.min(lcap or a.cap, a.cap); rcap = math.min(rcap or a.cap, a.cap)
-    if lcap > 0 then blit(bb, a.foot_l, x0 - lcap, y, a.cap - lcap, 0, lcap, h) end
-    across(bb, a.foot_l, a.tile, a.cap, x0, x1, y, 0, h)
-    if rcap > 0 then blit(bb, a.foot_r, x1, y, a.tile, 0, rcap, h) end
+    if lcap > 0 then blit(bb, fl, x0 - lcap, y, a.cap - lcap, 0, lcap, h) end
+    across(bb, fl, a.tile, a.cap, x0, x1, y, 0, h)
+    if rcap > 0 then blit(bb, fr, x1, y, a.tile, 0, rcap, h) end
 end
 
 local DIRS  = { "right", "left" }
