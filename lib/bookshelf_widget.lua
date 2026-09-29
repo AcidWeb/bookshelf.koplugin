@@ -6130,6 +6130,9 @@ end
 
 function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     local SpineShelf = require("lib/bookshelf_spine_shelf")
+    -- A page the page map does not know moves onto the one that holds it,
+    -- so its ornaments come from an exact deal state (see _spineSnapToMap).
+    items = self:_spineSnapToMap(items, { content_w = content_w, shelf_h = shelf_h }) or items
     local shared = self:_shelfCallbacks()
     -- The options both of plan()'s passes must agree on (see _spinePlanBase),
     -- face-outs chosen from the chip's WHOLE list, not the page drawn here.
@@ -6511,7 +6514,11 @@ function BookshelfWidget:_spinePageFirsts(build, dims)
         -- Every page's start in the ornament deck (see _ornStartState).
         if c then
             c.page_orn = c.page_orn or {}
-            for k, st in pairs(plan.page_orn or {}) do c.page_orn[k] = st end
+            c.map_keys = {}
+            for k, st in pairs(plan.page_orn or {}) do
+                c.page_orn[k] = st
+                c.map_keys[k] = true
+            end
         end
         local pages = SpineLayout.paginate(plan.rows, self:_nShelves())
         local out = {}
@@ -6555,24 +6562,81 @@ function BookshelfWidget:_ornSig()
     return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), pool }, "|")
 end
 
+-- _ornFreshen(c, key): something the states depend on changed (a swap, a
+-- piece switched on or off, the level): forget them all but THIS page's, so
+-- the piece being edited stays where it is. A shuffle keeps nothing.
+function BookshelfWidget:_ornFreshen(c, key)
+    local Deck = require("lib/bookshelf_ornament_deck")
+    c.page_orn = c.page_orn or {}
+    local sig = self:_ornSig()
+    if c.orn_sig ~= sig then
+        local keep = (c.orn_epoch == Deck.epoch()) and c.page_orn[key] or nil
+        c.page_orn, c.page_firsts, c.map_keys = {}, nil, nil
+        if keep then c.page_orn[key] = keep end
+        c.orn_sig, c.orn_epoch = sig, Deck.epoch()
+    end
+end
+
+-- _spineSnapToMap(items, dims) -> the page's items from the new start, or nil
+--
+-- A cursor saved under another layout (a different row count; a book turned
+-- face-out before it) can start a page the page map does not know: 111 when
+-- the map's pages run 100, 117. Such a page had no deal state of its own and
+-- borrowed the nearest earlier one -- and a later render, with the map
+-- complete, borrowed a DIFFERENT one, so the pieces on screen swapped half a
+-- minute after a book was closed (maintainer; PW5 log: page 6 dealt from
+-- 0/0/0 while parked, from 1/2/1 on the return). Such a page moves to the
+-- map's page that holds its first book instead, whose state is exact.
+--
+-- Pages a render recorded (paging on from a known page) stay where they are;
+-- so does the chip's first page, and any source that is not the whole list.
+function BookshelfWidget:_spineSnapToMap(items, dims)
+    if not self:_isSpineMode() then return nil end
+    local c = self._spine_fetch_cache
+    if not c or self._spine_fetch_live == false then return nil end
+    local dc = self._draft_items_cache
+    local all = dc and dc.total_hint == nil and dc.all_items or nil
+    local cur, skip = self._cursor or 1, self:_spineSkip()
+    if not all or not items or all[cur] ~= items[1] then return nil end
+    if cur <= 1 and skip == 0 then return nil end
+    local key = self:_ornKey(cur, skip)
+    self:_ornFreshen(c, key)
+    if c.page_orn[key] then return nil end
+    self:_spinePageFirsts(true, dims)
+    c = self._spine_fetch_cache or c
+    if c.page_orn and c.page_orn[key] then return nil end
+    local best_c, best_s
+    for k in pairs(c.map_keys or {}) do
+        local kc, ks = k:match("^(%d+):(%d+)$")
+        kc, ks = tonumber(kc), tonumber(ks)
+        if kc and (kc < cur or (kc == cur and ks < skip))
+                and (not best_c or kc > best_c or (kc == best_c and ks > best_s)) then
+            best_c, best_s = kc, ks
+        end
+    end
+    if not best_c then return nil end
+    self:_setSpineCursor(best_c, best_s)
+    self:_syncPageFromCursor()
+    -- The selection is an index into the page: keep it on the same book.
+    if type(self._cursor_idx) == "number" then
+        self._cursor_idx = self._cursor_idx + (cur - best_c)
+    end
+    local out = {}
+    local n = #items + (cur - best_c)
+    for i = best_c, math.min(#all, best_c + n - 1) do out[#out + 1] = all[i] end
+    self._page_items = out
+    logger.info("[bookshelf] spine page moved onto the page map:", key, "->", self:_ornKey(best_c, best_s))
+    return out
+end
+
 function BookshelfWidget:_ornStartState(dims)
     local Deck = require("lib/bookshelf_ornament_deck")
     local cur, skip = self._cursor or 1, self:_spineSkip()
     local c = self._spine_fetch_cache
     -- An open-ended feed's window: the cache belongs to another chip.
     if not c or self._spine_fetch_live == false then return Deck.newState() end
-    c.page_orn = c.page_orn or {}
     local key = self:_ornKey(cur, skip)
-    -- Something the states depend on changed (a swap, a piece switched on or
-    -- off, the level): forget them all but THIS page's, so the piece being
-    -- edited stays where it is. A shuffle keeps nothing.
-    local sig = self:_ornSig()
-    if c.orn_sig ~= sig then
-        local keep = (c.orn_epoch == Deck.epoch()) and c.page_orn[key] or nil
-        c.page_orn, c.page_firsts = {}, nil
-        if keep then c.page_orn[key] = keep end
-        c.orn_sig, c.orn_epoch = sig, Deck.epoch()
-    end
+    self:_ornFreshen(c, key)
     if cur <= 1 and skip == 0 then return Deck.newState() end
     if c.page_orn[key] then return Deck.copyState(c.page_orn[key]) end
     self:_spinePageFirsts(true, dims)
@@ -6599,7 +6663,7 @@ function BookshelfWidget:_dropOrnPages(keep_current)
     if not c then return end
     local key = self:_ornKey(self._cursor or 1, self:_spineSkip())
     local keep = keep_current and c.page_orn and c.page_orn[key] or nil
-    c.page_firsts, c.page_orn = nil, {}
+    c.page_firsts, c.page_orn, c.map_keys = nil, {}, nil
     if keep then c.page_orn[key] = keep end
 end
 
