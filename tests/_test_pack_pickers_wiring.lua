@@ -47,4 +47,20 @@ t.test("pickers mark the choice with painted marks, not words", function()
     assert(not ob:find('_("Off")', 1, true), "the card still says Off")
 end)
 
+local browser = io.open("lib/bookshelf_ornament_browser.lua"):read("*a")
+t.test("the collection shows ornaments only, and offers Apply pack theme", function()
+    local items = browser:match("function Browser:_items%(%)(.-)\nend\n")
+    assert(items and not items:find("plankEntries", 1, true), "plank tiles are still listed")
+    assert(not browser:find("is_plank", 1, true), "plank branches are still there")
+    local foot = browser:match("function Browser:_footerRows%(%)(.-)\nend\n")
+    assert(foot and foot:find('_("Apply pack theme")', 1, true), "no Apply pack theme")
+    assert(foot:find('_("Undo pack theme")', 1, true) and foot:find("TP.appliedPack() == pack", 1, true),
+        "the button does not become Undo for the applied pack")
+    assert(foot:find("ConfirmBox:new{", 1, true) and foot:find("TP.applySummary(pack)", 1, true),
+        "Apply does not ask first, naming what changes")
+    assert(not foot:find('_("Colors: on")', 1, true), "the colors toggle is still in the footer")
+    local apply = browser:match("function Browser:_applyTheme%(pack%)(.-)\nend\n")
+    assert(apply and apply:find('bookshelf_plank_browser").show(', 1, true), "several planks do not open the picker")
+end)
+
 t.done()

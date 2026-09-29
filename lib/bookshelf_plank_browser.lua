@@ -115,7 +115,7 @@ local function renderCell(o, dimen)
     local pad = Space.padding.small
     local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
     local name = nameOf(o)
-    if o.kind == "pack" then name = T(_("%1 (%2)"), name, o.pack) end
+    if o.kind == "pack" then name = T(_("%1 (%2 pack)"), name, o.pack) end
     -- The title row, aligned left: the radio mark (filled for the plank in
     -- use), the name, and why it would not show when its pack is off.
     local HorizontalGroup = require("ui/widget/horizontalgroup")

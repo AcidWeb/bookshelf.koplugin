@@ -24,6 +24,13 @@
 -- plank design goes with the ornaments: it follows the pack's on/off and has
 -- its own entry in the ornament off-set; one plank shows at a time.
 local logger = require("logger")
+local ok_i, I18n = pcall(require, "lib/bookshelf_i18n")
+local _ = (ok_i and I18n and I18n.gettext) or function(x) return x end
+local ok_u, FUtil = pcall(require, "ffi/util")
+local T = (ok_u and FUtil and FUtil.template) or function(f, ...)
+    local args = { ... }
+    return (f:gsub("%%(%d)", function(i) return tostring(args[tonumber(i)]) end))
+end
 
 local M = {}
 
@@ -372,7 +379,7 @@ function M.choosePlank(choice)
 end
 
 -- plankRowLabel() -> what the Shelf plank row and Performance tweaks name:
--- "Oak", "Walnut (Planks)", or nil for the plain colour (the caller shows the
+-- "Oak", "Walnut (Planks pack)", or nil for the plain colour (the caller shows the
 -- colour's value).
 function M.plankRowLabel()
     local c = M.plankChoice()
@@ -380,7 +387,7 @@ function M.plankRowLabel()
     local p
     if c == "oak" then p = M.builtinPlank() else p = M._packPlank(c) end
     if not p then return nil end
-    if p.pack and p.name then return p.name .. " (" .. p.pack .. ")" end
+    if p.pack and p.name then return T(_("%1 (%2 pack)"), p.name, p.pack) end
     return M.plankLabel(p)
 end
 
@@ -402,6 +409,89 @@ function M.plankOptions()
         end
     end
     return out
+end
+
+-- ── Apply pack theme ──────────────────────────────────────────────────────
+-- One tap on a pack's tab uses what its theme/ has: its wallpaper as the
+-- default wallpaper (full screen follows through "Same as default" unless the
+-- reader set their own), its colour theme, its plank (a pack of several opens
+-- the plank picker instead of guessing). It asks first, naming what will
+-- change, and saves what it replaces, so the same button then undoes it
+-- exactly: "I applied a theme and want my plank back" (maintainer).
+--
+-- The snapshot is taken once: applying a second pack keeps the ORIGINAL
+-- values, so Undo returns to the reader's own look, not the first pack's.
+M.APPLIED_SETTING = "theme_applied"
+local SNAP = { plank = M.PLANK_SETTING, wood = M.WOOD_SETTING, wallpaper = "wallpaper_default",
+               wallpaper_own = "wallpaper_default_own", colours = M.COLOURS_SETTING }
+-- A saved nil, which a settings table cannot hold as a value.
+local NIL_MARK = "\0nil"
+
+function M.appliedPack()
+    local s = read(M.APPLIED_SETTING)
+    return type(s) == "table" and s.pack or nil
+end
+
+local function snapshot(pack)
+    local s = read(M.APPLIED_SETTING)
+    if type(s) ~= "table" or type(s.values) ~= "table" then
+        s = { values = {} }
+        for k, key in pairs(SNAP) do
+            local v = read(key)
+            if v == nil then v = NIL_MARK end
+            s.values[k] = v
+        end
+    end
+    s.pack = pack
+    save(M.APPLIED_SETTING, s)
+end
+
+-- undoPackTheme(): every saved value back as it was, unset ones unset.
+function M.undoPackTheme()
+    local s = read(M.APPLIED_SETTING)
+    if type(s) ~= "table" then return end
+    for k, key in pairs(SNAP) do
+        local v = s.values and s.values[k]
+        if v == NIL_MARK then v = nil end
+        save(key, v)
+    end
+    save(M.APPLIED_SETTING, nil)
+    M._plank_memo = nil
+end
+
+-- applySummary(pack) -> the confirmation's text: what applying will change.
+function M.applySummary(pack)
+    local th, parts = M.theme(pack), {}
+    if th.wallpaper then parts[#parts + 1] = _("wallpaper") end
+    local planks = th.planks or {}
+    if #planks == 1 then parts[#parts + 1] = T(_("%1 plank"), planks[1].name or pack)
+    elseif #planks > 1 then parts[#parts + 1] = _("a plank you choose") end
+    if th.colours then parts[#parts + 1] = _("colors") end
+    local list = parts[#parts] or ""
+    if #parts > 1 then
+        list = T(_("%1 and %2"), table.concat(parts, ", ", 1, #parts - 1), parts[#parts])
+    end
+    return T(_("Uses %1's %2. Undo pack theme on this tab puts yours back."), pack, list)
+end
+
+-- applyPackTheme(pack) -> { wallpaper, colours, plank, pick_plank }: what it
+-- did (pick_plank: the pack has several planks, the caller opens the picker).
+function M.applyPackTheme(pack)
+    snapshot(pack)
+    orn().setPackOff(pack, false)
+    local th = M.theme(pack)
+    local r = { wallpaper = false, colours = false, plank = false, pick_plank = false }
+    if th.wallpaper then
+        for _i, e in ipairs(M.wallpaperEntries()) do
+            if e.pack == pack then M.chooseWallpaper("wallpaper_default", e.name); r.wallpaper = true end
+        end
+    end
+    if th.colours then M.setColoursPack(pack); r.colours = true end
+    local planks = th.planks or {}
+    if #planks == 1 then M.choosePlank(planks[1].id); r.plank = true
+    elseif #planks > 1 then r.pick_plank = true end
+    M._plank_memo = nil
+    return r
 end
 
 -- invertHex("#RRGGBB") -> its negative, same shape. What
@@ -514,25 +604,6 @@ function M.isDarkName(name)
     local stem = file and file:match("^(.-)%.[^%.]+$")
     stem = stem and stem:lower()
     return stem == "wallpaper.dark" or stem == "wallpaper.full.dark"
-end
-
--- plankEntries(pack) -> ornament-shaped entries for the pack's plank designs,
--- so the browser shows and switches them like ornaments. Previewed from each
--- middle image; never placed on a shelf by the ornament picker (is_plank).
-function M.plankEntries(pack)
-    local out = {}
-    for _i, p in ipairs(M.theme(pack).planks or {}) do
-        local f = io.open(p.middle, "rb")
-        local head = f and f:read(64)
-        if f then f:close() end
-        local aspect = head and require("lib/bookshelf_ornaments").parsePngHeader(head)
-        if aspect then
-            out[#out + 1] = { path = p.middle, name = p.id, file = p.name or "Plank",
-                              pack = pack, aspect = aspect, overhang = 0,
-                              is_plank = true, plank = p }
-        end
-    end
-    return out
 end
 
 -- withOverride(items, label, on_deactivate, keep) -> the menu with, while a

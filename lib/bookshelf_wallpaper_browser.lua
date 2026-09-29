@@ -118,7 +118,7 @@ local function renderCell(key, item, dimen)
     local border, pad = Size.border.default, Space.padding.default
     local inner_w = dimen.w - 2 * (border + pad)
     local name = item.label
-    if item.kind == "pack" then name = T(_("%1 (pack)"), item.label) end
+    if item.kind == "pack" then name = T(_("%1 pack"), item.label) end
     local lines = VerticalGroup:new{ align = "center",
         TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = inner_w } }
     if WB.inUse(key, item) then

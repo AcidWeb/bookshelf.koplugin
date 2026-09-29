@@ -141,35 +141,13 @@ function Browser:_items()
                               pack_off = Orn.isPackOff(e.pack) }
         end
     end
-    -- A pack's plank design (theme/plank.*.png) as one more item, so it is
-    -- seen and switched like an ornament. One shows at a time: the item is
-    -- "on" only for the pack whose plank is on the shelf.
-    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
-    if ok_t and TP then
-        local _all, packs = Orn.listAll()
-        local shown = TP.activePlank()
-        for _i, pack in ipairs(packs or {}) do
-            if self.chip == ALL or self.chip == pack then
-                for _j, e in ipairs(TP.plankEntries(pack)) do
-                    out[#out + 1] = { entry = e, off = not (shown and shown.id == e.name),
-                                      pack = pack, pack_off = Orn.isPackOff(pack) }
-                end
-            end
-        end
-    end
     return out
 end
 
--- _toggle(item): switch an ornament, or a pack's plank design, on or off.
--- A plank in a switched-off pack switches the pack on too: otherwise the tap
--- changed nothing anyone could see (maintainer).
+-- _toggle(item): switch an ornament on or off. (Planks are chosen in the
+-- plank picker, wallpapers in the wallpaper picker.)
 function Browser:_toggle(item)
-    if item.entry.is_plank then
-        if item.off and item.pack_off then O().setPackOff(item.pack, false) end
-        require("lib/bookshelf_theme_pack").choosePlank(item.off and item.entry.name or "colour")
-    else
-        O().setOff(item.entry.name, not item.off)
-    end
+    O().setOff(item.entry.name, not item.off)
     self:_changed()
 end
 
@@ -177,7 +155,6 @@ end
 -- takes the slot; a switched-off one, or one in a switched-off pack, is
 -- switched on, or the swap would put nothing there.
 function Browser:_pick(item)
-    if item.entry.is_plank then return end
     if item.off then O().setOff(item.entry.name, false) end
     if item.pack_off and item.entry.pack then O().setPackOff(item.entry.pack, false) end
     self.opts.pick(item.entry)
@@ -249,16 +226,13 @@ function Browser:_longTap(item)
             end,
         }},
     }
-    -- The plank design is part of the pack's theme folder, not a loose file.
-    if not item.entry.is_plank then
-        buttons[#buttons + 1] = {{
-            text = _("Delete\xe2\x80\xa6"),
-            callback = function()
-                UIManager:close(d)
-                self:_confirmDelete(item)
-            end,
-        }}
-    end
+    buttons[#buttons + 1] = {{
+        text = _("Delete\xe2\x80\xa6"),
+        callback = function()
+            UIManager:close(d)
+            self:_confirmDelete(item)
+        end,
+    }}
     d = ButtonDialog:new{ title = item.entry.name, buttons = buttons }
     UIManager:show(d)
 end
@@ -299,10 +273,26 @@ function Browser:_packAction()
     }
 end
 
--- _footerRows() -> the footer: the pack's theme switches in their own row, only
--- for the parts this pack actually has (theme/ wallpaper, colours.json), above
--- the pack button and Close. A wallpaper or colours switch changes the whole
--- screen, so it asks for a full repaint.
+-- _applyTheme(pack): Apply pack theme, confirmed. A pack of several planks
+-- opens the plank picker on its tab to choose one (the rest is applied).
+function Browser:_applyTheme(pack)
+    local TP = require("lib/bookshelf_theme_pack")
+    local r = TP.applyPackTheme(pack)
+    self._full = true
+    self:_changed()
+    if r.pick_plank then
+        self._close()
+        require("lib/bookshelf_plank_browser").show({ chip = pack, on_change = self.on_change })
+    else
+        UIManager:show(InfoMessage:new{ text = T(_("%1 theme applied"), pack), timeout = 2 })
+    end
+end
+
+-- _footerRows() -> the footer: on a pack's tab whose theme/ has anything
+-- (a wallpaper, planks, colours), Apply pack theme in its own row, above the
+-- pack button and Close. Apply asks first, naming what will change; on the
+-- pack last applied the same button reads Undo pack theme and puts back
+-- exactly what Apply replaced (bookshelf_theme_pack).
 function Browser:_footerRows()
     local rows = {}
     local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Apply"), on_tap = self._close }
@@ -310,19 +300,24 @@ function Browser:_footerRows()
     if self.opts.pick then return { { close } } end
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
     if ok_t and TP and self:_isPack(self.chip) then
-        local th, pack, row = TP.theme(self.chip), self.chip, {}
-        if th.colours then
-            row[#row + 1] = { key = "colours",
+        local th, pack = TP.theme(self.chip), self.chip
+        if th.wallpaper or th.colours or (th.planks and #th.planks > 0) then
+            rows[#rows + 1] = { { key = "apply_theme",
                 label_func = function()
-                    return TP.activeColoursPack() == pack and _("Colors: on") or _("Colors: off")
+                    return TP.appliedPack() == pack and _("Undo pack theme") or _("Apply pack theme")
                 end,
                 on_tap = function()
-                    TP.setColoursPack(TP.activeColoursPack() ~= pack and pack or nil)
-                    self._full = true
-                    self:_changed()
-                end }
+                    if TP.appliedPack() == pack then
+                        TP.undoPackTheme()
+                        self._full = true
+                        self:_changed()
+                        UIManager:show(InfoMessage:new{ text = T(_("%1 theme undone"), pack), timeout = 2 })
+                        return
+                    end
+                    UIManager:show(ConfirmBox:new{ text = TP.applySummary(pack), ok_text = _("Apply"),
+                        ok_callback = function() self:_applyTheme(pack) end })
+                end } }
         end
-        if #row > 0 then rows[#rows + 1] = row end
     end
     rows[#rows + 1] = { self:_packAction(), close }
     return rows
@@ -335,12 +330,6 @@ end
 function Browser.show(on_change, opts)
     local self = setmetatable({ chip = ALL, on_change = on_change, opts = opts or {} },
                               { __index = Browser })
-    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
-    local function plankId()
-        local pl = ok_t and TP and TP.activePlank()
-        return pl and pl.id or nil
-    end
-    local plank_before = plankId()
     O().beginDeferred()
     self.items = self:_items()
     local function cols() return Screen:getWidth() > Screen:getHeight() and 4 or 3 end
@@ -348,15 +337,15 @@ function Browser.show(on_change, opts)
         if self.modal then UIManager:close(self.modal); self.modal = nil end
     end
     -- However it closes (Close, the title's X, Back): write the switches,
-    -- rebuild the shelf once, and repaint the whole screen only if what shows
-    -- changed there: a plank design's lower band hangs below the last row,
-    -- into the strip a shelf refresh stops short of, and a wallpaper or a
-    -- colour theme is the whole screen.
+    -- rebuild the shelf once, and repaint the whole screen only after Apply
+    -- or Undo pack theme (self._full): a wallpaper or a colour theme is the
+    -- whole screen, and a plank design's lower band hangs below the last row,
+    -- into the strip a shelf refresh stops short of.
     local function closed()
         O().endDeferred()
         if not self._dirty then return end
         if self.on_change then pcall(self.on_change) end
-        if self._full or plankId() ~= plank_before then
+        if self._full then
             UIManager:setDirty("all", "full")
         end
     end

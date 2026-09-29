@@ -1498,7 +1498,7 @@ function Settings:_wallpaperMenu()
         local TP = require("lib/bookshelf_theme_pack")
         if TP.isPackName(name) then
             if TP.variantName(name, false, false) then
-                return T(_("%1 (pack)"), name:match("^theme%-pack\1([^\1]+)") or "?")
+                return T(_("%1 pack"), name:match("^theme%-pack\1([^\1]+)") or "?")
             end
             name = BookshelfSettings.read(setting .. "_own")
             if type(name) ~= "string" or name == "" or TP.isPackName(name) then return fallback end
