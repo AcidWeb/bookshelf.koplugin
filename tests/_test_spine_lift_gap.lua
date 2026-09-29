@@ -366,10 +366,19 @@ t.test("a lifted face-out no longer asks _behindAt for its corners", function()
         "the lifted case still takes _behindAt's page white")
 end)
 
-t.test("a standing face-out keeps its plank-shade nick", function()
+t.test("a standing face-out takes its nick from the shelf below it", function()
+    -- It used to paint a COMPUTED plank shade into the corner. Over a plank
+    -- design, or under the mask shadows' contact line, that colour is not
+    -- what surrounds the corner: on the PW5 it came out 43 against a 105
+    -- contact line and 100-120 shadow, so the nick merged into the black
+    -- border and could not be seen (maintainer). The spines' feet already
+    -- copy the row below; the face-out now does the same, which is the
+    -- contact shade whichever painter drew it.
     local b = feetBody()
-    assert(b:find("_behindAt(self.plank, y + h, false)", 1, true),
-        "the standing face-out lost the nick it always had")
+    assert(b:find("SpineShelf.nickFromBelow(bb, x, y + h, w, hl)", 1, true),
+        "the standing face-out does not take its nick from the shelf below")
+    assert(not b:find("_behindAt(self.plank, y + h, false)", 1, true),
+        "the standing face-out still paints a computed shade into its corners")
 end)
 
 t.test("the card-level pre-fill built on the wrong theory is gone", function()

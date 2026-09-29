@@ -161,10 +161,12 @@ t.test("the band painters read the STASHED surface, never the row", function()
     -- Two painters left this count by design: the space under a lifted spine
     -- and under a lifted face-out no longer REPRODUCE the plank's bands, they
     -- copy the shelf painted beside them (SpineShelf.fillLiftGap), so there is
-    -- nothing of theirs left to recompute or drift. The floor counts the
-    -- definition plus the painters that still reproduce bands.
+    -- nothing of theirs left to recompute or drift. A standing book's foot
+    -- nick joined them: the face-out's now copies the row below
+    -- (nickFromBelow), like the spines'. The floor counts the definition plus
+    -- the painters that still reproduce bands.
     local n = select(2, src:gsub("SpineShelf%.plankSurfaceOf%(", ""))
-    assert(n >= 3, "a band painter has stopped using the stashed surface: " .. n)
+    assert(n >= 2, "a band painter has stopped using the stashed surface: " .. n)
     assert(src:match("surf = SpineShelf%.plankSurface%(opts%.height%)"),
         "rowWidget no longer stashes the band on its plank descriptors")
     local stashes = select(2, src:gsub("surf = surf", ""))

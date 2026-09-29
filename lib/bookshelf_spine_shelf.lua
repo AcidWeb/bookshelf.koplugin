@@ -905,82 +905,6 @@ local function _plankRowAt(y_rel, surf_h, mul)
     return _plankBandColor(math.floor(surf_h * i / PLANK_BANDS), surf_h, mul)
 end
 
--- ── The chamfer where a book meets the shelf ────────────────────────────────
---
--- A real book's corners are never square against a shelf, and taking the
--- corner pixel off lets the shelf show through -- which is what stops a row of
--- spines reading as a bar chart.
---
--- The corner is REMOVED: the pixel is replaced by what would be there if the
--- book were not. Two earlier attempts painted a shadowed plank tone into it,
--- which read as nothing at all against the book's own dark border, and then a
--- bigger version of the same, which read as a notch cut into a square foot
--- (maintainer, both times).
---
--- It cannot be done by copying what is underneath, which was the obvious
--- answer: a spine renders into its OWN offscreen buffer (see the render
--- cache), filled with the page ground and blitted opaquely, so nothing behind
--- it is visible to this code at all. Reading a pixel there returns the page
--- ground or uninitialised memory, not the plank. The colour is therefore
--- computed the same way the lifted book's under-strip reproduces the plank --
--- _plankBandColor with the same quantisation -- so the cut matches the shelf
--- it exposes instead of approximating it.
---
--- behind(yy) -> the colour the shelf shows at that row: the plank's own band
--- where the surface reaches, the page ground above it (a lifted book's corner
--- shows the page, which is the point of keeping the cut when it lifts).
-local function _behindAt(plank, slot_bottom, lifted)
-    return function(yy)
-        if plank and not lifted then
-            local surf_h   = SpineShelf.plankSurfaceOf(plank)
-            local surf_top = slot_bottom + plank.inset - surf_h
-            if yy >= surf_top then
-                -- The CONTACT shade, not the lit band and not the lifted
-                -- book's softer patch. The plank a pixel below the book is in
-                -- full light; the pixel the corner exposes is UNDER the book,
-                -- where nothing reaches. Taking the lit tone read as a bright
-                -- speck, and 0.72 -- the lifted patch's value, tried next --
-                -- still came out brighter than the spine's own dark board
-                -- edge, so the nick read as a highlight on the corner rather
-                -- than as a corner coming off (maintainer, twice).
-                return _plankRowAt(yy - surf_top, surf_h,
-                                   SpineShelf.PLANK_CONTACT_SHADE)
-            end
-        end
-        -- Page ground in PRE-INVERT space, matching the buffer the slot is
-        -- filled with, so night mode inverts it with everything else.
-        --
-        -- Transparent over a wallpaper, for the same reason as the head's
-        -- notch: a lifted book's foot corners should show the picture behind
-        -- it, and white there is a speck rather than a chamfer.
-        if SpineShelf.seeThrough() then
-            -- NIL, not a transparent colour. The slot buffer is BB8A on a
-            -- greyscale device and an RGB32 alpha does not survive the
-            -- conversion -- so "transparent" painted as solid BLACK, which is
-            -- invisible by day and inverts to bright white pixels in night
-            -- mode (maintainer: bright corners on a lifted spine, night
-            -- only). Nil means "paint nothing", and what is already in the
-            -- buffer there is the transparency we wanted.
-            return nil
-        end
-        return Blitbuffer.ColorRGB32(0xFF, 0xFF, 0xFF, 0xFF)
-    end
-end
-
--- _cutFootCorners(bb, x, bottom, w, n, behind) -- n px square off each BOTTOM
--- corner. `bottom` is one past the book's last row.
-local function _cutFootCorners(bb, x, bottom, w, n, behind)
-    for dy = 0, n - 1 do
-        local yy = bottom - 1 - dy
-        local c = behind(yy)
-        -- nil = leave it alone; see _behindAt.
-        if type(c) == "nil" then goto continue end
-        bb:paintRectRGB32(x, yy, n, 1, c)
-        bb:paintRectRGB32(x + w - n, yy, n, 1, c)
-        ::continue::
-    end
-end
-
 local function _plankLit(t, mul)
     local r, g, b = _plankRGB()
     r = r + (255 - r) * t
@@ -2539,16 +2463,18 @@ function FaceOutFeet:paintTo(bb, x, y)
     if self.lifted then
         -- A LIFTED face-out's corners come off into the shelf the gap below it
         -- is filled from (the column just left of it, which face_gap makes
-        -- shelf) -- not into _behindAt's lifted answer, which is page white on
-        -- a plain page. That was the report: a 2x2 of 255 at each bottom
+        -- shelf) -- not into a computed "behind" colour, which was page white
+        -- on a plain page. That was the report: a 2x2 of 255 at each bottom
         -- corner of a lifted cover, hl being scaleBySize(1), on a shelf of 50
         -- all round. Painted here, after the cover, because the card itself
         -- is square and never cuts its corners.
         SpineShelf.fillLiftGap(bb, x, y + h - hl, hl, hl, x - 1)
         SpineShelf.fillLiftGap(bb, x + w - hl, y + h - hl, hl, hl, x - 1)
     else
-        _cutFootCorners(bb, x, y + h, w, hl,
-                        _behindAt(self.plank, y + h, false))
+        -- Standing: the corner takes the shelf directly below the cover, as
+        -- the spines' feet do -- the contact shade whichever painter drew it
+        -- (the band above, or the mask shadows' line), over a design or not.
+        SpineShelf.nickFromBelow(bb, x, y + h, w, hl)
     end
 end
 
