@@ -301,19 +301,22 @@ function Browser:_footerRows()
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
     if ok_t and TP and self:_isPack(self.chip) then
         local th, pack = TP.theme(self.chip), self.chip
-        if th.wallpaper or th.colours or (th.planks and #th.planks > 0) then
-            rows[#rows + 1] = { { key = "apply_theme",
-                label_func = function()
-                    return TP.appliedPack() == pack and _("Undo pack theme") or _("Apply pack theme")
-                end,
+        -- The theme applied: Undo alone, beside Apply. Undo puts the reader's
+        -- own look back and switches the pack off again if Apply switched it
+        -- on; a Switch pack off beside it would do half of that, and the two
+        -- read as the same thing (maintainer).
+        if TP.appliedPack() == pack then
+            return { { { key = "undo_theme", label = _("Undo pack theme"),
                 on_tap = function()
-                    if TP.appliedPack() == pack then
-                        TP.undoPackTheme()
-                        self._full = true
-                        self:_changed()
-                        UIManager:show(InfoMessage:new{ text = T(_("%1 theme undone"), pack), timeout = 2 })
-                        return
-                    end
+                    TP.undoPackTheme()
+                    self._full = true
+                    self:_changed()
+                    UIManager:show(InfoMessage:new{ text = T(_("%1 theme undone"), pack), timeout = 2 })
+                end }, close } }
+        end
+        if th.wallpaper or th.colours or (th.planks and #th.planks > 0) then
+            rows[#rows + 1] = { { key = "apply_theme", label = _("Apply pack theme"),
+                on_tap = function()
                     UIManager:show(ConfirmBox:new{ text = TP.applySummary(pack), ok_text = _("Apply"),
                         ok_callback = function() self:_applyTheme(pack) end })
                 end } }

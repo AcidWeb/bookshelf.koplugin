@@ -80,4 +80,14 @@ t.test("a Color theme from an off pack is marked, and choosing it switches the p
     assert(row:find("setPackOff(p, false)", 1, true), "choosing it does not switch the pack on")
 end)
 
+t.test("while a pack's theme is applied its tab offers Undo, not Switch pack off as well", function()
+    local foot = browser:match("function Browser:_footerRows%(%)(.-)\nend\n")
+    assert(foot, "_footerRows moved")
+    local applied = foot:match("if TP%.appliedPack%(%) == pack then\n(.-)\n        end\n")
+    assert(applied, "no footer of its own for an applied theme")
+    assert(applied:find('_("Undo pack theme")', 1, true) and applied:find("close", 1, true),
+        "the applied footer is Undo and Apply")
+    assert(not applied:find("_packAction", 1, true), "Switch pack off is offered beside Undo")
+end)
+
 t.done()
