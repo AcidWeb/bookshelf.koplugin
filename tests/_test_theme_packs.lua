@@ -580,4 +580,20 @@ t.test("shownWallpaper: a pack default switched off shows the reader's own, in b
     eq(TP.shownWallpaper(true, false), nil, "full screen None stays None")
 end)
 
+t.test("Undo switches the pack back off when Apply was what switched it on", function()
+    local TP, d, settings, packs_off = setup()
+    mkwall(d, "Japan")
+    TP.invalidate()
+    packs_off["Japan"] = true
+    TP.applyPackTheme("Japan")
+    eq(packs_off["Japan"], nil)
+    TP.undoPackTheme()
+    eq(packs_off["Japan"], true, "its ornaments leave with its theme")
+    -- A pack that was already on stays on.
+    local TP2, d2, _s2, packs_off2 = setup()
+    mkwall(d2, "Japan"); TP2.invalidate()
+    TP2.applyPackTheme("Japan"); TP2.undoPackTheme()
+    eq(packs_off2["Japan"], nil)
+end)
+
 t.done()

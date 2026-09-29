@@ -474,6 +474,7 @@ function M.undoPackTheme()
                 for _i, k in ipairs(keys) do save(k, dec(s.before[k])) end
             end
         end
+        for p in pairs(s.switched_on or {}) do orn().setPackOff(p, true) end
     end
     save(M.APPLIED_SETTING, nil)
     M._plank_memo = nil
@@ -506,6 +507,12 @@ function M.applyPackTheme(pack)
         if not held(s, keys) then
             for _i, k in ipairs(keys) do s.before[k] = enc(read(k)); s.applied[k] = nil end
         end
+    end
+    -- Apply switches the pack on; Undo switches it back off if Apply was
+    -- what switched it on, so its ornaments leave with its theme.
+    if orn().isPackOff(pack) then
+        s.switched_on = s.switched_on or {}
+        s.switched_on[pack] = true
     end
     orn().setPackOff(pack, false)
     local th = M.theme(pack)
