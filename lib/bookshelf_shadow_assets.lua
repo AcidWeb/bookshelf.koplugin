@@ -24,7 +24,7 @@ local Screen     = Device.screen
 local M = {}
 
 -- dp layout of the files; keep in step with shadowgen.py
-M.DP = { side = 10, up = 96, wall = 10, below = 3, above = 2,
+M.DP = { side = 10, up = 96, wall = 10, below = 0, above = 2,
          halo = 6, tile = 48, cap = 5, foot = 5 }
 -- stretched tapers kept per set (a page holds a few dozen book heights)
 M.TAPER_CACHE = 96
@@ -104,7 +104,7 @@ function M.get(night)
     local D = M.DP
     local s = function(dp) return math.max(1, Screen:scaleBySize(dp)) end
     local side_w, up = s(D.side), s(D.up)
-    local low = s(D.wall) + s(D.below)
+    local low = s(D.wall) + Screen:scaleBySize(D.below)
     local tile, cap, halo, foot = s(D.tile), s(D.cap), s(D.halo), s(D.foot)
     local dir = pluginRoot() .. "/assets/shadows/"
     local side = loadMask(dir .. "shadow.side.png", side_w, up + low)
@@ -121,7 +121,7 @@ function M.get(night)
         low_r = tint(side, grey, false, up, low), low_l = tint(side, grey, true, up, low),
         top = tint(top, grey),
         foot_l = tint(ft, grey), foot_r = tint(ft, grey, true),
-        side_w = side_w, low = low, wall = s(D.wall), below = s(D.below),
+        side_w = side_w, low = low, wall = s(D.wall), below = Screen:scaleBySize(D.below),
         above = s(D.above), tile = tile, cap = cap, halo = halo, foot = foot,
         tapers = {}, n_tapers = 0,
     }
