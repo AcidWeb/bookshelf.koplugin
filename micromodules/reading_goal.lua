@@ -426,7 +426,7 @@ local function computeGoal(goal, data, t)
         local met = today_min >= target
         header_text  = _("Daily goal")
         big_text     = tostring(today_min)
-        suffix       = " / " .. tostring(target) .. " min"
+        suffix       = " / " .. T(_("%1 min"), target)
         if met then suffix = suffix .. " \xE2\x9C\x93" end
         pct          = math.min(1, data.today_secs / math.max(1, target * 60))
         local left   = math.max(0, target - today_min)
