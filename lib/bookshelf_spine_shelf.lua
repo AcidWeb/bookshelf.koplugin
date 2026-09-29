@@ -2497,7 +2497,10 @@ function FaceOutFeet:paintTo(bb, x, y)
     -- front, which is the whole of the ambient occlusion principle: the
     -- shadow is deepest where the two surfaces meet.
     local pk = self.plank
-    if pk and not self.lifted then
+    -- With the shadow masks on they draw this line, matched to the spines';
+    -- this strip repaints the board's colour and would wipe it out.
+    local masks = SpineShelf.shadowsEnabled() and SpineShelf.shadowAssets()
+    if pk and not self.lifted and not masks then
         local inset = math.floor(tonumber(pk.inset) or 0)
         -- Cover foot to the plank's front edge, and from there back one inset
         -- to where the neighbouring SPINES stand. That second line is where

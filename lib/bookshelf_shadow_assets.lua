@@ -296,27 +296,29 @@ function M.paintRow(bb, ox, oy, cols, opts)
                    (not nb) and room or nil, np)
         end
     end
-    -- contact line: under each run of standing (not face-out) books
-    if below > 0 then
-        local i = 1
-        while i <= n do
-            local c = cols[i]
-            if (c.foot or 0) == 0 then
-                local j = i
-                while j < n and (cols[j + 1].foot or 0) == 0
-                        and cols[j + 1].x <= cols[j].x + cols[j].w do
-                    j = j + 1
-                end
-                local x0, x1 = c.x, cols[j].x + cols[j].w
-                local lroom = (i > 1) and (x0 - (cols[i - 1].x + cols[i - 1].w)) or x0
-                local rroom = (j < n) and (cols[j + 1].x - x1) or (width - x1)
-                M.foot(bb, a, ox + x0, ox + x1, oy + stand_h, below,
-                       math.max(0, lroom), math.max(0, rroom))
-                i = j + 1
-            else
-                i = i + 1
-            end
+    -- contact line: under each run of touching books that stand at the same
+    -- foot. Spines stand on the floor and their line covers the plank strip
+    -- in front of them (below); a face-out stands pushed back by its foot,
+    -- and its line runs from the cover's foot over that push, up to where
+    -- the spines stand -- the band FaceOutFeet paints without the masks.
+    local i = 1
+    while i <= n do
+        local c = cols[i]
+        local foot = c.foot or 0
+        local j = i
+        while j < n and (cols[j + 1].foot or 0) == foot
+                and cols[j + 1].x <= cols[j].x + cols[j].w do
+            j = j + 1
         end
+        local rows = (foot > 0) and foot or below
+        if rows > 0 then
+            local x0, x1 = c.x, cols[j].x + cols[j].w
+            local lroom = (i > 1) and (x0 - (cols[i - 1].x + cols[i - 1].w)) or x0
+            local rroom = (j < n) and (cols[j + 1].x - x1) or (width - x1)
+            M.foot(bb, a, ox + x0, ox + x1, oy + stand_h - foot, rows,
+                   math.max(0, lroom), math.max(0, rroom))
+        end
+        i = j + 1
     end
     return true
 end

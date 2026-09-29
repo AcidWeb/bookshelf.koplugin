@@ -237,6 +237,18 @@ t.test("a face-out gets a contact strip across its whole width", function()
         "the strip no longer indexes the board from its own front edge")
 end)
 
+t.test("with the shadow masks on, the face-out strip stands aside", function()
+    -- The masks draw the face-out's contact line themselves, matched to the
+    -- spines'. This strip repaints the board's own colour, and books paint
+    -- after the shadows, so left on it would wipe that line out and put the
+    -- old, heavier band back under the cover (maintainer: "doesn't look like
+    -- it's sitting flush").
+    local feet = src:match("function FaceOutFeet:paintTo.-\nend")
+    assert(feet, "FaceOutFeet:paintTo could not be located")
+    assert(feet:match("SpineShelf%.shadowAssets%(%)"),
+        "the strip still paints under the masks' contact line")
+end)
+
 -- ── reproducing the board ─────────────────────────────────────────────────
 
 t.test("everything that must MATCH the board goes through _plankRowAt", function()

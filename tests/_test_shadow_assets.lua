@@ -160,6 +160,22 @@ do
     ok(squeezed and not cut, "row end: the wedge squeezed into 2px")
 end
 
+-- a face-out (foot = its push back) gets the same contact line at its own
+-- foot, over the strip up to where the spines stand; the spines keep theirs
+do
+    SA._cache["d100"] = set()
+    local bb = fakeBB()
+    local cols = { { x = 10, w = 5, h = 8 }, { x = 15, w = 9, h = 6, foot = 2 }, { x = 24, w = 5, h = 8 } }
+    SA.paintRow(bb, 0, 0, cols, { stand_h = 20, width = 40, below = 2 })
+    local fo_w, spines = 0, 0
+    for _i, b in ipairs(bb.blits) do
+        if b.src == "FL" and b.dy == 18 and b.h == 2 and b.dx >= 15 and b.dx < 24 then fo_w = fo_w + b.w end
+        if b.src == "FL" and b.dy == 20 then spines = spines + 1 end
+    end
+    ok(fo_w == 9, "contact line across the face-out at its foot (row 18, 2 rows): " .. fo_w)
+    ok(spines >= 2, "the spines either side keep theirs: " .. spines)
+end
+
 -- no C blitter: nothing painted, and reported done
 do
     local bb = fakeBB()
