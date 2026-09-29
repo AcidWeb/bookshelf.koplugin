@@ -70,4 +70,11 @@ t.test("flipping the switch rebuilds the shelf on screen", function()
     assert(row:find("touchmenu_instance:updateItems()", 1, true), "the tick is not refreshed")
 end)
 
+t.test("the mask shadows are the default; an explicit false turns them off", function()
+    local body = shelf:match("function SpineShelf%.shadowAssets%(%)(.-)\nend")
+    assert(body, "shadowAssets() moved")
+    assert(body:find('read("spine_shadow_assets", true) ~= false', 1, true),
+        "the mask shadows are not the default")
+end)
+
 t.done()

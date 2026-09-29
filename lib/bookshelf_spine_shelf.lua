@@ -1849,9 +1849,11 @@ function SpineShelf.shadowsEnabled()
     return BookshelfSettings.read("spine_no_shadows", false) ~= true
 end
 -- shadowAssets() -> paint the book shadows from the image masks
--- (lib/bookshelf_shadow_assets) instead of the banded ramps. EXPERIMENT.
+-- (lib/bookshelf_shadow_assets). The default since 5.3; the banded ramps
+-- stay as the fallback when the masks cannot load, and the whole depth is
+-- still switched off by spine_no_shadows (Performance tweaks).
 function SpineShelf.shadowAssets()
-    return BookshelfSettings.read("spine_shadow_assets", false) == true
+    return BookshelfSettings.read("spine_shadow_assets", true) ~= false
 end
 -- paintShadowAssets(bb, x, y, cols, opts) -> true when the masks painted
 -- the row's recess; false (masks missing, or a paint error) leaves it to the
