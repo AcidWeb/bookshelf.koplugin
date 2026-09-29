@@ -101,7 +101,6 @@ end
 local function renderCell(o, dimen)
     if o.kind == "hint" then return renderHint(dimen) end
     local Blitbuffer      = require("ffi/blitbuffer")
-    local CenterContainer = require("ui/widget/container/centercontainer")
     local Font            = require("ui/font")
     local FrameContainer  = require("ui/widget/container/framecontainer")
     local Geom            = require("ui/geometry")
@@ -117,14 +116,24 @@ local function renderCell(o, dimen)
     local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
     local name = nameOf(o)
     if o.kind == "pack" then name = T(_("%1 (%2)"), name, o.pack) end
-    -- The one in use is marked by its radio mark (below), so the only
-    -- words under a plank are its name, and why it would not show.
-    local status = o.pack_off and _("Pack off") or nil
-    local lines = VerticalGroup:new{ align = "center",
-        TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = inner_w } }
+    -- The title row, aligned left: the radio mark (filled for the plank in
+    -- use), the name, and why it would not show when its pack is off.
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local HorizontalSpan  = require("ui/widget/horizontalspan")
+    local LeftContainer   = require("ui/widget/container/leftcontainer")
+    local Marks           = require("lib/bookshelf_marks")
+    local radio = Marks.Radio:new{ checked = PB.inUse(o) }
+    local gap = Space.padding.default
+    local status = o.pack_off and TextWidget:new{ text = _("Pack off"), face = Font:getFace("cfont", 14),
+                                                   max_width = math.floor(inner_w / 3) } or nil
+    local name_w = inner_w - radio:getSize().w - gap - (status and (status:getSize().w + gap) or 0)
+    local row = HorizontalGroup:new{ align = "center", radio, HorizontalSpan:new{ width = gap },
+        TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = math.max(1, name_w) } }
     if status then
-        lines[#lines + 1] = TextWidget:new{ text = status, face = Font:getFace("cfont", 14), max_width = inner_w }
+        row[#row + 1] = HorizontalSpan:new{ width = gap }
+        row[#row + 1] = status
     end
+    local lines = LeftContainer:new{ dimen = Geom:new{ w = inner_w, h = row:getSize().h }, row }
     local box_h = math.max(1, inner_h - lines:getSize().h - Space.padding.small)
     -- A row the height of a four-row shelf: the plank as most shelves show
     -- it. Smaller when the card is too short for it (plankPreview trims to
@@ -144,27 +153,18 @@ local function renderCell(o, dimen)
         tries = tries + 1
     end
     local pic
-    if bb then
-        local ph = math.min(box_h, bb:getHeight())
-        local Marks = require("lib/bookshelf_marks")
-        local OverlapGroup = require("ui/widget/overlapgroup")
-        local radio = Marks.Radio:new{ checked = PB.inUse(o) }
-        local rs = radio:getSize().w
-        -- On the plank's left end.
-        radio.overlap_offset = { Space.padding.default + rs, math.floor((ph - rs) / 2) }
-        pic = OverlapGroup:new{ dimen = Geom:new{ w = inner_w, h = ph },
-            ImageWidget:new{ image = bb, image_disposable = disposable },
-            radio }
-    end
+    if bb then pic = ImageWidget:new{ image = bb, image_disposable = disposable } end
+    -- The title row above its plank, the pair packed to the top of the card,
+    -- so each name reads with the plank under it and not the next one.
+    local TopContainer = require("ui/widget/container/topcontainer")
     return FrameContainer:new{
         bordersize = 0, padding = pad, margin = 0,
         background = Blitbuffer.COLOR_WHITE,
-        CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h },
-            VerticalGroup:new{ align = "center",
-                CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = box_h },
-                    pic or VerticalSpan:new{ width = 1 } },
-                VerticalSpan:new{ width = Space.padding.small },
+        TopContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h },
+            VerticalGroup:new{ align = "left",
                 lines,
+                VerticalSpan:new{ width = Space.padding.small },
+                pic or VerticalSpan:new{ width = 1 },
             } },
     }
 end
