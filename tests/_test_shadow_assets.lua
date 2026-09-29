@@ -49,7 +49,7 @@ local function set()
              low_r = fakeBuf("LOW", 4, 5), low_l = fakeBuf("LOWL", 4, 5),
              top = "TOP", foot_l = "FL", foot_r = "FR",
              side_w = 4, low = 5, wall = 3, below = 2, above = 1,
-             tile = 5, cap = 2, halo = 2, foot = 2, wedges = {}, n_wedges = 0, lows = {} }
+             tile = 5, cap = 2, halo = 2, foot = 2, lip = 1, wedges = {}, n_wedges = 0, lows = {} }
 end
 
 -- a free-standing wedge: book top 10, floor 30 -> rows 9 (one above the top)
@@ -174,6 +174,15 @@ do
     end
     ok(fo_w == 9, "contact line across the face-out at its foot (row 18, 2 rows): " .. fo_w)
     ok(spines >= 2, "the spines either side keep theirs: " .. spines)
+end
+
+-- the halo runs on over the spine's top row: the page block leaves that
+-- row unpainted between its boards for the shadow behind to show
+do
+    local a, bb = set(), fakeBB()
+    SA.top(bb, a, 10, 5, 30)
+    local b = bb.blits[1]
+    ok(b and b.dy == 29 and b.dy + b.h == 31, "halo rows 29..30, ending one row INTO the book at 30")
 end
 
 -- no C blitter: nothing painted, and reported done

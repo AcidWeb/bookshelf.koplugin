@@ -163,6 +163,7 @@ function M.get(night)
         top = top, foot_l = ft, foot_r = mirrored(ft),
         side_w = side_w, low = low, wall = s(D.wall), below = below,
         above = s(D.above), tile = tile, cap = cap, halo = halo, foot = foot,
+        lip = math.max(1, Screen:scaleBySize(1)),   -- the page block's hairline
         wedges = {}, n_wedges = 0, lows = {},
     }
     pcall(function() side:free() end)
@@ -219,9 +220,11 @@ local function across(bb, src, tile, sx, x0, x1, y, sy, h)
     end
 end
 
--- top(bb, a, x, w, book_top): the halo above a spine at [x, x+w).
+-- top(bb, a, x, w, book_top): the halo above a spine at [x, x+w). It ends
+-- one lip INTO the book: the page block leaves its top row unpainted between
+-- the boards (the nick) for the shadow behind the head to show there.
 function M.top(bb, a, x, w, book_top)
-    local y = book_top - a.halo
+    local y = book_top + (a.lip or 0) - a.halo
     local sy, h = 0, a.halo
     if y < 0 then sy = -y; h = h + y; y = 0 end
     if h <= 0 or w <= 0 then return end
