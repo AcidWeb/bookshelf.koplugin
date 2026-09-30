@@ -648,7 +648,9 @@ Reflowable formats like EPUB have no fixed page count until something lays them 
 - **Which books** -- **Only books without a page count**, or **Every book, replacing earlier counts**.
 - **Delete scanned page counts…** -- clears counts from earlier scans. Counts for books you have opened, and page counts in file names, are kept.
 
-Progress shows in the top panel's status line ("Counting pages in book 30 of 41") with a **Stop** button, and the shelf stays usable while it runs. It pauses while the device sleeps and carries on after.
+To count just one folder's books, long-press the folder on the shelf and choose **Extract page counts…**: the same dialog, for the books in that folder and the folders inside it. It works on a series, author, genre or collection stack too.
+
+Progress shows in the top panel's status line ("Counting pages in book 30 of 41") with a **Stop** button, and the shelf stays usable while it runs. The device doesn't go to sleep on its own while it runs; if you put it to sleep, the scan pauses and carries on after.
 
 Two things worth knowing about the numbers:
 

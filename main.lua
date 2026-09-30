@@ -2418,7 +2418,8 @@ function Bookshelf:scanPageCounts(opts)
     -- Classified inside the job (classify, below), a sidecar read per opened
     -- book, so the shelf answers taps from the first moment instead of
     -- freezing before the status line even appears.
-    local fps = Repo.getAllFilepaths and Repo.getAllFilepaths() or {}
+    -- opts.paths scopes the scan to one folder or stack's books (issue 459).
+    local fps = opts.paths or (Repo.getAllFilepaths and Repo.getAllFilepaths()) or {}
     local skipped = 0
     local todo = {}
 
@@ -2545,7 +2546,11 @@ function Bookshelf:scanPageCounts(opts)
 
     -- A Lua error mid-scan must still end the job, or the status line would
     -- show its progress until KOReader restarts.
-    Trapper:wrap(function() local ok_run, err_run = xpcall(function()
+    Trapper:wrap(function()
+    -- A scan runs for minutes and the device suspended in the middle of one
+    -- (issue 459's crash.log); every exit below comes back through here.
+    pcall(function() UIManager:preventStandby() end)
+    local ok_run, err_run = xpcall(function()
         local job = Progress.begin{
             title  = lookupTitle(),
             icons  = SCAN_ICONS,
@@ -2735,6 +2740,10 @@ function Bookshelf:scanPageCounts(opts)
             -- once on a device short of memory and then start.
             local completed, pages_s
             local elapsed = 0
+            -- At info level, before the fork: a scan that stalls on one book
+            -- leaves that book as the last line of crash.log (issue 459's
+            -- log named nothing).
+            logger.info(string.format("bookshelf: page count render %d/%d: %s", i, #todo, fp))
             for attempt = 1, 2 do
                 local t0 = _gettime()
                 job.in_run = true
@@ -2771,6 +2780,7 @@ function Bookshelf:scanPageCounts(opts)
                 break
             end
             processed = i
+            logger.info(string.format("bookshelf: page count render %d/%d took %.1fs", i, #todo, elapsed))
             local pages = tonumber(pages_s)
             if pages and pages > 0 then
                 -- A render count is layout-derived, not publisher truth:
@@ -2799,6 +2809,7 @@ function Bookshelf:scanPageCounts(opts)
         require("logger").warn("bookshelf: page count scan failed:", err_run)
         Progress.finish()
     end
+    pcall(function() UIManager:allowStandby() end)
     end)
 end
 

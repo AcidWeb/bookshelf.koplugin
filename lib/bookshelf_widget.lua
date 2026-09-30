@@ -23366,6 +23366,15 @@ function BookshelfWidget:_openGroupMenu(group, kind)
         table.insert(buttons, row)
     end
 
+    -- Page counts for just this stack's books (issue 459): the same dialog as
+    -- the settings menu's, scoped. A folder counts every book under it.
+    table.insert(buttons, {
+        { text = _("Extract page counts\xE2\x80\xA6"), callback = function()
+            close_dialog()
+            require("lib/bookshelf_page_count_dialog").showScoped(display_name, bw_ref:_resolveStackPaths(group), bw_ref)
+        end },
+    })
+
     dialog = ButtonDialog:new{
         title          = display_name,
         title_align    = "center",

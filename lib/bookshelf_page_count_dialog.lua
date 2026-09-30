@@ -172,33 +172,38 @@ function Dialog:init()
     -- the one line between the body and the buttons: a separate full-width
     -- rule above it plus the table's inset one read as two misaligned lines,
     -- worst where a scrolled body's bar meets them.
+    local rows = {}
+    -- Delete clears every scanned count in the library, so a dialog opened
+    -- for one folder does not offer it.
+    if not self.scope then
+        rows[#rows + 1] = {{
+            text = _("Delete scanned page counts\xe2\x80\xa6"),
+            callback = function()
+                UIManager:close(self)
+                M.deleteScanned(self.on_deleted)
+            end,
+        }}
+    end
+    rows[#rows + 1] = {
+        { text = _("Cancel"), callback = function() UIManager:close(self) end },
+        {
+            id = "start", text = _("Start"), enabled = M.anySource(o, hc, cal),
+            callback = function()
+                UIManager:close(self)
+                local opts = {}
+                for k, v in pairs(o) do opts[k] = v end
+                opts.hardcover = opts.hardcover and hc
+                opts.calibre = (opts.calibre and cal) or false
+                if self.scope then opts.paths = self.scope.paths end
+                self.start(opts)
+            end,
+        },
+    }
     self.buttons = ButtonTable:new{
         width = self.width,
         zero_sep = true,
         show_parent = self,
-        buttons = {
-            {{
-                text = _("Delete scanned page counts\xe2\x80\xa6"),
-                callback = function()
-                    UIManager:close(self)
-                    M.deleteScanned(self.on_deleted)
-                end,
-            }},
-            {
-                { text = _("Cancel"), callback = function() UIManager:close(self) end },
-                {
-                    id = "start", text = _("Start"), enabled = M.anySource(o, hc, cal),
-                    callback = function()
-                        UIManager:close(self)
-                        local opts = {}
-                        for k, v in pairs(o) do opts[k] = v end
-                        opts.hardcover = opts.hardcover and hc
-                        opts.calibre = (opts.calibre and cal) or false
-                        self.start(opts)
-                    end,
-                },
-            },
-        },
+        buttons = rows,
     }
 
     -- build(inner_w) -> the body. Built twice when it does not fit the
@@ -263,7 +268,10 @@ function Dialog:init()
 
         local body = VerticalGroup:new{
             align = "left",
-            text(_("Finds how long each book is, for spine thickness, page count badges, sorting and the page count token."),
+            text(self.scope
+                    and T(_("Finds how long each book in %1 is (%2 books), for spine thickness, page count badges, sorting and the page count token."),
+                          self.scope.label, #self.scope.paths)
+                    or _("Finds how long each book is, for spine thickness, page count badges, sorting and the page count token."),
                  Font:getFace("smallinfofont")),
             VerticalSpan:new{ width = pad },
             heading(_("Use page counts from, in this order")),
@@ -359,13 +367,48 @@ function Dialog:onCloseWidget()
     UIManager:setDirty(nil, function() return "ui", self.frame.dimen end)
 end
 
-function M.show(start, on_deleted)
+-- show(start, on_deleted, scope?) -- scope = { label =, paths = } limits the
+-- scan to those books (a folder or stack's long-press menu, issue 459).
+function M.show(start, on_deleted, scope)
     local d = Dialog:new{
         o = M.options(), hc = hardcoverLinked(), cal = calibreColumn(),
-        start = start, on_deleted = on_deleted,
+        start = start, on_deleted = on_deleted, scope = scope,
     }
     UIManager:show(d)
     return d
+end
+
+-- showScoped(label, paths, bw) -- the dialog for one stack's books, reaching
+-- the plugin instance the way action_exec does (FileManager, or the reader's
+-- copy while a book is parked under the shelf).
+function M.showScoped(label, paths, bw)
+    local local_paths = {}
+    for _i, fp in ipairs(type(paths) == "table" and paths or {}) do
+        -- Books on disk only: an OPDS entry has nothing to count.
+        if type(fp) == "string" and not fp:match("^%a+://") then
+            local_paths[#local_paths + 1] = fp
+        end
+    end
+    paths = local_paths
+    if #paths == 0 then
+        UIManager:show(InfoMessage:new{ text = _("No books to count here."), timeout = 2 })
+        return
+    end
+    local fm_mod = package.loaded["apps/filemanager/filemanager"]
+    local fm = fm_mod and fm_mod.instance
+    local plugin = fm and fm.bookshelf
+    if not plugin then
+        local rui_mod = package.loaded["apps/reader/readerui"]
+        local rui = rui_mod and rui_mod.instance
+        plugin = rui and rui.bookshelf
+    end
+    if not (plugin and plugin.scanPageCounts) then return end
+    return M.show(function(opts) plugin:scanPageCounts(opts) end, function()
+        if bw and bw._rebuild then
+            bw:_rebuild()
+            UIManager:setDirty(bw, "ui")
+        end
+    end, { label = label, paths = paths })
 end
 
 return M
