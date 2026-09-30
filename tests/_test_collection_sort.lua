@@ -75,6 +75,7 @@ package.loaded["lib/bookshelf_hero_card"] = { new = function() return {} end,
 package.loaded["lib/bookshelf_chip_bar"] = { new = function() return {} end }
 package.loaded["lib/bookshelf_shelf_row"] = {}
 
+STATUS = {}   -- filepath -> status, for the applyFilter stub below (global: the stub reads it)
 -- Repo stub: buildBookMeta returns LIGHT meta with NO last_opened / date_added,
 -- exactly reproducing the field gap that caused #205.
 package.loaded["lib/bookshelf_book_repository"] = {
@@ -82,6 +83,15 @@ package.loaded["lib/bookshelf_book_repository"] = {
         return { filepath = fp, title = (fp:match("([^/]+)$") or fp):gsub("%.%w+$", "") }
     end,
     readProgress = function() return nil end,
+    -- The shelf's filter (issue 479): here, "unread only", read from STATUS.
+    applyFilter = function(books, filter)
+        if not (filter and filter.status) then return books end
+        local out = {}
+        for _i, b in ipairs(books) do
+            if (STATUS[b.filepath] or "unread") == filter.status then out[#out + 1] = b end
+        end
+        return out
+    end,
 }
 
 -- TabModel stub: getById returns our controlled tab; any other call is a no-op.
@@ -174,6 +184,25 @@ test("single-level sort_priority leaves the group's default order untouched", fu
     } }
     widget():_applyWithinGroupSort(group)
     assert(titles(group.books) == "A,B", "single-level sort should not reorder books")
+end)
+
+test("a collection opened again after a book closes keeps the shelf's filter (issue 479)", function()
+    -- A return from a book can rebuild the drill from the collection itself:
+    -- every member, bare file paths. The shelf shows unread books only.
+    TEST_TAB.sort_priority = nil
+    TEST_TAB.filter = { status = "unread" }
+    STATUS["/lib/B.epub"] = "finished"
+    local w = widget()
+    w._drilldown_path = { { kind = "tag", payload = { kind = "tag", series_name = "C1", books = {
+        { filepath = "/lib/A.epub" }, { filepath = "/lib/B.epub" }, { filepath = "/lib/C.epub" } } } } }
+    w._cursor = 1
+    w._viewSize = function() return 10 end
+    w._isSpineMode = function() return false end
+    local books, total = w:_fetchChipItems(10)
+    assert(total == 2, "the finished book still counts: total " .. tostring(total))
+    assert(titles(books) == "A,C", "the finished book still shows: " .. titles(books))
+    assert(#w._drilldown_path[1].payload.books == 3, "the collection itself was cut down, not just what shows")
+    TEST_TAB.filter = nil
 end)
 
 print(string.format("%d passed, %d failed", pass, fail))

@@ -3530,7 +3530,16 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         -- its new last-opened position. Idempotent while paging (order is stable
         -- unless a book was opened).
         self:_applyWithinGroupSort(tip.payload)
+        -- And the chip's filter, on every fetch too: the same restore rebuilds
+        -- .books from the group's whole membership (a collection's every
+        -- member), so an Unread shelf showed its finished books after a book
+        -- closed, until the collection was entered again (GitHub issue 479).
+        -- On a copy: the payload stays the group, the filter only what shows.
+        local chip_tab = require("lib/bookshelf_tab_model").getById(self.chip)
         local books = tip.payload.books or {}
+        if chip_tab and chip_tab.filter and Repo.applyFilter then
+            books = Repo.applyFilter(books, chip_tab.filter)
+        end
         local total = #books
         -- Cursor-based: offset is 0-based, cursor is 1-based. Clamp upstream
         -- in _rebuild keeps cursor within range; defensive guard here too.
@@ -7746,7 +7755,11 @@ function BookshelfWidget:_jumpScanList()
     -- available guess, as before.
     if tip and tip.payload and tip.payload.books then
         local within_key = sp and sp[2] and sp[2].key
-        return tip.payload.books, within_key or chip_key, "drilldown-payload"
+        -- Filtered as _fetchChipItems filters what shows (issue 479), so the
+        -- jump list names only books that are on the shelf.
+        local books = tip.payload.books
+        if tab and tab.filter and Repo.applyFilter then books = Repo.applyFilter(books, tab.filter) end
+        return books, within_key or chip_key, "drilldown-payload"
     end
 
     -- Folder drill: the drilled path's listing, with the chip's filter and

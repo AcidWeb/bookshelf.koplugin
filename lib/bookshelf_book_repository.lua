@@ -5536,6 +5536,12 @@ _applyFilter = function(meta_list, filter)
     return out
 end
 
+-- Repo.applyFilter(books, filter) -> the books that pass a chip's filter, as
+-- the group hydrators apply it; the list itself is unchanged. For a group
+-- drill the widget has to re-filter: a return from a book can rebuild its
+-- payload from the group's full membership (GitHub issue 479).
+function Repo.applyFilter(books, filter) return _applyFilter(books, filter) end
+
 -- _withinPriority(sk): returns the level-2+ slice of a sort_priority,
 -- or nil when the chip only has a single level (no within-group rule).
 -- Used by every group hydrator to pick the cover that reflects the
