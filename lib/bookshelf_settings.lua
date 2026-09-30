@@ -1868,8 +1868,19 @@ function Settings:_plankRow(markDirty)
         keep_menu_open = true,
         callback = function(touchmenu_instance)
             require("lib/bookshelf_plank_browser").show({
-                on_change = function()
-                    markDirty()
+                -- Each tap in the picker: the shelf behind shows the plank at
+                -- once. Only its rows are rebuilt (the hero and chips do not
+                -- change), unless the tap switched a pack on, which brings
+                -- its ornaments: then the whole shelf.
+                on_change = function(full)
+                    local bw = self._bw
+                    if not full and bw and bw._swapShelvesInPlace and bw._isSpineMode
+                            and bw:_isSpineMode() then
+                        bw:_swapShelvesInPlace()
+                        UIManager:setDirty(bw, "ui")   -- the band under the last row too
+                    else
+                        markDirty()
+                    end
                     if touchmenu_instance then touchmenu_instance:updateItems() end
                 end,
                 pick_colour = function(before)

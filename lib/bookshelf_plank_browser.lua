@@ -227,27 +227,54 @@ function PB.show(opts)
         title = _("Shelf plank"),
         no_search = true,
         grid_cols = function() return 1 end,
-        cells_per_page = function() return landscape() and 4 or 6 end,
-        -- The grid's height is rows_per_page cards of 64dp (LibraryModal).
-        rows_per_page = function()
-            return math.max(3, math.floor(Screen:getHeight() * 0.6 / Screen:scaleBySize(64)))
+        -- Short, and pinned to the top (config.top), so the shelf's rows show
+        -- below it and a tap can be seen there. Sized by share of the screen,
+        -- not by count, so it is the same shape at every DPI: the grid about
+        -- 30% of the height, a plank to every ~72dp of it.
+        top = true,
+        rows_per_page = function() return LibraryModal.rowsForShare(0.3) end,
+        cells_per_page = function()
+            local rows = LibraryModal.rowsForShare(0.3)
+            if landscape() then rows = math.max(2, rows - 1) end   -- as the modal shaves
+            local area = rows * Screen:scaleBySize(64)
+            return math.max(2, math.floor(area / Screen:scaleBySize(72)))
         end,
         chip_strip = chips,
         on_chip_tap = function(k) self.chip = k; self.items = items() end,
         cell_renderer = renderCell,
+        -- A tap uses the plank at once, on the shelf behind, and the picker
+        -- stays open for the next (Close, or a tap outside it, when done).
+        -- on_change(full): full when the tap also switched a pack on, whose
+        -- ornaments then join the shelf. The plain colour closes the picker
+        -- for its colour dialog.
         on_cell_tap = function(o)
             if o.kind == "hint" then return end
             local before = TP().plankChoice()
-            if o.pack_off and o.pack then require("lib/bookshelf_ornaments").setPackOff(o.pack, false) end
+            local full = false
+            if o.pack_off and o.pack then
+                require("lib/bookshelf_ornaments").setPackOff(o.pack, false)
+                full = true
+            end
             TP().choosePlank(PB.choiceOf(o))
-            close()
-            if opts.on_change then pcall(opts.on_change) end
-            UIManager:setDirty("all", "full")   -- the band under the last row
-            if o.kind == "colour" and opts.pick_colour then opts.pick_colour(before) end
+            self.changed = true
+            if o.kind == "colour" then
+                close()
+                if opts.on_change then pcall(opts.on_change, full) end
+                if opts.pick_colour then opts.pick_colour(before) end
+                return
+            end
+            if full then self.items = items() end   -- "Pack off" goes
+            if opts.on_change then pcall(opts.on_change, full) end
+            if modal then modal:refresh() end
         end,
         item_count = function() return #self.items end,
         item_at = function(i) return self.items[i] end,
         footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
+        -- However it closes: one full refresh if the plank changed, to clear
+        -- what the quick per-tap updates leave on e-ink.
+        on_closed = function()
+            if self.changed then UIManager:setDirty("all", "full") end
+        end,
     }
     modal = LibraryModal:new{ config = config,
                               page = PB.startPage(self.items, config.cells_per_page()) }

@@ -223,20 +223,27 @@ function WB.show(key, on_change)
         no_search = true,
         grid_cols = function() return 1 end,
         cells_per_page = function() return 1 end,
-        -- The grid's height is rows_per_page cards of 64dp (LibraryModal):
-        -- enough of them that the one picture fills most of the screen.
-        rows_per_page = function()
-            local Screen = require("device").screen
-            return math.max(3, math.floor(Screen:getHeight() * 0.6 / Screen:scaleBySize(64)))
-        end,
+        -- Short, and pinned to the top (config.top), so the shelf shows
+        -- below it and a tap can be seen there; the picture takes about 40%
+        -- of the screen's height, whatever its DPI.
+        top = true,
+        rows_per_page = function() return LibraryModal.rowsForShare(0.4) end,
         chip_strip = chips,
         on_chip_tap = function(k) self.chip = k; self.items = items() end,
         cell_renderer = function(item, dimen) return renderCell(key, item, dimen) end,
+        -- A tap uses the picture at once, behind the picker, which stays open
+        -- for the next (Close, or a tap outside it, when done).
         on_cell_tap = function(item)
             WB.choose(key, item)
-            close()
+            self.changed = true
+            if item.pack_off then self.items = items() end   -- "Pack off" goes
             if on_change then pcall(on_change) end
-            UIManager:setDirty("all", "full")
+            if modal then modal:refresh() end
+        end,
+        -- However it closes: one full refresh if the picture changed, to
+        -- clear what the quick per-tap updates leave on e-ink.
+        on_closed = function()
+            if self.changed then UIManager:setDirty("all", "full") end
         end,
         item_count = function() return #self.items end,
         item_at = function(i) return self.items[i] end,

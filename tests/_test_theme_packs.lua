@@ -228,10 +228,15 @@ t.test("the browser: a tap redraws only itself; the shelf and a full repaint wai
     assert(closed and closed:find("endDeferred", 1, true) and closed:find("on_change", 1, true)
         and closed:find('setDirty("all", "full")', 1, true),
         "closing must flush, rebuild the shelf once, and repaint fully when the plank or wallpaper changed")
+    -- The plank picker: each tap repaints the shelf behind (the band under
+    -- the last row included), and closing after a change repaints fully.
     local pb = io.open("lib/bookshelf_plank_browser.lua"):read("*a")
-    local tap = pb:match("on_cell_tap = function%(o%).-\n        end,")
-    assert(tap and tap:find('setDirty("all", "full")', 1, true),
-        "the plank picker's choice must repaint fully too")
+    local closed_pb = pb:match("on_closed = function%(%).-\n        end,")
+    assert(closed_pb and closed_pb:find('setDirty("all", "full")', 1, true),
+        "closing the plank picker after a change must repaint fully")
+    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
+    local row = st:match("function Settings:_plankRow%(.-\nend\n")
+    assert(row and row:find('UIManager:setDirty(bw, "ui")', 1, true), "a plank tap does not repaint the shelf behind")
 end)
 
 
