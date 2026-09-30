@@ -56,9 +56,11 @@ package.loaded["luasettings"] = {
 
 -- Global KOReader settings (migration source).
 local greader = {}
+local greader_flushes = 0
 _G.G_reader_settings = {
     readSetting = function(_, k) return greader[k] end,
     delSetting  = function(_, k) greader[k] = nil end,
+    flush       = function() greader_flushes = greader_flushes + 1 end,
 }
 
 local helpers = dofile("tests/_helpers.lua")
@@ -221,6 +223,18 @@ t.test("the status-line settings move out of KOReader's settings file, once", fu
     eq(greader.bookshelf_hero_regions, nil); eq(greader.bookshelf_status_in_reader, nil)
     eq(greader.bookshelf_reader_status_h, nil, "nothing is left in KOReader's file")
     eq(S.view():readSetting("status_in_reader"), true, "a readSetting view for lib/status_line")
+end)
+
+t.test("old status-line keys left behind by an unsaved exit are cleared on a later start", function()
+    -- The move ran and was flagged, but KOReader was killed before it saved
+    -- its own file, so the old entries came back from disk.
+    greader = { bookshelf_status_in_reader = true }
+    lua_store = { migrated = true, reader_keys_moved = true, status_in_reader = false }
+    greader_flushes = 0
+    local S = loadStore()
+    eq(S.read("status_in_reader"), false, "the moved value is not overwritten by the stale one")
+    eq(greader.bookshelf_status_in_reader, nil, "the stale entry is cleared")
+    eq(greader_flushes > 0, true, "and KOReader's file saved, so it stays cleared")
 end)
 
 t.test("bookshelf's status-line code reads bookshelf's own settings", function()

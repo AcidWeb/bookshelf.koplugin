@@ -193,14 +193,24 @@ local READER_KEYS = {
     bookshelf_reader_status_h  = "reader_status_h",
 }
 local function _moveReaderKeys(s)
-    if s:readSetting("reader_keys_moved") or type(G_reader_settings) ~= "table" then return end
+    if type(G_reader_settings) ~= "table" then return end
+    local moved = s:readSetting("reader_keys_moved")
+    local cleared = false
     for old, new in pairs(READER_KEYS) do
         local v = G_reader_settings:readSetting(old)
-        if v ~= nil and s:readSetting(new) == nil then s:saveSetting(new, v) end
-        if v ~= nil then G_reader_settings:delSetting(old) end
+        if v ~= nil then
+            -- Copied once. Cleared whenever still there: a KOReader killed
+            -- before it saved its file brings the old entries back from disk.
+            if not moved and s:readSetting(new) == nil then s:saveSetting(new, v) end
+            G_reader_settings:delSetting(old)
+            cleared = true
+        end
     end
-    s:saveSetting("reader_keys_moved", true)
-    s:flush()
+    if cleared and G_reader_settings.flush then pcall(function() G_reader_settings:flush() end) end
+    if not moved then
+        s:saveSetting("reader_keys_moved", true)
+        s:flush()
+    end
 end
 
 local function _open()
