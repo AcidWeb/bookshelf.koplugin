@@ -162,7 +162,66 @@ end
 
 local function _chipInk() return _memoised("chip_ink", _chipInkRaw) end
 
-local function _buildLabelContent(label, size, max_w, ink)
+-- ── SVG/PNG icons in a label (GitHub issue 469) ────────────────────────────
+-- "[icon=NAME]" (TextSegments) draws KOReader's icon of that name -- the
+-- reader's own koreader/icons folder first, as IconWidget looks -- a square
+-- the height of the label's text. Black line art takes the label's ink, so it
+-- reads as the text does on every chip (the selected chip's inversion, a
+-- custom chip colour, a dark shelf); a coloured icon keeps its colours, in
+-- the selected chip and in night mode alike (maintainer: never invert a
+-- coloured SVG's colours). A name with no file draws nothing.
+local _side_memo = {}
+local function _iconSide(size)
+    if _side_memo[size] then return _side_memo[size] end
+    local f, b = BFont:getFace("infofont", size, { bold = true })
+    local tw = TextWidget:new{ text = "M", face = f, bold = b }
+    local h = tw:getSize().h
+    tw:free()
+    local side = math.max(8, math.floor(h * 0.9))
+    _side_memo[size] = side
+    return side
+end
+
+-- inverted: the chip paints this and then inverts its own rect (the default
+-- selected chip, InvertedFrame), so a coloured icon is pre-inverted to come
+-- out as drawn.
+local function _imageSegment(name, size, ink, inverted)
+    local side = _iconSide(size)
+    local IconWidget = require("ui/widget/iconwidget")
+    local ok, icon = pcall(function()
+        return IconWidget:new{ icon = name, width = side, height = side, alpha = true }
+    end)
+    if not ok or type(icon) ~= "table" or type(icon.file) ~= "string"
+            or (icon.file:find("notice%-warning") and name ~= "notice-warning") then
+        return HorizontalSpan:new{ width = 0 }
+    end
+    local ok_w, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
+    if not ok_w then return icon end
+    if Wallpaper.iconHasColour and Wallpaper.iconHasColour(icon) then
+        -- The panel inverts in night mode as the chip does when selected;
+        -- once each, or not at all, and the colours land as drawn.
+        local night = Screen.night_mode and true or false
+        if (inverted and true or false) ~= night then
+            pcall(function()
+                if not icon._bb then icon:_render() end
+                local copy = icon._bb:copy()
+                copy:invertRect(0, 0, copy:getWidth(), copy:getHeight())
+                if icon._bb_disposable then icon._bb:free() end
+                icon._bb = copy
+                icon._bb_disposable = true
+            end)
+        end
+        return icon
+    end
+    -- Line art in black ink is already the label's colour (the selected chip
+    -- inverts it with the text); any other ink tints it.
+    if ink and ink ~= Blitbuffer.COLOR_BLACK and Wallpaper.mask then
+        return Wallpaper.mask(true, icon, ink)
+    end
+    return icon
+end
+
+local function _buildLabelContent(label, size, max_w, ink, inverted)
     ink = ink or _chipInk()
     local segments = TextSegments.labelSegments(_chipCase(label))
     if #segments == 0 then
@@ -173,6 +232,9 @@ local function _buildLabelContent(label, size, max_w, ink)
             bold    = empty_bold,
             fgcolor = ink,
         }
+    end
+    if #segments == 1 and segments[1].class == "image" then
+        return _imageSegment(segments[1].name, size, ink, inverted)
     end
     if #segments == 1 then
         local one_face, one_bold
@@ -199,7 +261,9 @@ local function _buildLabelContent(label, size, max_w, ink)
     -- inter-segment spacing have claimed their natural widths.
     local icon_w = 0
     for _i, seg in ipairs(segments) do
-        if seg.class ~= "text" then
+        if seg.class == "image" then
+            icon_w = icon_w + _iconSide(size)
+        elseif seg.class ~= "text" then
             local iw_face, iw_bold = _iconFace(size)
             local tw = TextWidget:new{
                 text = seg.text,
@@ -220,6 +284,9 @@ local function _buildLabelContent(label, size, max_w, ink)
         else
             seg_face, seg_bold = _iconFace(size)
         end
+        if seg.class == "image" then
+            hg[#hg + 1] = _imageSegment(seg.name, size, ink, inverted)
+        else
         hg[#hg + 1] = TextWidget:new{
             text      = seg.text,
             face      = seg_face,
@@ -227,6 +294,7 @@ local function _buildLabelContent(label, size, max_w, ink)
             fgcolor   = ink,
             max_width = is_text and _maxWidthOrNil(text_budget) or nil,
         }
+        end
     end
     return hg
 end
@@ -239,6 +307,10 @@ local function _measureLabel(label, size)
     local segments = TextSegments.labelSegments(_chipCase(label))
     for _i, seg in ipairs(segments) do
         local m_face, m_bold
+        if seg.class == "image" then
+            total = total + _iconSide(size)
+            goto continue
+        end
         if seg.class == "text" then
             m_face, m_bold = BFont:getFace("infofont", size, { bold = true })
         else
@@ -251,6 +323,7 @@ local function _measureLabel(label, size)
         }
         total = total + tw:getSize().w
         tw:free()
+        ::continue::
     end
     return total
 end
@@ -720,12 +793,17 @@ local function arrowPillFrame(label, h, chained, glyph)
             label_text = _chipCase(label)
             face, bold = BFont:getFace("infofont", _scaled(16), { bold = true })
         end
+        if not glyph and label_text:find("[icon=", 1, true) then
+            -- A shelf label with an SVG/PNG icon in it (issue 469).
+            content_widget = _buildLabelContent(label, _scaled(16), nil, Blitbuffer.COLOR_BLACK)
+        else
         content_widget = TextWidget:new{
             text    = label_text,
             face    = face,
             bold    = bold,
             fgcolor = Blitbuffer.COLOR_BLACK,
         }
+        end
         content_w = content_widget:getSize().w
         content_h = content_widget:getSize().h
     end
@@ -1303,7 +1381,9 @@ function ChipBar:_buildChipRow(flex_indices, flex_naturals, action_w, separator_
                 chip.label or "",
                 _scaled(16),
                 w - 2 * Space.padding.small,
-                ink)
+                ink,
+                -- The default selected chip inverts itself (InvertedFrame below).
+                is_active and not is_cursor_pre and not has_custom)
         end
         local is_cursor = is_cursor_pre
         -- An action chip that points at the hero (currently reading, micro

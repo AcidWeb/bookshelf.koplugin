@@ -55,5 +55,29 @@ test("emoji and dingbats are icons", function()
     eq(classes("Smile 😀"), "text:Smile |icon:😀")
 end)
 
+-- SVG/PNG icons in a shelf label (GitHub issue 469): an [icon=NAME] token,
+-- as the icon picker inserts it and Bookends writes it, is its own segment.
+test("an [icon=NAME] token is an image segment carrying its name", function()
+    local segs = Segments.labelSegments("[icon=my cat] Books")
+    eq(#segs, 2)
+    eq(segs[1].class, "image"); eq(segs[1].name, "my cat")
+    eq(segs[2].class, "text"); eq(segs[2].text, " Books")
+    local mid = Segments.labelSegments("A[icon=x]B")
+    eq(#mid, 3); eq(mid[2].class, "image"); eq(mid[3].text, "B")
+end)
+
+test("a bracket that is not an icon token stays text", function()
+    local segs = Segments.labelSegments("[draft] notes")
+    eq(#segs, 1); eq(segs[1].class, "text")
+    eq(Segments.labelSegments("[icon=]")[1].class, "text", "an empty name is not a token")
+end)
+
+test("upper() leaves an icon token's name as it is", function()
+    package.loaded["ffi/utf8proc"] = { uppercase_dumb = function(t) return t:upper() end }
+    package.loaded["lib/bookshelf_text_segments"] = nil
+    local S2 = dofile("lib/bookshelf_text_segments.lua")
+    eq(S2.upper("my [icon=cat.paw] shelf"), "MY [icon=cat.paw] SHELF")
+end)
+
 print(string.format("\ntext_segments: %d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)

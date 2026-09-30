@@ -758,7 +758,9 @@ function Editor:editTab(tab_id, opts)
                             label_dialog.deny_keyboard_hiding = true
                         end
                         -- Shelf labels render literally (no token
-                        -- expansion), so dynamic %tokens are excluded.
+                        -- expansion), so dynamic %tokens are excluded. The
+                        -- SVG icon folder is offered (svg): an [icon=NAME]
+                        -- in a label draws that image (issue 469).
                         IconsLibrary:show(function(glyph)
                             if label_dialog then
                                 label_dialog.deny_keyboard_hiding = false
@@ -772,7 +774,7 @@ function Editor:editTab(tab_id, opts)
                             if label_dialog and label_dialog.onShowKeyboard then
                                 pcall(function() label_dialog:onShowKeyboard() end)
                             end
-                        end, { dynamic = false })
+                        end, { dynamic = false, svg = true })
                     end,
                 },
             }

@@ -16,9 +16,27 @@ local Segments = {}
 -- Utf8Proc.uppercase_dumb uppercases each codepoint correctly;
 -- util.fixUtf8 guards against malformed input (the same pattern
 -- KOReader's util.lower uses for lowercasing).
+-- An SVG/PNG icon in a label: "[icon=NAME]", as the icon picker inserts it
+-- (and Bookends writes it). NAME is a file in KOReader's icons folder, so it
+-- keeps its case: file names are case-sensitive on an e-reader.
+local ICON_TOKEN = "%[icon=([^%]]+)%]"
+
 function Segments.upper(str)
     if not str or str == "" then return str end
-    return Utf8Proc.uppercase_dumb(util.fixUtf8(str, "?"))
+    if not str:find("[icon=", 1, true) then
+        return Utf8Proc.uppercase_dumb(util.fixUtf8(str, "?"))
+    end
+    -- Upper-case around the icon tokens, never inside them.
+    local out, pos = {}, 1
+    while true do
+        local s0, e0 = str:find(ICON_TOKEN, pos)
+        if not s0 then break end
+        if s0 > pos then out[#out + 1] = Utf8Proc.uppercase_dumb(util.fixUtf8(str:sub(pos, s0 - 1), "?")) end
+        out[#out + 1] = str:sub(s0, e0)
+        pos = e0 + 1
+    end
+    if pos <= #str then out[#out + 1] = Utf8Proc.uppercase_dumb(util.fixUtf8(str:sub(pos), "?")) end
+    return table.concat(out)
 end
 
 local function isContinuation(byte)
@@ -82,6 +100,15 @@ function Segments.labelSegments(label)
     local i = 1
 
     while i <= #label do
+        -- "[icon=NAME]": an image segment of its own (see ICON_TOKEN).
+        local ts, te, name = label:find("^" .. ICON_TOKEN, i)
+        if ts then
+            current = nil
+            segments[#segments + 1] = { class = "image", name = name, text = label:sub(ts, te) }
+            i = te + 1
+            goto continue
+        end
+        do
         local chunk_len, codepoint, valid = decodeAt(label, i)
         chunk_len = chunk_len or 1
         local class = (not valid or Segments.isIconCodepoint(codepoint)) and "icon" or "text"
@@ -95,6 +122,8 @@ function Segments.labelSegments(label)
         end
 
         i = i + chunk_len
+        end
+        ::continue::
     end
 
     return segments
