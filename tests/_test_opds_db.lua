@@ -38,8 +38,10 @@ package.loaded["logger"] = { dbg=function() end, info=function() end,
 -- Point the module at a scratch directory rather than the real settings dir.
 local TMPDIR = os.getenv("TMPDIR") or "/tmp"
 local DBDIR = TMPDIR .. "/bookshelf_opds_db_test"
-os.execute("rm -rf '" .. DBDIR .. "' && mkdir -p '" .. DBDIR .. "'")
-package.loaded["datastorage"] = { getSettingsDir = function() return DBDIR end }
+-- The feed cache lives in cache/bookshelf/ under the data dir (lib/bookshelf_paths).
+os.execute("rm -rf '" .. DBDIR .. "' && mkdir -p '" .. DBDIR .. "/cache/bookshelf'")
+package.loaded["datastorage"] = { getSettingsDir = function() return DBDIR end,
+                                  getDataDir = function() return DBDIR end }
 
 local DB = require("lib/bookshelf_opds_db")
 

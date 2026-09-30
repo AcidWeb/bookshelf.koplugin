@@ -36,7 +36,9 @@ package.loaded["logger"] = { dbg=function() end, info=function() end,
                              warn=function() end, err=function() end }
 local TMPDIR = os.getenv("TMPDIR") or "/tmp"
 local DBDIR = TMPDIR .. "/bookshelf_facts_db_test"
-os.execute("rm -rf '" .. DBDIR .. "' && mkdir -p '" .. DBDIR .. "'")
+-- The store lives in settings/bookshelf/ (lib/bookshelf_paths), which the
+-- paths module makes once per session; a test that wipes it makes it again.
+os.execute("rm -rf '" .. DBDIR .. "' && mkdir -p '" .. DBDIR .. "/bookshelf'")
 package.loaded["datastorage"] = { getSettingsDir = function() return DBDIR end }
 
 local Facts = require("lib/bookshelf_book_facts_db")
@@ -51,7 +53,9 @@ local function test(name, fn)
 end
 local function fresh()
     Facts.close()
-    os.execute("rm -rf '" .. DBDIR .. "' && mkdir -p '" .. DBDIR .. "'")
+    -- The store lives in settings/bookshelf/ (lib/bookshelf_paths), which the
+-- paths module makes once per session; a test that wipes it makes it again.
+os.execute("rm -rf '" .. DBDIR .. "' && mkdir -p '" .. DBDIR .. "/bookshelf'")
     Facts.forgetMemo()
 end
 
