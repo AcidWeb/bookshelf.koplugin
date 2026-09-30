@@ -1943,7 +1943,15 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                         return T(_("How many: %1"), spec.recent or SS.FACE_RECENT_DEFAULT)
                     end
                     local function whichLabel(spec)
-                        if spec.collection then return T(_("Collection: %1"), spec.collection) end
+                        if spec.collection then
+                            -- Deleted or renamed since: say so, rather than
+                            -- a tick on a shelf that faces nothing out.
+                            local ok_rc, rc = pcall(require, "readcollection")
+                            if ok_rc and rc and rc.coll and rc.coll[spec.collection] == nil then
+                                return T(_("Collection: %1 (not found)"), spec.collection)
+                            end
+                            return T(_("Collection: %1"), spec.collection)
+                        end
                         return _("Choose collection")
                     end
                     local function label(spec, k)

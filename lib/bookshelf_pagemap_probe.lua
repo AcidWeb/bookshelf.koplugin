@@ -172,10 +172,14 @@ end
 function M.wordsFromText(html)
     if type(html) ~= "string" then return nil end
     local plain = html:gsub("<[^>]*>", " ")
-    local num = plain:match("Words:%s*(%d[%d,%.\194\160 ]*)")
+    -- "Words:" as a word of its own, then one number: thousands separators
+    -- are commas, dots or a no-break space, never a plain space, so "5,000 2
+    -- chapters" is 5000. Under 100 is not a word count ("Words: 3 Stories" on
+    -- a title page); a drabble is 100.
+    local num = plain:match("%f[%a]Words:%s*(%d[%d,%.\194\160]*)")
     if not num then return nil end
     local n = tonumber((num:gsub("%D", "")))
-    if n and n > 0 then return n end
+    if n and n >= 100 then return n end
     return nil
 end
 

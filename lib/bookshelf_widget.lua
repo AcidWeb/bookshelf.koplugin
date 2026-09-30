@@ -19900,7 +19900,9 @@ end
 
 -- _tapTileRect(fp) -> the painted rect of the tile _markTapped marks, or nil.
 -- A folder tile is keyed on its first book, so it is matched before its front
--- cover: the cover's rect leaves out the pile of page edges behind it.
+-- cover: the cover's rect leaves out the pile of page edges behind it. From the
+-- shelf ROWS only, as _shelfSlotRect: the hero carries a .book too, usually
+-- this very book, and its rect is not where the ring is drawn.
 function BookshelfWidget:_tapTileRect(fp)
     local function find(node, depth)
         if type(node) ~= "table" or depth > 16 then return nil end
@@ -19919,8 +19921,13 @@ function BookshelfWidget:_tapTileRect(fp)
         end
         return nil
     end
-    local g = find(self._inner_vgroup, 0)
-    return g and g:copy() or nil
+    local d = self._shelf_dims
+    if not (self._inner_vgroup and d) then return nil end
+    for r = 1, (d.n_shelves or 1) do
+        local g = find(self._inner_vgroup[(d.shelf_top_idx or 1) + 2 * (r - 1)], 0)
+        if g then return g:copy() end
+    end
+    return nil
 end
 
 -- Open a scrollable viewer with the full book description. Same

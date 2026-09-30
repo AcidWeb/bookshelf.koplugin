@@ -36,15 +36,27 @@ t.test("the stack menu opens the scoped dialog with the stack's books", function
 end)
 
 t.test("the scan holds the device awake, and lets it sleep again on every exit", function()
+    -- AutoSuspend reads PluginShare.pause_auto_suspend, not UIManager's standby
+    -- count (review finding), so that is the flag that keeps a long scan from
+    -- suspending. The value it had before (Keep-alive may have set it) comes back.
     local body = main:match("function Bookshelf:scanPageCounts%(opts%)(.-)\nend\n")
-    local wrap = body and body:match("Trapper:wrap%(function%(%)(.*)$")
-    assert(wrap, "the scan job moved")
-    local on = wrap:find("UIManager:preventStandby()", 1, true)
+    local hold = body and body:match("local function holdAwake%(on%)(.-)\n    end\n")
+    assert(hold, "no holdAwake")
+    assert(hold:find("pause_auto_suspend = true", 1, true), "auto-suspend is not paused")
+    assert(hold:find("pause_auto_suspend = held_prev", 1, true), "the earlier value is not restored")
+    local wrap = body:match("Trapper:wrap%(function%(%)(.*)$")
+    local on = wrap:find("holdAwake(true)", 1, true)
     local run = wrap:find("xpcall(function()", 1, true)
-    local off = wrap:find("UIManager:allowStandby()", 1, true)
     local failed = wrap:find('"bookshelf: page count scan failed:"', 1, true)
-    assert(on and run and on < run, "standby is not held before the job runs")
-    assert(off and failed and off > failed, "standby is not released after the job, error path included")
+    local off = wrap:find("holdAwake(false)", failed or 1, true)
+    assert(on and run and on < run, "the device is not held awake before the job runs")
+    assert(off and failed and off > failed, "the hold is not released after the job, error path included")
+end)
+
+t.test("a scan waiting for an open book lets the device sleep", function()
+    local body = main:match("function Bookshelf:scanPageCounts%(opts%)(.-)\nend\n")
+    local wait = body:match("(holdAwake%(false%)%s+while Progress%.reading%(%).-holdAwake%(true%))")
+    assert(wait, "the reader's session keeps the device awake while the scan waits")
 end)
 
 t.done()

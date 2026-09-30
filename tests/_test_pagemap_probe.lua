@@ -188,4 +188,12 @@ t.test("pagesFromWords: rounds up, and answers nothing for nothing", function()
     H.eq(P.pagesFromWords(1000, 0), nil)
 end)
 
+t.test("wordsFromText: not fooled by ordinary text", function()
+    local P = freshProbe()
+    H.eq(P.wordsFromText("<h1>Words: 3 Stories</h1>"), nil, "a title read as a word count")
+    H.eq(P.wordsFromText("<p>PassWords: 12000</p>"), nil, "matched inside another word")
+    H.eq(P.wordsFromText("<b>Words:</b> 5,000 2 chapters"), 5000, "two numbers run together")
+    H.eq(P.wordsFromText("<b>Words:</b> 100"), 100, "a drabble is a real count")
+end)
+
 t.done()

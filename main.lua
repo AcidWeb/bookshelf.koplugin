@@ -2548,10 +2548,28 @@ function Bookshelf:scanPageCounts(opts)
 
     -- A Lua error mid-scan must still end the job, or the status line would
     -- show its progress until KOReader restarts.
+    -- holdAwake(on): a scan runs for minutes, and the device suspended in the
+    -- middle of one (issue 459's crash.log). AutoSuspend reads
+    -- PluginShare.pause_auto_suspend, not UIManager's standby count, so both
+    -- are held; the flag's earlier value (Keep-alive may have set it) comes
+    -- back. Idempotent both ways, so a wait can let go and take it again.
+    local held_prev
+    local function holdAwake(on)
+        local ok_ps, PluginShare = pcall(require, "pluginshare")
+        if on and held_prev == nil then
+            held_prev = (ok_ps and PluginShare.pause_auto_suspend) and true or false
+            if ok_ps then PluginShare.pause_auto_suspend = true end
+            pcall(function() UIManager:preventStandby() end)
+        elseif not on and held_prev ~= nil then
+            if ok_ps then PluginShare.pause_auto_suspend = held_prev end
+            held_prev = nil
+            pcall(function() UIManager:allowStandby() end)
+        end
+    end
+
     Trapper:wrap(function()
-    -- A scan runs for minutes and the device suspended in the middle of one
-    -- (issue 459's crash.log); every exit below comes back through here.
-    pcall(function() UIManager:preventStandby() end)
+    -- Every exit below comes back through here.
+    holdAwake(true)
     local ok_run, err_run = xpcall(function()
         local job = Progress.begin{
             title  = lookupTitle(),
@@ -2758,7 +2776,12 @@ function Bookshelf:scanPageCounts(opts)
         for i, fp in ipairs(todo) do
             -- Not while a book is open: each render is seconds of CPU the
             -- reader would feel. A parked reader (under the shelf) is fine.
-            while Progress.reading() and not job.stopped do breathe(2) end
+            -- The reader's session is not the scan's to keep awake.
+            if Progress.reading() then
+                holdAwake(false)
+                while Progress.reading() and not job.stopped do breathe(2) end
+                holdAwake(true)
+            end
             if job.stopped then
                 report.cancelled = true
                 break
@@ -2842,7 +2865,7 @@ function Bookshelf:scanPageCounts(opts)
         require("logger").warn("bookshelf: page count scan failed:", err_run)
         Progress.finish()
     end
-    pcall(function() UIManager:allowStandby() end)
+    holdAwake(false)
     end)
 end
 
