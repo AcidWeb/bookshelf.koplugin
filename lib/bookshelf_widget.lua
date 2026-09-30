@@ -1841,15 +1841,7 @@ function BookshelfWidget:_rebuild()
                     -- else refreshed it (device report: "a lifted book is not
                     -- always dropped when the currently reading button is
                     -- tapped").
-                    if prior_rect then
-                        local pad = math.max(Screen:scaleBySize(12),
-                                             self._spine_lift_headroom or 0)
-                        prior_rect.y = math.max(0, prior_rect.y - pad)
-                        prior_rect.h = prior_rect.h + pad
-                        UIManager:setDirty(self, function()
-                            return "ui", prior_rect, self.dithered
-                        end)
-                    end
+                    if prior_rect then self:_dirtyDroppedBook(prior_rect) end
                 end
                 return
             end
@@ -13386,6 +13378,20 @@ function BookshelfWidget:_liftShown()
     return fp and self:_shelfSlotRect(fp) or nil
 end
 
+-- _dirtyDroppedBook(rect): refresh where a lifted book was and where it lands.
+-- rect is the book as it was painted, lifted. Above it: the headroom a lift
+-- can rise into. Below it: the same again, as the book comes back down by its
+-- lift -- a face-out cover's foot lands below the rect, over the shadow its
+-- lift left on the plank, and without this that strip kept the shadow
+-- (device report).
+function BookshelfWidget:_dirtyDroppedBook(rect)
+    local pad = math.max(Screen:scaleBySize(12), self._spine_lift_headroom or 0)
+    local y0 = math.max(0, rect.y - pad)
+    local y1 = rect.y + rect.h + pad + Screen:scaleBySize(6)
+    rect.y, rect.h = y0, y1 - y0
+    UIManager:setDirty(self, function() return "ui", rect, self.dithered end)
+end
+
 -- _dropLift() -> true when it put a lifted book back on the shelf: the first
 -- tap of "tap twice to open", or the book the hero is previewing (the hero
 -- goes back to the book being read, as the Currently reading chip does).
@@ -13405,10 +13411,7 @@ function BookshelfWidget:_dropLift()
     self:_rebuildRefreshHeroAndChips()
     -- The hero band is refreshed above; the row the book stood out of is not
     -- in it (see the Currently reading chip).
-    local pad = math.max(Screen:scaleBySize(12), self._spine_lift_headroom or 0)
-    rect.y = math.max(0, rect.y - pad)
-    rect.h = rect.h + pad
-    UIManager:setDirty(self, function() return "ui", rect, self.dithered end)
+    self:_dirtyDroppedBook(rect)
     return true
 end
 

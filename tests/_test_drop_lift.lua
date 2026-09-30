@@ -10,6 +10,7 @@ local t, eq = H.runner(), H.eq
 local src = io.open("lib/bookshelf_widget.lua"):read("*a")
 local body = src:match("\n(function BookshelfWidget:_dropLift%(.-\nend)\n")
 local shown_body = src:match("\n(function BookshelfWidget:_liftShown%(.-\nend)\n")
+local dirty_body = src:match("\n(function BookshelfWidget:_dirtyDroppedBook%(.-\nend)\n")
 
 local dirty = {}
 local function load_drop()
@@ -20,11 +21,13 @@ local function load_drop()
         UIManager = { setDirty = function(_u, w, f) dirty[#dirty + 1] = { w, f } end },
     }, { __index = _G })
     assert(shown_body, "no BookshelfWidget:_liftShown")
-    local chunk = assert((loadstring or load)(shown_body .. "\n" .. body, "=_dropLift", "t", env))
+    assert(dirty_body, "no BookshelfWidget:_dirtyDroppedBook")
+    local chunk = assert((loadstring or load)(shown_body .. "\n" .. dirty_body .. "\n" .. body, "=_dropLift", "t", env))
     if setfenv then setfenv(chunk, env) end
     chunk()
     return function(w)
         w._liftShown = env.BookshelfWidget._liftShown
+        w._dirtyDroppedBook = env.BookshelfWidget._dirtyDroppedBook
         return env.BookshelfWidget._dropLift(w)
     end
 end
@@ -60,6 +63,11 @@ t.test("a previewed book drops: the hero goes back to the book being read", func
     eq(w._preview_book, nil); eq(w._hero_mode, "current")
     eq(w.calls[1], { "hero" })
     eq(#dirty, 1, "the row the book stood out of is refreshed too")
+    local _mode, r = dirty[1][2]()
+    -- The book's rect was y=100 h=80 (lifted); it lands lower, so the
+    -- refresh reaches below it as well as above (a face-out's foot and the
+    -- lift shadow it leaves). pad = max(12, headroom 8) = 12 here.
+    assert(r.y < 100 and r.y + r.h >= 100 + 80 + 12, "the refresh does not reach where the book lands")
 end)
 
 t.test("nothing lifted on this page: the tap is left alone", function()
