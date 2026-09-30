@@ -175,13 +175,23 @@ local function _calibreMetadataFor(filepath, enabled)
     _calibre_state.last_check = now
     local home = G_reader_settings:readSetting("home_dir") or "/"
     local lfs  = require("libs/libkoreader-lfs")
+    -- Home first, then the folder above it: Calibre sends metadata.calibre to
+    -- the root of the device, and a home set to a Books folder under that
+    -- root found nothing (issue 475). The lpaths are relative to the file,
+    -- and lib_root below is taken from wherever it was found.
+    local dirs = { home }
+    local parent = _normPath(home):gsub("/+$", ""):match("^(.*)/[^/]+$")
+    if parent then dirs[#dirs + 1] = (parent == "" and "/" or parent) end
     local meta_path
-    for _i, name in ipairs({ "metadata.calibre", ".metadata.calibre" }) do
-        local p = _joinPath(home, name)
-        if lfs.attributes(p, "mode") == "file" then
-            meta_path = p
-            break
+    for _d, dir in ipairs(dirs) do
+        for _i, name in ipairs({ "metadata.calibre", ".metadata.calibre" }) do
+            local p = _joinPath(dir, name)
+            if lfs.attributes(p, "mode") == "file" then
+                meta_path = p
+                break
+            end
         end
+        if meta_path then break end
     end
     if not meta_path then
         _calibre_state.file_path = nil

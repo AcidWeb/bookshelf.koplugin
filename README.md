@@ -528,7 +528,7 @@ Long-press an image-set folder or stack and tap *Clear … image* to revert to t
 
 ## Calibre metadata (beta)
 
-For libraries managed by Calibre. Turn on **menu > Settings > Advanced > BETA: Read calibre metadata.calibre** and Bookshelf reads the `metadata.calibre` file Calibre writes when it syncs books to a device or manages a folder. The file must sit **directly in your KOReader home folder** (the folder Bookshelf scans for books), so point Calibre's device sync at that folder, or set your home folder to wherever Calibre already syncs. Its fields are read alongside each book's embedded metadata.
+For libraries managed by Calibre. Turn on **menu > Settings > Advanced > BETA: Read calibre metadata.calibre** and Bookshelf reads the `metadata.calibre` file Calibre writes when it syncs books to a device or manages a folder. The file must sit **directly in your KOReader home folder** (the folder Bookshelf scans for books) **or the folder above it**, which covers Calibre's usual place at the root of the device when your home folder is a folder inside it. Its fields are read alongside each book's embedded metadata.
 
 What it adds:
 

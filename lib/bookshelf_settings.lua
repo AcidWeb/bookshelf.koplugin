@@ -4446,7 +4446,8 @@ function Settings:_advancedSubItems()
             -- Calibre library built from filenames ended up overriding
             -- correct metadata with a chapter title as the author (#381).
             help_text = _("For users with a Calibre-managed library. "
-                .. "Reads the metadata.calibre file in your home folder to "
+                .. "Reads the metadata.calibre file in your home folder, or "
+                .. "the folder above it, to "
                 .. "fill in title, authors, series, tags, language and "
                 .. "description for every book at once, with no per-book "
                 .. "extraction. Calibre's values take priority over the "

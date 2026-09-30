@@ -19,7 +19,8 @@ package.loaded["libs/libkoreader-lfs"] = {
     attributes = function() return nil end,   -- no metadata.calibre anywhere
 }
 
-local t = dofile("tests/_helpers.lua").runner()
+local H = dofile("tests/_helpers.lua")
+local t, eq = H.runner(), H.eq
 local CalibreMeta = dofile("lib/calibre_metadata.lua")
 
 t.test("module exposes its contract", function()
@@ -228,6 +229,40 @@ t.test("a normal home_dir is unaffected", function()
     local M = withStubbedJson(STRIPPED, HARVEST)
     local e = M.entryFor("/lib/a/Dune.epub", true)
     assert(e and e.calibre and e.calibre.mood == "cosy")
+end)
+
+-- ── issue 475: Calibre writes metadata.calibre to the device root ──────────
+
+t.test("a library file in the folder above home is found", function()
+    -- Calibre sends metadata.calibre to the root of the device, and a reader
+    -- whose home is a Books folder under it found nothing. The lpaths are
+    -- relative to where the file is, so the books still resolve.
+    local M = withStubbedJson(STRIPPED, HARVEST, "/lib/Books")
+    local e = M.entryFor("/lib/a/Dune.epub", true)
+    assert(e, "metadata.calibre in the parent of home was not found")
+    assert(e.author_sort == "Herbert, Frank", "author_sort: " .. tostring(e.author_sort))
+end)
+
+t.test("home is searched before the folder above it", function()
+    local M = withStubbedJson(STRIPPED, HARVEST, "/lib/Books")
+    local real = package.loaded["libs/libkoreader-lfs"]
+    local probed = {}
+    package.loaded["libs/libkoreader-lfs"] = {
+        attributes = function(path, what)
+            if what == "mode" then probed[#probed + 1] = path end
+            return real.attributes(path, what)
+        end,
+    }
+    M.invalidate()
+    M.entryFor("/lib/a/Dune.epub", true)
+    package.loaded["libs/libkoreader-lfs"] = real
+    eq(probed[1], "/lib/Books/metadata.calibre", "home is not searched first")
+    eq(probed[3], "/lib/metadata.calibre", "the parent is not searched after home")
+end)
+
+t.test("a home at the root of the filesystem looks nowhere else", function()
+    local M = withStubbedJson(STRIPPED, HARVEST, "/")
+    assert(M.entryFor("/lib/a/Dune.epub", true) == nil)
 end)
 
 -- ── Harvest carry-forward: never drop a field this writer does not know ────
