@@ -24,7 +24,11 @@ local LuaSettings = require("luasettings")
 local logger      = require("logger")
 local lfs         = require("libs/libkoreader-lfs")
 
-local SETTINGS_PATH = DataStorage:getSettingsDir() .. "/bookshelf.lua"
+-- settings/bookshelf/settings.lua (lib/bookshelf_paths). Until 5.3 it was
+-- settings/bookshelf.lua; lib/bookshelf_storage_move brings it over, before
+-- this module loads (main.lua runs the move first).
+local Paths = require("lib/bookshelf_paths")
+local SETTINGS_PATH = Paths.settingsFile("settings.lua")
 
 local _file_present_at_load = lfs.attributes(SETTINGS_PATH, "mode") ~= nil
 
@@ -69,9 +73,9 @@ local _settings = nil
 
 -- Large values are routed to their OWN files (not bookshelf.lua), so saving an
 -- ordinary preference doesn't rewrite them:
---   * "micromodule_*" keys      -> bookshelf_micromodules.lua
---   * "hardcover_links" (cache) -> bookshelf_hardcover_links.lua
---   * "opds_cache" (cache)      -> bookshelf_opds.lua
+--   * "micromodule_*" keys      -> settings/bookshelf/micromodule_data.lua
+--   * "hardcover_links" (cache) -> settings/bookshelf/hardcover_links.lua
+--   * "opds_cache" (cache)      -> cache/bookshelf/opds.lua
 -- subStoreFor(key) returns the destination store or nil (= the main file).
 -- Sub-stores are lazy-required so they aren't pulled in until a routed key is
 -- touched (and so the standalone test runner can stub them).
@@ -81,11 +85,11 @@ local function mm()
     return _mm
 end
 local function hc()
-    _hc = _hc or require("lib/bookshelf_file_store").new("bookshelf_hardcover_links.lua")
+    _hc = _hc or require("lib/bookshelf_file_store").new(Paths.settingsFile("hardcover_links.lua"))
     return _hc
 end
 local function opds()
-    _opds = _opds or require("lib/bookshelf_file_store").new("bookshelf_opds.lua")
+    _opds = _opds or require("lib/bookshelf_file_store").new(Paths.cacheFile("opds.lua"))
     return _opds
 end
 local function subStoreFor(key)

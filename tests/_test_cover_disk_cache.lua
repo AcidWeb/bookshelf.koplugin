@@ -45,7 +45,7 @@ local lfs_real = {
 }
 package.loaded["libs/libkoreader-lfs"] = lfs_real
 package.loaded["logger"] = { dbg = function() end, warn = function() end, info = function() end }
-package.loaded["datastorage"] = { getDataDir = function() return DIR end }
+package.loaded["datastorage"] = { getDataDir = function() return DIR end, getSettingsDir = function() return DIR .. "/settings" end }
 
 -- A blitbuffer that is just bytes: enough for store/load to exercise the
 -- header and the copy without pulling in the real ffi one.
@@ -86,7 +86,7 @@ lfs_real.mkdir(DIR .. "/cache")
 local Cache = require("lib/bookshelf_cover_disk_cache")
 local BB = package.loaded["ffi/blitbuffer"]
 
-local STORE = DIR .. "/cache/bookshelf_covers"
+local STORE = DIR .. "/cache/bookshelf/scaled_covers"
 
 local function makeBB(w, h, fill, stride)
     stride = stride or w
@@ -174,9 +174,9 @@ t.test("a truncated file is rejected", function()
     Cache.store("/books/trunc.epub", makeBB(8, 4, 77))
     -- Chop the pixel data in half, leaving the header intact.
     local key
-    for entry in lfs_real.dir(DIR .. "/cache/bookshelf_covers") do
+    for entry in lfs_real.dir(DIR .. "/cache/bookshelf/scaled_covers") do
         if entry ~= "." and entry ~= ".." then
-            local p = DIR .. "/cache/bookshelf_covers/" .. entry
+            local p = DIR .. "/cache/bookshelf/scaled_covers/" .. entry
             local f = io.open(p, "rb"); local all = f:read("*a"); f:close()
             if all:find("/books/trunc.epub", 1, true) then key = p end
         end

@@ -9,7 +9,7 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 local t = dofile("tests/_helpers.lua").runner()
 
 local opens, flushes = 0, 0
-package.loaded["datastorage"] = {
+package.loaded["datastorage"] = { getDataDir = function() return "/data" end, 
     getSettingsDir = function() return "/settings" end,
 }
 package.loaded["luasettings"] = {
@@ -28,8 +28,8 @@ local FileStore = dofile("lib/bookshelf_file_store.lua")
 
 t.test("path() and lazy open", function()
     opens = 0
-    local store = FileStore.new("bookshelf_x.lua")
-    assert(store.path() == "/settings/bookshelf_x.lua")
+    local store = FileStore.new("/settings/bookshelf/x.lua")
+    assert(store.path() == "/settings/bookshelf/x.lua", "new(path) takes the full path")
     assert(opens == 0, "creating a store must not open the file")
     store.flush()
     assert(opens == 0, "flush before any access must not open the file")
@@ -40,7 +40,7 @@ t.test("path() and lazy open", function()
 end)
 
 t.test("read returns default only when unset", function()
-    local store = FileStore.new("bookshelf_x.lua")
+    local store = FileStore.new("/settings/bookshelf/x.lua")
     assert(store.read("missing", "fallback") == "fallback")
     store.save("k", false)
     assert(store.read("k", "fallback") == false,
@@ -48,7 +48,7 @@ t.test("read returns default only when unset", function()
 end)
 
 t.test("save flushes once per call", function()
-    local store = FileStore.new("bookshelf_x.lua")
+    local store = FileStore.new("/settings/bookshelf/x.lua")
     store.read("warm")   -- open outside the counted window
     flushes = 0
     store.save("a", 1)
@@ -57,7 +57,7 @@ t.test("save flushes once per call", function()
 end)
 
 t.test("saveDeferred writes in-memory only; flush() lands the batch", function()
-    local store = FileStore.new("bookshelf_x.lua")
+    local store = FileStore.new("/settings/bookshelf/x.lua")
     store.read("warm")
     flushes = 0
     store.saveDeferred("lat", 51.5)
@@ -70,7 +70,7 @@ end)
 
 t.test("deferred batch closed by a final save() also lands once", function()
     -- The exact weather/on_this_day pattern: N saveDeferred + 1 save.
-    local store = FileStore.new("bookshelf_x.lua")
+    local store = FileStore.new("/settings/bookshelf/x.lua")
     store.read("warm")
     flushes = 0
     store.saveDeferred("data", { temp = 21 })
@@ -81,7 +81,7 @@ t.test("deferred batch closed by a final save() also lands once", function()
 end)
 
 t.test("delete removes and flushes", function()
-    local store = FileStore.new("bookshelf_x.lua")
+    local store = FileStore.new("/settings/bookshelf/x.lua")
     store.save("k", "v")
     flushes = 0
     store.delete("k")

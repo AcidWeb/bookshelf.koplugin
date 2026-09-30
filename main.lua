@@ -29,6 +29,9 @@
 --     which is required so the close-document hook fires inside the Reader.
 
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+-- Before ANY store opens its file: bring bookshelf's files over from the old
+-- flat layout into settings/bookshelf/ and cache/bookshelf/ (5.3).
+require("lib/bookshelf_storage_move").run()
 local BookshelfSettings = require("lib/bookshelf_settings_store")
 local UIManager       = require("ui/uimanager")
 local logger          = require("logger")
@@ -3254,33 +3257,40 @@ end
 -- delete plugin settings". (Available in KOReader nightly via upstream
 -- PR #15240, expected in the next stable release.) Anything outside the
 -- install directory we need to clean up:
---   - <settings_dir>/bookshelf.lua (the LuaSettings file the store writes)
---     plus the routed sub-store files (micromodules / hardcover links /
---     opds cache) and the Hardcover module's settings + sqlite cache
---   - the cover / cache directories the plugin grows under settings_dir
+--   - our settings files in settings/bookshelf/ (the main settings file, the
+--     micro-module data, Hardcover links and cache, page counts) and all of
+--     cache/bookshelf/ (lib/bookshelf_paths), plus anything an older version
+--     left in the flat layout. The reader's content folders stay.
 --   - any legacy bookshelf_* keys in G_reader_settings that the migration
 --     never moved (e.g. user deleted the plugin before ever opening it
 --     post-upgrade)
 function Bookshelf:deletePluginSettings()
+    local Paths = require("lib/bookshelf_paths")
+    -- Our settings and caches (lib/bookshelf_paths). The reader's content in
+    -- settings/bookshelf/ (wallpapers, ornaments, quotes, micro-modules) is
+    -- left, as before; so are other plugins' files (the Hardcover sync
+    -- plugin's settings, which bookshelf only reads and adds to).
+    local sdir = Paths.settingsDir()
+    for _i, f in ipairs({ "settings.lua", "micromodule_data.lua", "hardcover_links.lua",
+                          "book_facts.sqlite3", "hardcover.sqlite3" }) do
+        for _j, c in ipairs({ "", ".old", "-wal", "-shm", "-journal" }) do
+            os.remove(sdir .. "/" .. f .. c)
+        end
+    end
+    local ok_ffi, ffiutil = pcall(require, "ffi/util")
+    if ok_ffi and ffiutil and type(ffiutil.purgeDir) == "function" then
+        pcall(ffiutil.purgeDir, Paths.cacheDir())
+    end
+    -- Anything an older bookshelf left in the flat layout.
     local DataStorage = require("datastorage")
     local settings_dir = DataStorage:getSettingsDir()
-    for _i, f in ipairs({
-        "bookshelf.lua",
-        "bookshelf_micromodules.lua",       -- bookshelf_settings_store sub-stores
-        "bookshelf_hardcover_links.lua",
-        "bookshelf_opds.lua",
-        "bookshelf_changelog.lua",          -- cached release notes
-        "hardcoversync_settings.lua",       -- bookshelf_hardcover settings
-    }) do
-        os.remove(settings_dir .. "/" .. f)
-        os.remove(settings_dir .. "/" .. f .. ".old")
+    for _i, f in ipairs({ "bookshelf.lua", "bookshelf_micromodules.lua", "bookshelf_hardcover_links.lua",
+                          "bookshelf_opds.lua", "bookshelf_changelog.lua", "bookshelf_book_facts.sqlite3",
+                          "bookshelf_hardcover.sqlite3", "bookshelf_opds.sqlite3", "bookshelf_hero_inflight" }) do
+        for _j, c in ipairs({ "", ".old", "-wal", "-shm", "-journal" }) do
+            os.remove(settings_dir .. "/" .. f .. c)
+        end
     end
-    os.remove(settings_dir .. "/bookshelf_hardcover.sqlite3")
-    -- Cover working dir (incl. the OPDS cover cache), the updater's download
-    -- scratch dir, and the Hardcover enrichment cover dir. purgeDir is
-    -- recursive; pcall so a missing dir (or an older KOReader without the
-    -- helper) can't abort the remaining cleanup.
-    local ok_ffi, ffiutil = pcall(require, "ffi/util")
     if ok_ffi and ffiutil and type(ffiutil.purgeDir) == "function" then
         for _i, d in ipairs({ "bookshelf_covers", "bookshelf_cache", "bookshelf_hardcover" }) do
             pcall(ffiutil.purgeDir, settings_dir .. "/" .. d)

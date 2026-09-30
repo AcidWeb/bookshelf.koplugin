@@ -21,7 +21,7 @@ M.MAX_BODY     = 8 * 1024
 
 local _store
 local function store()
-    _store = _store or require("lib/bookshelf_file_store").new("bookshelf_changelog.lua")
+    _store = _store or require("lib/bookshelf_file_store").new(require("lib/bookshelf_paths").cacheFile("changelog.lua"))
     return _store
 end
 

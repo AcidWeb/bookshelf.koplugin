@@ -451,7 +451,7 @@ function Updater.install(zip_url, old_version, new_version, on_success, error_la
 
     UIManager:scheduleIn(0.1, function()
         -- Download ZIP to temp location
-        local cache_dir = DataStorage:getSettingsDir() .. "/bookshelf_cache"
+        local cache_dir = require("lib/bookshelf_paths").cacheFile("updater")
         if lfs.attributes(cache_dir, "mode") ~= "directory" then
             lfs.mkdir(cache_dir)
         end

@@ -11,13 +11,13 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 -- upvalue, so reassigning the slot repoints it.
 local lua_store = {}
 local flush_count = 0
-local MAIN_PATH = "/tmp/bookshelf-settings-test/bookshelf.lua"
+local MAIN_PATH = "/tmp/bookshelf-settings-test/bookshelf/settings.lua"
 -- Routed keys (opds_cache, hardcover_links, micromodule_*) land in their own
 -- files, keyed here by path -- separate tables from lua_store so a test can
 -- assert a routed key is absent from the main file and present in its own.
 local sub_files = {}
 
-package.loaded["datastorage"] = {
+package.loaded["datastorage"] = { getDataDir = function() return "/tmp/bookshelf-settings-test-data" end, 
     getSettingsDir = function() return "/tmp/bookshelf-settings-test" end,
 }
 package.loaded["logger"] = {
@@ -134,14 +134,14 @@ t.test("opds_cache routes to its own file, not the main file", function()
     Store.save("opds_cache", { ["srv|feed"] = { entries = {} } })
     assert(lua_store.opds_cache == nil,
         "opds_cache write must NOT touch the main file")
-    local sub = sub_files["/tmp/bookshelf-settings-test/bookshelf_opds.lua"]
+    local sub = sub_files["/tmp/bookshelf-settings-test-data/cache/bookshelf/opds.lua"]
     assert(sub ~= nil and sub.opds_cache["srv|feed"] ~= nil,
         "opds_cache write must land in the bookshelf_opds.lua file")
     eq(Store.read("opds_cache")["srv|feed"].entries ~= nil, true)
 end)
 
 t.test("path() returns the dedicated bookshelf settings file", function()
-    eq(Store.path(), "/tmp/bookshelf-settings-test/bookshelf.lua")
+    eq(Store.path(), "/tmp/bookshelf-settings-test/bookshelf/settings.lua")
 end)
 
 t.test("wasPresent reflects whether the file existed at load", function()

@@ -74,7 +74,7 @@ guarded so the standalone test runner (no DataStorage) can still load this.
 function M.heroMarkerPath()
     local ok, DataStorage = pcall(require, "datastorage")
     if ok and DataStorage then
-        return DataStorage:getSettingsDir() .. "/bookshelf_hero_inflight"
+        return require("lib/bookshelf_paths").cacheFile("hero_inflight")
     end
     return nil
 end

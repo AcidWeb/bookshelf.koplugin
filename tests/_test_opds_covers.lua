@@ -5,7 +5,7 @@
 -- "existing files" set.
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
-package.loaded["datastorage"] = {
+package.loaded["datastorage"] = { getDataDir = function() return "/tmp/opds_covers_test_data" end, 
     getSettingsDir = function() return "/tmp/opds_covers_test_settings" end,
 }
 
@@ -103,7 +103,7 @@ local eq = helpers.eq
 local OpdsCovers = dofile("lib/bookshelf_opds_covers.lua")
 local OpdsSource = require("lib/bookshelf_opds_source")
 
-local CACHE_ROOT = "/tmp/opds_covers_test_settings/bookshelf_covers/opds"
+local CACHE_ROOT = "/tmp/opds_covers_test_data/cache/bookshelf/covers/opds"
 
 local rec_ok = {
     filepath = "OPDS://abcd1234/book-1",
@@ -500,7 +500,7 @@ t.test("sweepCache never deletes anything outside the opds cache dir", function(
     })
     -- A sibling under bookshelf_covers (the Cover tab's working material) and
     -- a file one level too deep: neither is this sweep's to touch.
-    local sibling = "/tmp/opds_covers_test_settings/bookshelf_covers/emb_book.png"
+    local sibling = "/tmp/opds_covers_test_data/cache/bookshelf/covers/emb_book.png"
     _G._test_files[sibling] = { size = 50 * MB, mtime = 1 }
     OpdsCovers.sweepCache()
     assert(_G._test_files[sibling] ~= nil, "a file outside opds/ must never be removed")

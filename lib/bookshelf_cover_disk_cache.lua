@@ -51,7 +51,7 @@ local function dir()
         _dir = false
         return nil
     end
-    local d = DataStorage:getDataDir() .. "/cache/bookshelf_covers"
+    local d = require("lib/bookshelf_paths").cacheFile("scaled_covers")
     if lfs.attributes(d, "mode") ~= "directory" then
         local ok_mk = pcall(lfs.mkdir, d)
         if not ok_mk or lfs.attributes(d, "mode") ~= "directory" then

@@ -14,7 +14,7 @@ local logger      = require("logger")
 local CoverFetch = {}
 
 function CoverFetch.cacheDir()
-    return DataStorage:getSettingsDir() .. "/bookshelf_covers"
+    return require("lib/bookshelf_paths").cacheFile("covers")
 end
 
 -- Online downloads are TRANSIENT (a chosen cover is copied into the book's .sdr

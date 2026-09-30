@@ -14,7 +14,7 @@ package.loaded["ffi/util"] = {
 }
 -- In-memory file store (same stub shape as _test_file_store).
 local flushes = 0
-package.loaded["datastorage"] = { getSettingsDir = function() return "/settings" end }
+package.loaded["datastorage"] = { getDataDir = function() return "/data" end,  getSettingsDir = function() return "/settings" end }
 package.loaded["luasettings"] = {
     open = function(_self, path)
         local s = { data = {}, path = path }

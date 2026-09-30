@@ -11,7 +11,7 @@
 -- all (full-size images, so tens of MB on a metered device).
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
-package.loaded["datastorage"] = {
+package.loaded["datastorage"] = { getDataDir = function() return "/data" end, 
     getSettingsDir = function() return "/settings" end,
 }
 
@@ -76,7 +76,7 @@ local t = helpers.runner()
 
 local CoverApply = dofile("lib/bookshelf_cover_apply.lua")
 
-local ROOT = "/settings/bookshelf_covers"
+local ROOT = "/data/cache/bookshelf/covers"
 
 local function seed()
     FS = {}

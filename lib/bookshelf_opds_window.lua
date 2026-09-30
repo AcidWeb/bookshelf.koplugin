@@ -91,9 +91,12 @@ local function clearLegacy()
     -- the backup sitting there and would never reach this inside the guard.
     local ok_ds, DataStorage = pcall(require, "datastorage")
     if ok_ds and DataStorage then
-        local stale = DataStorage:getSettingsDir() .. "/bookshelf_opds.lua.old"
-        if os.remove(stale) then
-            logger.dbg("[bookshelf] removed the legacy opds store's .old backup")
+        -- Where it was, and where the storage move put it (cache/bookshelf/).
+        for _i, stale in ipairs({ DataStorage:getSettingsDir() .. "/bookshelf_opds.lua.old",
+                                  require("lib/bookshelf_paths").cacheFile("opds.lua.old") }) do
+            if os.remove(stale) then
+                logger.dbg("[bookshelf] removed the legacy opds store's .old backup")
+            end
         end
     end
 end

@@ -46,7 +46,7 @@ local logger = (function()
     return { dbg = function() end, warn = function() end }
 end)()
 
-M.DB_NAME = "bookshelf_opds.sqlite3"
+M.DB_NAME = "opds.sqlite3"   -- in cache/bookshelf/ (lib/bookshelf_paths)
 
 -- Payload codec. rapidjson is bundled with KOReader and measured 3.5x faster
 -- to encode and 2.6x faster to decode than the Lua dump/loadstring pair, at
@@ -121,7 +121,7 @@ function M.open()
     if not ok_ds then _open_failed = "no-datastorage"; return nil, _open_failed end
     local ok_sq, SQ3 = pcall(require, "lua-ljsqlite3/init")
     if not (ok_sq and SQ3) then _open_failed = "no-sqlite"; return nil, _open_failed end
-    local path = DataStorage:getSettingsDir() .. "/" .. M.DB_NAME
+    local path = require("lib/bookshelf_paths").cacheFile(M.DB_NAME)
     local ok_open, db = pcall(SQ3.open, path)
     if not (ok_open and db) then _open_failed = "open-failed"; return nil, _open_failed end
     -- WAL: see the header. NORMAL sync is the right trade for a cache - a torn

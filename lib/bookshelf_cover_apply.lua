@@ -34,7 +34,7 @@ local CHOICES_KEY = "cover_choices"
 -- Downloaded / extracted cover working files live here (shared with
 -- bookshelf_cover_fetch). Kept out of any .sdr so they're disposable cache.
 local function _cacheDir()
-    return DataStorage:getSettingsDir() .. "/bookshelf_covers"
+    return require("lib/bookshelf_paths").cacheFile("covers")
 end
 
 -- Shared recursive, pcall-hardened helper (lib/bookshelf_fs); the flat copy

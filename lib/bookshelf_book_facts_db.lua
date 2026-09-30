@@ -38,7 +38,7 @@ local logger = require("logger")
 
 local M = {}
 
-M.DB_NAME = "bookshelf_book_facts.sqlite3"
+M.DB_NAME = "book_facts.sqlite3"   -- in settings/bookshelf/ (lib/bookshelf_paths)
 
 local SCHEMA = [[
 CREATE TABLE IF NOT EXISTS book_facts (
@@ -71,7 +71,7 @@ function M.open()
     if not ok_ds then _open_failed = "no-datastorage"; return nil, _open_failed end
     local ok_sq, SQ3 = pcall(require, "lua-ljsqlite3/init")
     if not (ok_sq and SQ3) then _open_failed = "no-sqlite"; return nil, _open_failed end
-    local path = DataStorage:getSettingsDir() .. "/" .. M.DB_NAME
+    local path = require("lib/bookshelf_paths").settingsFile(M.DB_NAME)
     local ok_open, db = pcall(SQ3.open, path)
     if not (ok_open and db) then _open_failed = "open-failed"; return nil, _open_failed end
     local ok_p = pcall(function()

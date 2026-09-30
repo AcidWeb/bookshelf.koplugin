@@ -30,7 +30,7 @@ end
 
 function M.cacheDir()
     local DataStorage = require("datastorage")
-    return DataStorage:getSettingsDir() .. "/bookshelf_covers/opds"
+    return require("lib/bookshelf_paths").cacheFile("covers/opds")
 end
 
 function M.cachePath(rec)

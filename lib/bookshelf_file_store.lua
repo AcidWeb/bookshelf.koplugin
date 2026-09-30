@@ -1,12 +1,12 @@
 -- bookshelf_file_store.lua
 --
--- Factory for a small key/value store backed by its OWN settings file under
--- <datadir>/settings/, separate from the main bookshelf.lua. Used for large
+-- Factory for a small key/value store backed by its OWN settings file,
+-- separate from the main settings file. Used for large
 -- values that shouldn't ride along in bookshelf.lua and get rewritten on every
 -- preference save (LuaSettings:flush serialises the whole table): the
 -- micro-module data file and the Hardcover link cache.
 --
---   local store = require("lib/bookshelf_file_store").new("bookshelf_x.lua")
+--   local store = require("lib/bookshelf_file_store").new(Paths.settingsFile("x.lua"))
 --   store.read(key, default) / store.save(key, v) / store.delete(key)
 --   store.saveDeferred(key, v)  -- in-memory only; pair with store.flush()
 --
@@ -15,10 +15,9 @@
 
 local M = {}
 
-function M.new(filename)
-    local DataStorage = require("datastorage")
+-- new(path): path is the file's full path (lib/bookshelf_paths).
+function M.new(path)
     local LuaSettings = require("luasettings")
-    local path = DataStorage:getSettingsDir() .. "/" .. filename
 
     local settings
     local function open()

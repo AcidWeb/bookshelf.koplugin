@@ -37,8 +37,7 @@ local function _settingsPath()
 end
 
 local function _cacheDir()
-    local DataStorage = require("datastorage")
-    return DataStorage:getSettingsDir() .. "/bookshelf_hardcover"
+    return require("lib/bookshelf_paths").cacheFile("hardcover")
 end
 
 -- Shared recursive, pcall-hardened helper (lib/bookshelf_fs).
@@ -144,7 +143,7 @@ local function _cacheDb(for_write)
     if _cache_db == false then return nil end   -- disabled after a prior failure
     if _cache_db then return _cache_db end
     local DataStorage = require("datastorage")
-    local db_path = DataStorage:getSettingsDir() .. "/bookshelf_hardcover.sqlite3"
+    local db_path = require("lib/bookshelf_paths").settingsFile("hardcover.sqlite3")
     if not for_write then
         local lfs = require("libs/libkoreader-lfs")
         if lfs.attributes(db_path, "mode") ~= "file"

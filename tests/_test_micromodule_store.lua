@@ -24,7 +24,7 @@ package.loaded["luasettings"] = {
         return obj
     end,
 }
-package.loaded["datastorage"] = { getSettingsDir = function() return "/x" end }
+package.loaded["datastorage"] = { getDataDir = function() return "/xd" end,  getSettingsDir = function() return "/x" end }
 package.loaded["logger"] = { dbg = function() end, info = function() end,
                              warn = function() end, err = function() end }
 package.loaded["libs/libkoreader-lfs"] = {
@@ -33,10 +33,10 @@ package.loaded["libs/libkoreader-lfs"] = {
 _G.G_reader_settings = { readSetting = function() return nil end,
                          delSetting = function() end }
 
-local MAIN = "/x/bookshelf.lua"
-local MM   = "/x/bookshelf_micromodules.lua"
+local MAIN = "/x/bookshelf/settings.lua"
+local MM   = "/x/bookshelf/micromodule_data.lua"
 
-local HC = "/x/bookshelf_hardcover_links.lua"
+local HC = "/x/bookshelf/hardcover_links.lua"
 
 -- Seed: legacy migration already done (skip it), relocation NOT yet done, with
 -- a micromodule_* key, the big hardcover_links cache, and an ordinary key all in
