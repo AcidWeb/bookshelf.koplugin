@@ -19,11 +19,28 @@
 
 local StatusLine = {}
 
---- Where bookshelf keeps the hero regions. A plain G_reader_settings key, NOT
---- bookshelf's own settings file, and deliberately so: it means bookends reads
---- it with no pcall(require) of a sibling plugin and no file paths, so the
---- interop cannot break when bookshelf refactors.
+--- The hero regions' key. Read through StatusLine.source() below: bookshelf's
+--- own settings since its 5.3, G_reader_settings before. Either way bookends
+--- reads it with no pcall(require) of a sibling plugin and no file paths, so
+--- the interop cannot break when bookshelf refactors.
 StatusLine.SETTINGS_KEY = "bookshelf_hero_regions"
+
+--- Where the three keys are read from. Bookshelf 5.3 moved them out of
+--- G_reader_settings into its own settings file (settings/bookshelf/), so a
+--- backup of that folder keeps them; its live store is offered here through
+--- package.loaded, which is the same Lua state and still no pcall(require) of
+--- a sibling plugin and no file path. Its view() reads the key names below.
+--- A bookshelf before 5.3 (no view) or none at all: G_reader_settings, where
+--- older bookshelf keeps them.
+--- @return table a readSetting-shaped settings object
+function StatusLine.source()
+    local store = package.loaded["lib/bookshelf_settings_store"]
+    if type(store) == "table" and type(store.view) == "function" then
+        local ok, view = pcall(store.view)
+        if ok and type(view) == "table" and view.readSetting then return view end
+    end
+    return G_reader_settings
+end
 StatusLine.REGION_KEY   = "status"
 
 --- Whether bookshelf should also draw this line across the top of the reader.
