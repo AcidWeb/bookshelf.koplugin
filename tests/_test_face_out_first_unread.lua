@@ -123,13 +123,15 @@ end)
 
 t.test("the picker groups the reasons the way a reader thinks", function()
     -- Reading state first, the two series reasons on one line, and the
-    -- whole-shelf answers at the bottom with Favourites.
+    -- whole-shelf answers at the bottom. Unread standalone sits under Unread,
+    -- with Favourites beside it, and the collection reason has its own row
+    -- beside the button that picks which (issue 470).
     local ed = io.open("lib/bookshelf_chip_editor.lua"):read("*a")
     local rows = ed:match("local sub_rows = {(.-)\n%s+}\n")
     assert(rows, "the picker's rows moved")
     local order = {}
     for name in rows:gmatch('toggle%("([%a_]+)"%)') do order[#order + 1] = name end
-    eq(table.concat(order, ","), "unread,reading,first,first_unread,recent,favorites",
+    eq(table.concat(order, ","), "unread,reading,standalone,favorites,first,first_unread,recent,collection",
        "the picker's row order changed")
     assert(rows:find('toggle("first"),  toggle("first_unread")', 1, true),
         "the two series reasons should share a line")

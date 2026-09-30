@@ -35,8 +35,9 @@ t.test("toggles rewrite labels in place instead of closing and reopening the pic
     assert(block:find("getButtonById(", 1, true), "labels must be reached through getButtonById")
     assert(block:find(":setText(", 1, true), "labels must be rewritten with setText")
     local closes = select(2, block:gsub("UIManager:close%(sub%)", ""))
-    eq(closes, 2, "only the count picker and Done may close the picker; found " .. closes .. " closes")
-    assert(not block:find("UIManager:close(sub); show()", 1, true) or closes == 2)
+    -- The count picker, the collection picker (issue 470) and Done.
+    eq(closes, 3, "only the count picker, the collection picker and Done may close the picker; found " .. closes .. " closes")
+    assert(not block:find("UIManager:close(sub); show()", 1, true) or closes == 3)
 end)
 
 t.test("the repaint after a toggle is a plain ui refresh of the dialog's own rectangle", function()

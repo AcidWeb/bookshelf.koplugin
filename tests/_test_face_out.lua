@@ -136,6 +136,48 @@ t.test("the planner actually consults the reason, rather than storing it", funct
         "spine_face_out gained an 'unread' reason that the planner ignores")
 end)
 
+-- ── issue 470: unread standalones, and a chosen collection ─────────────────
+
+t.test("unread standalone is a reason, in both stored shapes", function()
+    eq(SpineShelf.faceOutSpec("standalone").standalone, true)
+    eq(SpineShelf.faceOutSpec{ standalone = true }.standalone, true)
+    eq(SpineShelf.faceOutEmpty(SpineShelf.faceOutSpec("standalone")), false)
+end)
+
+t.test("isUnreadStandalone: unread and in no series", function()
+    eq(SpineShelf.isUnreadStandalone{ _spine_status_checked = true }, true)
+    eq(SpineShelf.isUnreadStandalone{ _spine_status_checked = true, series_name = "" }, true)
+    eq(SpineShelf.isUnreadStandalone{ _spine_status_checked = true, series_name = "Culture" }, false,
+        "a book in a series is not a standalone")
+    eq(SpineShelf.isUnreadStandalone{ _spine_status_checked = true, status = "reading" }, false)
+    eq(SpineShelf.isUnreadStandalone{}, false, "an unchecked record is never unread")
+end)
+
+t.test("a collection is a reason that carries its name", function()
+    local spec = SpineShelf.faceOutSpec{ collection = "To read" }
+    eq(spec.collection, "To read")
+    eq(SpineShelf.faceOutEmpty(spec), false)
+    eq(SpineShelf.faceOutSpec{ collection = "" }.collection, nil, "an empty name is not a reason")
+    eq(SpineShelf.faceOutSpec{ collection = true }.collection, nil, "a collection needs a name")
+    local both = SpineShelf.faceOutSpec{ collection = "To read", favorites = true }
+    eq(both.favorites, true)
+end)
+
+t.test("the planner consults both new reasons", function()
+    assert(src:match("face_spec%.standalone and SpineShelf%.isUnreadStandalone%(src%)"),
+        "the unread-standalone reason is stored but the planner ignores it")
+    assert(src:match("face_spec%.collection and _inCollection%(face_spec%.collection, src%.filepath%)"),
+        "the collection reason is stored but the planner ignores it")
+end)
+
+t.test("the editor stores a collection reason with its name", function()
+    -- A single reason is saved as its bare key string, which would drop the
+    -- collection's name the way it would drop Recently added's count.
+    local ed = io.open("lib/bookshelf_chip_editor.lua"):read("a")
+    assert(ed:match('only ~= "recent" and only ~= "collection"'),
+        "a shelf with only the collection reason would lose which collection")
+end)
+
 -- ── recentSet ──────────────────────────────────────────────────────────────
 
 local function flat(...)

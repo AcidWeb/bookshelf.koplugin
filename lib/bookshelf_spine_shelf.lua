@@ -803,6 +803,15 @@ local function _isFavourite(fp)
            and rc.coll.favorites[fp] ~= nil or false
 end
 
+-- _inCollection(name, fp) -> the book is in the named KOReader collection.
+local function _inCollection(name, fp)
+    if not fp then return false end
+    local ok, rc = pcall(require, "readcollection")
+    if not (ok and rc and rc.coll) then return false end
+    local c = rc.coll[name]
+    return c ~= nil and c[fp] ~= nil
+end
+
 -- ── Paint helpers ───────────────────────────────────────────────────────────
 
 local function _textColor(night)
@@ -968,8 +977,12 @@ end
 -- the shelf, and the one the reader wants shown is the one they have not got
 -- to yet ("show cover only the first unread book in the series. Basically the
 -- next unread in the series").
+-- "standalone" and "collection" came from issue 470: every unread book that
+-- is in no series, and every book in one collection the reader picks (a To
+-- read list, say). The collection is the one reason that carries a value
+-- other than true, its name, the way "recent" carries its count.
 SpineShelf.FACE_REASONS = { "favorites", "first", "first_unread", "reading",
-                            "unread", "recent" }
+                            "unread", "standalone", "recent", "collection" }
 SpineShelf.FACE_RECENT_DEFAULT = 5
 
 -- faceOutSpec(v) -> { favorites=, first=, reading=, all=, recent=N|nil }
@@ -988,6 +1001,10 @@ function SpineShelf.faceOutSpec(v)
         if k == "recent" then
             local n = tonumber(v.recent)
             if n and n > 0 then out.recent = math.floor(n) end
+        elseif k == "collection" then
+            if type(v.collection) == "string" and v.collection ~= "" then
+                out.collection = v.collection
+            end
         elseif v[k] then
             out[k] = true
         end
@@ -1199,6 +1216,13 @@ function SpineShelf.isUnread(src)
     end
     local st = src.status
     return st == nil or st == "new" or st == "unread"
+end
+
+-- isUnreadStandalone(src) -> unread, and in no series (issue 470).
+function SpineShelf.isUnreadStandalone(src)
+    if not SpineShelf.isUnread(src) then return false end
+    local sname = src.series_name
+    return type(sname) ~= "string" or sname == ""
 end
 
 -- ── Vertical CJK title ─────────────────────────────────────────────────────
@@ -3831,6 +3855,8 @@ function SpineShelf.plan(items, opts)
                     or (face_spec.first_unread and f.series_next == true)
                     or (face_spec.reading and src.status == "reading")
                     or (face_spec.unread and SpineShelf.isUnread(src))
+                    or (face_spec.standalone and SpineShelf.isUnreadStandalone(src))
+                    or (face_spec.collection and _inCollection(face_spec.collection, src.filepath))
                     or (face_recent ~= nil and face_recent[src.filepath] == true)
                     or false
             end
