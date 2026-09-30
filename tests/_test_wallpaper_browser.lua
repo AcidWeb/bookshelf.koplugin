@@ -88,9 +88,16 @@ end)
 t.test("the picker opens on the page of the wallpaper in use", function()
     store = { wallpaper_default = "leaves.png" }
     local e = WB.entries("wallpaper_default", WB.ALL)
-    eq(WB.startPage("wallpaper_default", e), 2)
+    eq(WB.startPage("wallpaper_default", e), 1, "the second picture is on the first page of four")
+    eq(WB.startPage("wallpaper_default", e, 1), 2, "one to a page: the second page")
     store = {}
     eq(WB.startPage("wallpaper_default", e), 1, "nothing chosen: None, the first page")
+end)
+
+t.test("the picker marks the one in use with a radio mark, not a line under the picture", function()
+    local src = io.open("lib/bookshelf_wallpaper_browser.lua"):read("*a")
+    assert(src:find("Marks.Radio:new{ checked = WB.inUse(key, item) }", 1, true), "no radio mark")
+    assert(not src:find('_("In use")', 1, true), "the In use line is still there")
 end)
 
 t.done()

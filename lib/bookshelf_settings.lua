@@ -1510,13 +1510,13 @@ function Settings:_wallpaperMenu()
     -- pictures beside the reader's own).
     local function openPicker(key)
         return function(touchmenu_instance)
+            local restore = self:_hidePickerMenu(touchmenu_instance)
             require("lib/bookshelf_wallpaper_browser").show(key, function()
                 if self._bw and self._bw._rebuild then
                     self._bw:_rebuild()
                     UIManager:setDirty(self._bw, "ui")
                 end
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end)
+            end, restore)
         end
     end
 
@@ -1853,6 +1853,30 @@ function Settings:_pickPlank(touchmenu_instance, refresh, before)
         })
 end
 
+-- _hidePickerMenu(touchmenu_instance) -> restore: KOReader's menu out of the
+-- way while a picker whose choices show on the shelf is open, and a closure
+-- that brings it back, once, with its rows refreshed. Through the plugin's
+-- hideMenu, which only hides a real menu container: a duck-typed shim (a menu
+-- shortcut from the start menu, bookshelf_menu_host) is refreshed instead of
+-- being pushed onto the window stack, where it would crash the next paint.
+function Settings:_hidePickerMenu(touchmenu_instance)
+    local plugin = self._plugin
+    local restore
+    if plugin and plugin.hideMenu then
+        restore = plugin:hideMenu(touchmenu_instance)
+    else
+        restore = function()
+            if touchmenu_instance and touchmenu_instance.updateItems then touchmenu_instance:updateItems() end
+        end
+    end
+    local done = false
+    return function()
+        if done then return end
+        done = true
+        restore()
+    end
+end
+
 -- _plankRow(markDirty) -> the "Shelf plank" row: names the plank in use and
 -- opens the plank picker. In Accent colors and next to the wallpaper rows.
 function Settings:_plankRow(markDirty)
@@ -1867,7 +1891,9 @@ function Settings:_plankRow(markDirty)
             .. " color, the built-in oak, or a plank from an ornament pack."),
         keep_menu_open = true,
         callback = function(touchmenu_instance)
+            local restore = self:_hidePickerMenu(touchmenu_instance)
             require("lib/bookshelf_plank_browser").show({
+                on_closed = restore,
                 -- Each tap in the picker: the shelf behind shows the plank at
                 -- once. Only its rows are rebuilt (the hero and chips do not
                 -- change), unless the tap switched a pack on, which brings
@@ -1881,7 +1907,6 @@ function Settings:_plankRow(markDirty)
                     else
                         markDirty()
                     end
-                    if touchmenu_instance then touchmenu_instance:updateItems() end
                 end,
                 pick_colour = function(before)
                     self:_pickPlank(touchmenu_instance, markDirty, before)

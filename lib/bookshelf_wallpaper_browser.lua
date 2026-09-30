@@ -62,11 +62,13 @@ function WB.inUse(key, item)
     return v == item.name
 end
 
--- startPage(key, items) -> the page (one picture per page) showing the
--- wallpaper in use, so the picker opens on the current choice.
-function WB.startPage(key, items)
+-- startPage(key, items, per_page) -> the page showing the wallpaper in use,
+-- so the picker opens on the current choice (per_page: WB.PER_PAGE).
+WB.PER_PAGE = 4
+function WB.startPage(key, items, per_page)
+    per_page = math.max(1, per_page or WB.PER_PAGE)
     for i, item in ipairs(items) do
-        if WB.inUse(key, item) then return i end
+        if WB.inUse(key, item) then return math.ceil(i / per_page) end
     end
     return 1
 end
@@ -94,10 +96,11 @@ function WB.choose(key, item)
     pcall(function() WP().free() end)
 end
 
--- Decoded previews, a few at a time: one per page, so a page turn is one
--- decode, and going back a page or two is free.
+-- Decoded previews, a few pages' worth: a page is four, and going back a page
+-- is free. A page's four are always the newest, so the cache never frees a
+-- preview still on screen.
 local _previews, _order = {}, {}
-local PREVIEW_KEEP = 3
+local PREVIEW_KEEP = 8
 local function preview(path, w, h)
     local key = path .. "|" .. w .. "x" .. h
     if _previews[key] then return _previews[key] end
@@ -125,7 +128,11 @@ local function renderCell(key, item, dimen)
     local Font            = require("ui/font")
     local FrameContainer  = require("ui/widget/container/framecontainer")
     local Geom            = require("ui/geometry")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local HorizontalSpan  = require("ui/widget/horizontalspan")
     local ImageWidget     = require("ui/widget/imagewidget")
+    local LeftContainer   = require("ui/widget/container/leftcontainer")
+    local Marks           = require("lib/bookshelf_marks")
     local Size            = require("ui/size")
     local Space           = require("lib/bookshelf_space")
     local TextWidget      = require("lib/bookshelf_colour_text")
@@ -133,19 +140,27 @@ local function renderCell(key, item, dimen)
     local VerticalGroup   = require("ui/widget/verticalgroup")
     local VerticalSpan    = require("ui/widget/verticalspan")
     local T               = require("ffi/util").template
-    local border, pad = Size.border.default, Space.padding.default
-    local inner_w = dimen.w - 2 * (border + pad)
+    local pad = Space.padding.small
+    local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
     local name = item.label
     if item.kind == "pack" then name = T(_("%1 pack"), item.label) end
-    local lines = VerticalGroup:new{ align = "center",
-        TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = inner_w } }
-    if WB.inUse(key, item) then
-        lines[#lines + 1] = TextWidget:new{ text = _("In use"), face = Font:getFace("cfont", 14), max_width = inner_w }
-    elseif item.pack_off then
-        lines[#lines + 1] = TextWidget:new{ text = _("Pack off"), face = Font:getFace("cfont", 14), max_width = inner_w }
+    -- The title row, aligned left as the plank picker's: the radio mark
+    -- (filled for the one in use), the name, and why it would not show when
+    -- its pack is off. The same height on every card, so the pictures above
+    -- are all one size whichever is chosen.
+    local radio = Marks.Radio:new{ checked = WB.inUse(key, item) }
+    local gap = Space.padding.small
+    local status = item.pack_off and TextWidget:new{ text = _("Pack off"), face = Font:getFace("cfont", 13),
+                                                      max_width = math.floor(inner_w / 3) } or nil
+    local name_w = inner_w - radio:getSize().w - gap - (status and (status:getSize().w + gap) or 0)
+    local row = HorizontalGroup:new{ align = "center", radio, HorizontalSpan:new{ width = gap },
+        TextWidget:new{ text = name, face = Font:getFace("cfont", 15), bold = true, max_width = math.max(1, name_w) } }
+    if status then
+        row[#row + 1] = HorizontalSpan:new{ width = gap }
+        row[#row + 1] = status
     end
-    local text_h = lines:getSize().h
-    local box_h = math.max(1, dimen.h - 2 * (border + pad) - text_h - Space.padding.small)
+    local lines = LeftContainer:new{ dimen = Geom:new{ w = inner_w, h = row:getSize().h }, row }
+    local box_h = math.max(1, inner_h - lines:getSize().h - Space.padding.small)
     local pic
     if item.path then
         local bb = preview(item.path, inner_w, box_h)
@@ -156,7 +171,10 @@ local function renderCell(key, item, dimen)
     if not pic then
         -- None / Same as default: a plain frame the size of a picture, with
         -- where the reader's pictures come from under None.
-        local sw, sh = require("device").screen:getWidth(), require("device").screen:getHeight()
+        -- Portrait, as the wallpapers are, in either orientation.
+        local Screen = require("device").screen
+        local sw = math.min(Screen:getWidth(), Screen:getHeight())
+        local sh = math.max(Screen:getWidth(), Screen:getHeight())
         local fw = inner_w
         local fh = math.min(box_h, math.floor(fw * sh / sw))
         if fh == box_h then fw = math.floor(fh * sw / sh) end
@@ -174,31 +192,38 @@ local function renderCell(key, item, dimen)
         elseif item.kind == "same" then
             hint = _("Full screen shelves show the default wallpaper.")
         end
+        -- The hint only where it fits: on a small screen's card the folder
+        -- path would run out of the frame a letter to a line.
+        local inner_fw, inner_fh = fw - 2 * Size.border.thin, fh - 2 * Size.border.thin
+        local hint_w
+        if hint then
+            hint_w = TextBoxWidget:new{ text = hint, face = Font:getFace("cfont", 12),
+                                        width = math.max(1, math.floor(inner_fw * 0.9)), alignment = "center" }
+            local hs = hint_w:getSize()
+            if inner_fw < Screen:scaleBySize(90) or hs.h > inner_fh then hint_w:free(); hint_w = nil end
+        end
         pic = FrameContainer:new{
             bordersize = Size.border.thin, padding = 0, margin = 0,
             background = Blitbuffer.COLOR_WHITE,
-            CenterContainer:new{ dimen = Geom:new{ w = fw - 2 * Size.border.thin, h = fh - 2 * Size.border.thin },
-                hint and TextBoxWidget:new{ text = hint, face = Font:getFace("cfont", 16),
-                                            width = math.floor(fw * 0.8), alignment = "center" }
-                     or VerticalSpan:new{ width = 1 } },
+            CenterContainer:new{ dimen = Geom:new{ w = inner_fw, h = inner_fh },
+                hint_w or VerticalSpan:new{ width = 1 } },
         }
     end
-    local inner_h = dimen.h - 2 * (border + pad)
     return FrameContainer:new{
         bordersize = 0, padding = pad, margin = 0,
         background = Blitbuffer.COLOR_WHITE,
-        CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h },
-            VerticalGroup:new{ align = "center",
-                CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = box_h }, pic },
-                VerticalSpan:new{ width = Space.padding.small },
-                lines,
-            } },
+        VerticalGroup:new{ align = "left",
+            lines,
+            VerticalSpan:new{ width = Space.padding.small },
+            CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = box_h }, pic },
+        },
     }
 end
 
--- show(key, on_change): the picker for that setting. on_change() runs after
--- a choice, so the menu row and the shelf can catch up.
-function WB.show(key, on_change)
+-- show(key, on_change, on_closed): the picker for that setting. on_change()
+-- runs after each choice, so the shelf behind can catch up; on_closed() once,
+-- however the picker closes (the caller brings its menu back).
+function WB.show(key, on_change, on_closed)
     local LibraryModal = require("lib/bookshelf_library_modal")
     local UIManager    = require("ui/uimanager")
     local T            = require("ffi/util").template
@@ -221,13 +246,18 @@ function WB.show(key, on_change)
     local config = {
         title = (key == WP().FULL_SETTING) and _("Full screen shelves image") or _("Default wallpaper image"),
         no_search = true,
-        grid_cols = function() return 1 end,
-        cells_per_page = function() return 1 end,
-        -- Short, and pinned to the top (config.top), so the shelf shows
-        -- below it and a tap can be seen there; the picture takes about 40%
-        -- of the screen's height, whatever its DPI.
-        top = true,
-        rows_per_page = function() return LibraryModal.rowsForShare(0.4) end,
+        -- Four to a page, two across: each chosen with a tap and marked by
+        -- its radio, without the picture changing size.
+        -- Landscape: one row of four, or portrait pictures in short wide
+        -- cells come out tiny.
+        grid_cols = function()
+            local Screen = require("device").screen
+            return (Screen:getWidth() > Screen:getHeight()) and 4 or 2
+        end,
+        cells_per_page = function() return WB.PER_PAGE end,
+        -- Short, so the shelf shows around it and a tap can be seen there:
+        -- the grid about 45% of the screen's height, whatever its DPI.
+        rows_per_page = function() return LibraryModal.rowsForShare(0.45) end,
         chip_strip = chips,
         on_chip_tap = function(k) self.chip = k; self.items = items() end,
         cell_renderer = function(item, dimen) return renderCell(key, item, dimen) end,
@@ -244,12 +274,13 @@ function WB.show(key, on_change)
         -- clear what the quick per-tap updates leave on e-ink.
         on_closed = function()
             if self.changed then UIManager:setDirty("all", "full") end
+            if on_closed then pcall(on_closed) end
         end,
         item_count = function() return #self.items end,
         item_at = function(i) return self.items[i] end,
         footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
     }
-    modal = LibraryModal:new{ config = config, page = WB.startPage(key, self.items) }
+    modal = LibraryModal:new{ config = config, page = WB.startPage(key, self.items, WB.PER_PAGE) }
     UIManager:show(modal)
     return modal
 end

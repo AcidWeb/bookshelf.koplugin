@@ -192,7 +192,9 @@ end
 
 -- show(opts): the picker.
 --   opts.chip        the tab to open on (a pack's name), else All
---   opts.on_change   after a choice, so the menu row and the shelf catch up
+--   opts.on_change   after each choice, so the shelf behind catches up
+--   opts.on_closed   once, however the picker closes (the caller brings its
+--                    menu back); before pick_colour's dialog opens
 --   opts.pick_colour function(before): the plank colour dialog, after the
 --                    plain colour is chosen; before is the choice it replaced
 --                    (the dialog's Revert puts it back)
@@ -227,11 +229,10 @@ function PB.show(opts)
         title = _("Shelf plank"),
         no_search = true,
         grid_cols = function() return 1 end,
-        -- Short, and pinned to the top (config.top), so the shelf's rows show
-        -- below it and a tap can be seen there. Sized by share of the screen,
-        -- not by count, so it is the same shape at every DPI: the grid about
-        -- 30% of the height, a plank to every ~72dp of it.
-        top = true,
+        -- Short, so the shelf shows around it and a tap can be seen there.
+        -- Sized by share of the screen, not by count, so it is the same shape
+        -- at every DPI: the grid about 30% of the height, a plank to every
+        -- ~72dp of it.
         rows_per_page = function() return LibraryModal.rowsForShare(0.3) end,
         cells_per_page = function()
             local rows = LibraryModal.rowsForShare(0.3)
@@ -274,6 +275,7 @@ function PB.show(opts)
         -- what the quick per-tap updates leave on e-ink.
         on_closed = function()
             if self.changed then UIManager:setDirty("all", "full") end
+            if opts.on_closed then pcall(opts.on_closed) end
         end,
     }
     modal = LibraryModal:new{ config = config,

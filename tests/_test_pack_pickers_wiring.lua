@@ -2,7 +2,7 @@
 -- One place to choose each kind (5.3): where the menus send the reader.
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local H = dofile("tests/_helpers.lua")
-local t = H.runner()
+local t, eq = H.runner(), H.eq
 local settings = io.open("lib/bookshelf_settings.lua"):read("*a")
 
 t.test("the two wallpaper rows open the wallpaper picker", function()
@@ -88,6 +88,27 @@ t.test("while a pack's theme is applied its tab offers Undo, not Switch pack off
     assert(applied:find('_("Undo pack theme")', 1, true) and applied:find("close", 1, true),
         "the applied footer is Undo and Apply")
     assert(not applied:find("_packAction", 1, true), "Switch pack off is offered beside Undo")
+end)
+
+t.test("the pickers put KOReader's menu away while open and bring it back once", function()
+    local body = settings:match("\n(function Settings:_hidePickerMenu%(.-\nend)\n")
+    assert(body, "no _hidePickerMenu")
+    local env = setmetatable({ Settings = {} }, { __index = _G })
+    local chunk = assert((loadstring or load)(body, "=hide", "t", env))
+    if setfenv then setfenv(chunk, env) end
+    chunk()
+    local hidden, restored = 0, 0
+    local S = { _plugin = { hideMenu = function(_p, tmi) hidden = hidden + 1; return function() restored = restored + 1 end end } }
+    local restore = env.Settings._hidePickerMenu(S, {})
+    eq(hidden, 1, "hidden through the plugin's guarded hideMenu")
+    restore(); restore()
+    eq(restored, 1, "brought back once, however many ways the picker closes")
+    local row = settings:match("function Settings:_plankRow%(.-\nend\n")
+    assert(row:find("self:_hidePickerMenu(touchmenu_instance)", 1, true) and row:find("on_closed = restore", 1, true),
+        "the plank picker does not put the menu away")
+    local menu = settings:match("function Settings:_wallpaperMenu%(%)(.-)\nend\n")
+    assert(menu:find("self:_hidePickerMenu(touchmenu_instance)", 1, true) and menu:find("end, restore)", 1, true),
+        "the wallpaper picker does not put the menu away")
 end)
 
 t.done()

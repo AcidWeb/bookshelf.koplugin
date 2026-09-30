@@ -333,16 +333,6 @@ function LibraryModal.rowsForShare(share)
     return math.max(2, math.floor(Screen:getHeight() * share / unit))
 end
 
--- config.top: the frame pinned near the top of the screen, centred across
--- it, instead of in the middle. For a picker whose choice shows on the shelf
--- behind it (the plank and wallpaper pickers): the rows stay in view below.
-local TopCentred = require("ui/widget/container/widgetcontainer"):extend{ top = 0 }
-function TopCentred:paintTo(bb, x, y)
-    self.dimen.x, self.dimen.y = x, y
-    local s = self[1]:getSize()
-    self[1]:paintTo(bb, x + math.floor((self.dimen.w - s.w) / 2), y + self.top)
-end
-
 function LibraryModal:_buildFrame()
     local Screen = Device.screen
     -- Modal width: 85% of screen. Less wide than the 90% it was — visible
@@ -367,18 +357,10 @@ function LibraryModal:_buildFrame()
         background = Blitbuffer.COLOR_WHITE,
         VerticalGroup:new{ align = "left" },
     }
-    if self.config and self.config.top then
-        self[1] = TopCentred:new{
-            dimen = Geom:new{ w = Screen:getWidth(), h = Screen:getHeight() },
-            top = Screen:scaleBySize(8),
-            self.frame,
-        }
-    else
-        self[1] = CenterContainer:new{
-            dimen = Geom:new{ w = Screen:getWidth(), h = Screen:getHeight() },
-            self.frame,
-        }
-    end
+    self[1] = CenterContainer:new{
+        dimen = Geom:new{ w = Screen:getWidth(), h = Screen:getHeight() },
+        self.frame,
+    }
     self:refresh()
 end
 
