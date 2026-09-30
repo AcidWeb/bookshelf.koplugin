@@ -109,9 +109,10 @@ local SHELF_HEIGHT_FRAC = {
 -- to the hero. 1.0 = no shrink-to-cram (covers keep natural width, fill the row).
 local SHELF_PACK_FLOOR = 1.0
 -- Hero cover never wider than this fraction of content_w, so the title/details
--- column keeps the rest. Relaxed from 0.50 so a tall (large) hero's cover can
--- fill its card better while still leaving room for details.
-local HERO_COVER_MAX_FRAC = 0.58
+-- column keeps the rest. Back to half (it was 0.58): a panel grown by the swipe
+-- down (issue 465) had its cover fill most of it and squeeze the details into
+-- a narrow column (maintainer).
+local HERO_COVER_MAX_FRAC = 0.50
 
 -- _footerReserveH() — vertical space the screen-anchored pagination footer
 -- occupies. _rebuild reserves exactly this at the bottom of the layout
@@ -1544,16 +1545,6 @@ function BookshelfWidget:_rebuild()
         hero_cover_h = hero_cover_h_natural
     else
         hero_cover_h = math.max(1, hero_h)
-        -- Rows taken by a swipe down on the panel (issue 465) are room for the
-        -- book's description, not for a bigger cover: the cover keeps the
-        -- size it had before the swipe, and the details column gets the
-        -- width and the height (maintainer).
-        local cover_cap = self:_heroCoverCapH(hide_chip_bar)
-        self._hero_text_h = nil
-        if cover_cap and hero_cover_h > cover_cap then
-            hero_cover_h = cover_cap
-            self._hero_text_h = hero_h   -- the details take the panel's height
-        end
         -- Cover WIDTH stays 2:3-derived so an ordinary cover fills the region at
         -- full size (matching the shelf, where 2:3 covers keep their size). True
         -- aspect is applied inside HeroCard: it keeps this width for covers that
@@ -4803,9 +4794,6 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         height       = hero_h,
         cover_w      = hero_cover_w,
         cover_h      = hero_cover_h,
-        -- Taller than the cover while a swipe has grown the panel: the
-        -- description gets the room (see _heroCoverCapH).
-        text_h       = self._hero_text_h,
         pad          = PAD,
         device_state = device_state,
         tags_builder = tags_builder,
@@ -12850,7 +12838,12 @@ function BookshelfWidget:_baseShelves()
             -- row). Spine rows are far shorter than cover rows;
             -- _collapsedSpineSplit's min_band guard already protects a
             -- genuinely tiny screen by shrinking the hero, never the pin.
-            return math.max(1, math.min(math.floor(n), 6))
+            -- Rows a swipe down on the top panel took (issue 465) come off
+            -- this count as well: otherwise the panel grows and the same
+            -- rows just get shorter (maintainer). Without a pin the count
+            -- below is the cover grid's, which the swipe already lowered.
+            local taken = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
+            return math.max(1, math.min(math.floor(n), 6) - math.max(0, taken))
         end
     end
     local max_fit = self:_maxShelfRows()
@@ -15100,25 +15093,11 @@ function BookshelfWidget:_coverRows()
     return _asCoverGrid(function() return self:_baseShelves() end) or 1
 end
 
--- _heroCoverCapH(hide_chip_bar) -> the tallest the top panel's cover may be
--- while a swipe has taken rows: the panel's height with those rows back on
--- the shelf, which is the cover's height before the swipe. nil when none are
--- taken (the cover fills the panel, as it always has).
-function BookshelfWidget:_heroCoverCapH(hide_chip_bar)
-    local taken = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
-    if taken <= 0 then return nil end
-    local h = _asCoverGrid(function()
-        local _shelf_h, hero = self:_collapsedGridSplit(hide_chip_bar, self:_baseShelves() + taken)
-        return hero
-    end)
-    if type(h) == "number" and h > 0 then return h end
-    return nil
-end
-
 -- _nudgeCoverRows(delta, before_rebuild): the cover grid's collapsed row
 -- count, a step. before_rebuild (optional) runs only when the count moves,
 -- after it is saved and BEFORE the shelf is rebuilt, for state the rebuild
--- must already see (the top panel's taken count, which caps its cover).
+-- must already see (the top panel's taken count, which a spine shelf's own
+-- row count is lowered by: _baseShelves).
 function BookshelfWidget:_nudgeCoverRows(delta, before_rebuild)
     local cur = self:_coverRows()
     local max = _asCoverGrid(function() return self:_maxShelfRows() end) or cur
@@ -15151,9 +15130,9 @@ end
 function BookshelfWidget:_topPanelRowStep(dir)
     local n = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
     if dir > 0 and n <= 0 then return false end
-    -- The count is saved before the rebuild the nudge runs: the rebuild caps
-    -- the panel's cover from it, and saved after, the cover grew on the swipe
-    -- down and shrank below its old size on the swipe up (device report).
+    -- The count is saved before the rebuild the nudge runs: a spine shelf's
+    -- own row count reads it there, and saved after, the rows would stay put
+    -- on the swipe down and be one short on the swipe up.
     local moved = false
     self:_nudgeCoverRows(dir, function()
         moved = true

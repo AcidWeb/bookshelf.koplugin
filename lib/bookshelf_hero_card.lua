@@ -1381,12 +1381,9 @@ function HeroCard:_renderFull()
 
     local regions = Regions.read()
     local _perf_right_t0 = _gettime()
-    -- text_h: the details column's height when the panel is taller than
-    -- its cover (a swipe down on it, issue 465); the cover's otherwise.
-    local text_h = math.max(cover_h, tonumber(self.text_h) or 0)
     local right = self:_buildRightColumn(
         self.book, regions, self.device_state,
-        Geom:new{ w = right_w, h = text_h })
+        Geom:new{ w = right_w, h = cover_h })
     -- The hero dominates every in-session interaction (70-256ms on the fast
     -- tap path against 12-46ms of shelf repaint), and the caller's `card=`
     -- phase lumped these two together. They have completely different causes:
@@ -1406,7 +1403,7 @@ function HeroCard:_renderFull()
     }
     self._right_holder    = hg
     self._right_slot      = 3
-    self._right_dimen     = Geom:new{ w = right_w, h = text_h }
+    self._right_dimen     = Geom:new{ w = right_w, h = cover_h }
     return hg
 end
 
