@@ -28,7 +28,15 @@ local function stubWidget(n, lo, hi)
     }
     local self = { rows = n, store = store }
     function self:_coverRows() return self.rows end
-    function self:_nudgeCoverRows(d) self.rows = math.max(lo, math.min(hi, self.rows + d)) end
+    -- As the real one: a move saves the count, runs before_rebuild, then
+    -- rebuilds; the rebuild's view of the taken count is recorded.
+    function self:_nudgeCoverRows(d, before_rebuild)
+        local new = math.max(lo, math.min(hi, self.rows + d))
+        if new == self.rows then return end
+        self.rows = new
+        if before_rebuild then before_rebuild() end
+        self.seen_at_rebuild = store.top_panel_rows_taken
+    end
     local step = load("return function(self, dir)\n" .. extract("BookshelfWidget:_topPanelRowStep(dir)") .. "\nend",
         "step", "t", { BookshelfSettings = settings, tonumber = tonumber })()
     self._topPanelRowStep = step
@@ -68,7 +76,7 @@ t.test("every view steps the cover grid's count, which sizes the panel in all of
     -- (maintainer): the panel must not change size on a view switch.
     local cr = extract("BookshelfWidget:_coverRows()")
     assert(cr:find("_asCoverGrid(", 1, true), "the count is not the cover grid's in every view")
-    local nc = extract("BookshelfWidget:_nudgeCoverRows(delta)")
+    local nc = extract("BookshelfWidget:_nudgeCoverRows(delta, before_rebuild)")
     assert(nc:find('saveDeferred("bookshelf_rows"', 1, true), "the step does not move the Rows editor's count")
     assert(not src:find("spine:\" .. tostring(self.chip)", 1, true)
            and not src:find("list:\" .. tostring(self.chip)", 1, true),
@@ -107,6 +115,14 @@ t.test("the top panel's cover is capped at the panel's size before the swipe", f
     eq(cap(w, false), nil, "nothing taken: no cap")
     local sizing = src:match("local hero_cover_w, hero_cover_h\n(.-)\n    %-%- Title bar removed")
     assert(sizing and sizing:find("self:_heroCoverCapH(hide_chip_bar)", 1, true), "the cover is not capped")
+end)
+
+t.test("the rebuild already sees the new taken count (the cover cap reads it)", function()
+    local w = stubWidget(2, 1, 4)
+    w:_topPanelRowStep(-1)
+    eq(w.seen_at_rebuild, 1, "swipe down: the rebuild saw the row as taken")
+    w:_topPanelRowStep(1)
+    eq(w.seen_at_rebuild, nil, "swipe up: the rebuild saw it given back")
 end)
 
 t.done()

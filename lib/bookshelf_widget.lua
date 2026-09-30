@@ -15115,13 +15115,17 @@ function BookshelfWidget:_heroCoverCapH(hide_chip_bar)
     return nil
 end
 
--- _nudgeCoverRows(delta): the cover grid's collapsed row count, a step.
-function BookshelfWidget:_nudgeCoverRows(delta)
+-- _nudgeCoverRows(delta, before_rebuild): the cover grid's collapsed row
+-- count, a step. before_rebuild (optional) runs only when the count moves,
+-- after it is saved and BEFORE the shelf is rebuilt, for state the rebuild
+-- must already see (the top panel's taken count, which caps its cover).
+function BookshelfWidget:_nudgeCoverRows(delta, before_rebuild)
     local cur = self:_coverRows()
     local max = _asCoverGrid(function() return self:_maxShelfRows() end) or cur
     local new = math.max(ROWS_MIN, math.min(max, cur + delta))
     if new == cur then return true end
     BookshelfSettings.saveDeferred("bookshelf_rows", new)
+    if before_rebuild then before_rebuild() end
     self._nav_dirty = true
     self:_scheduleNavFlush()
     self:_clearDpadFocus()
@@ -15147,11 +15151,18 @@ end
 function BookshelfWidget:_topPanelRowStep(dir)
     local n = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
     if dir > 0 and n <= 0 then return false end
-    local before = self:_coverRows()
-    self:_nudgeCoverRows(dir)
-    local moved = self:_coverRows() ~= before
-    if moved then n = n - dir elseif dir > 0 then n = 0 end
-    BookshelfSettings.saveDeferred("top_panel_rows_taken", n > 0 and n or nil)
+    -- The count is saved before the rebuild the nudge runs: the rebuild caps
+    -- the panel's cover from it, and saved after, the cover grew on the swipe
+    -- down and shrank below its old size on the swipe up (device report).
+    local moved = false
+    self:_nudgeCoverRows(dir, function()
+        moved = true
+        local left = n - dir
+        BookshelfSettings.saveDeferred("top_panel_rows_taken", left > 0 and left or nil)
+    end)
+    if not moved and dir > 0 then
+        BookshelfSettings.saveDeferred("top_panel_rows_taken", nil)
+    end
     if dir > 0 then return moved end
     return true
 end
