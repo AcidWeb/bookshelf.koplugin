@@ -213,6 +213,47 @@ local function entryTitle(entry)
     return nil
 end
 
+-- seriesNum(v) -> a series position as the top panel shows it: "2" for 2
+-- or "2.0", "2.5" kept, nil for nothing usable.
+local function seriesNum(v)
+    local n = tonumber(v)
+    if not n then return nil end
+    if n == math.floor(n) then return string.format("%d", n) end
+    return (string.format("%.2f", n):gsub("0+$", ""))
+end
+
+-- entrySeries(entry) -> name, position: the series an entry belongs to.
+--   OPDS 1.x, EPUB 3 style (Grimmory, BookLore; GitHub issue 478):
+--     <meta property="belongs-to-collection" id="series">Name</meta>
+--     <meta property="group-position" refines="#series">2.0</meta>
+--   OPDS 2.0: mapped onto entry._series by opds2PublicationToEntry.
+local function entrySeries(entry)
+    if type(entry._series) == "table" then
+        return entry._series.name, seriesNum(entry._series.position)
+    end
+    local metas = entry.meta
+    if type(metas) ~= "table" then return nil end
+    local name, id
+    for _i, m in ipairs(metas) do
+        if type(m) == "table" and m.property == "belongs-to-collection"
+                and type(m._text) == "string" and m._text ~= "" then
+            name, id = m._text, m.id
+            break
+        end
+    end
+    if not name then return nil end
+    local pos
+    for _i, m in ipairs(metas) do
+        if type(m) == "table" and m.property == "group-position"
+                -- luxl drops the "#" of refines="#series": either spelling.
+                and (id == nil or m.refines == "#" .. id or m.refines == id) then
+            pos = seriesNum(m._text)
+            break
+        end
+    end
+    return name, pos
+end
+
 local function entryAuthor(entry)
     if type(entry.author) ~= "table" then return nil end
     local name = entry.author.name
@@ -293,13 +334,22 @@ local CANON_THUMB_REL = "http://opds-spec.org/image/thumbnail"
 -- equivalent, so it becomes two synthetic links carrying the canonical rels
 -- above instead.
 local function opds2PublicationToEntry(pub)
-    local title, author, summary, id
+    local title, author, summary, id, series
     if type(pub.metadata) == "table" then
         if type(pub.metadata.title) == "string" then title = pub.metadata.title end
         author = opds2AuthorName(pub.metadata.author)
         if type(pub.metadata.description) == "string" then summary = pub.metadata.description end
         if type(pub.metadata.identifier) == "string" and pub.metadata.identifier ~= "" then
             id = pub.metadata.identifier
+        end
+        -- belongsTo.series: an array of {name, position}, one such object, or
+        -- a bare name. The first series is the one shown.
+        local bt = type(pub.metadata.belongsTo) == "table" and pub.metadata.belongsTo.series
+        if type(bt) == "table" and bt[1] ~= nil then bt = bt[1] end
+        if type(bt) == "string" and bt ~= "" then
+            series = { name = bt }
+        elseif type(bt) == "table" and type(bt.name) == "string" and bt.name ~= "" then
+            series = { name = bt.name, position = bt.position }
         end
     end
     local link = {}
@@ -323,6 +373,7 @@ local function opds2PublicationToEntry(pub)
         content = summary,
         id = id,
         link = link,
+        _series = series,
     }
 end
 
@@ -583,6 +634,13 @@ function M.mapEntries(catalog, feed_url, server_key)
                     existing.opds.summary = summary
                     summary_acq_n[existing] = #acquisitions
                 end
+                -- Series: fill a nil, as the cover below.
+                if not existing.series_name then
+                    local sname, snum = entrySeries(entry)
+                    if sname then
+                        existing.series, existing.series_name, existing.series_num = sname, sname, snum
+                    end
+                end
                 -- Cover: fill a nil, never replace what the first entry had.
                 if not existing.opds.thumbnail_url and thumb then
                     existing.opds.thumbnail_url = thumb
@@ -613,6 +671,10 @@ function M.mapEntries(catalog, feed_url, server_key)
                         feed_url      = feed_url,
                     },
                 }
+                -- The series the top panel's series line shows, in the
+                -- fields a local book's record carries (GitHub issue 478).
+                local sname, snum = entrySeries(entry)
+                if sname then rec.series, rec.series_name, rec.series_num = sname, sname, snum end
                 book_records[#book_records + 1] = rec
                 if merge_key then
                     book_by_key[merge_key] = rec
@@ -700,7 +762,11 @@ local function unescape(str)
     end))
 end
 
-local function createFlatXTable(luxl_mod, xlex, curr_element)
+-- keep_text: the element keeps its attributes and takes its text as _text,
+-- instead of becoming the text alone. For <meta>: EPUB 3 style metadata puts
+-- what it is in an attribute and the value in the text, as in
+-- <meta property="belongs-to-collection" id="series">Name</meta>.
+local function createFlatXTable(luxl_mod, xlex, curr_element, keep_text)
     local ffi = require("ffi")
     curr_element = curr_element or {}
     local curr_attr_name
@@ -708,12 +774,14 @@ local function createFlatXTable(luxl_mod, xlex, curr_element)
         local txt = ffi.string(xlex.buf + offset, size)
         if event == luxl_mod.EVENT_START then
             if txt ~= "xml" then
-                local tab = createFlatXTable(luxl_mod, xlex)
+                local tab = createFlatXTable(luxl_mod, xlex, nil, txt == "meta")
                 -- "Url" arrays the same way: OpenSearch description documents
                 -- (see parseOsd below) repeat it, one per result type
                 -- (html, atom, ...). Dropped during vendoring; restored to
                 -- match the stock parser's opdsparser.lua.
-                if txt == "entry" or txt == "link" or txt == "Url" then
+                -- "meta" arrays too: an entry carries several (series name,
+                -- series position, ...), and each would overwrite the last.
+                if txt == "entry" or txt == "link" or txt == "Url" or txt == "meta" then
                     if curr_element[txt] == nil then curr_element[txt] = {} end
                     table.insert(curr_element[txt], tab)
                 elseif type(curr_element) == "table" then
@@ -726,7 +794,11 @@ local function createFlatXTable(luxl_mod, xlex, curr_element)
             curr_element[curr_attr_name] = unescape(txt)
             curr_attr_name = nil
         elseif event == luxl_mod.EVENT_TEXT then
-            curr_element = unescape(txt)
+            if keep_text and type(curr_element) == "table" then
+                curr_element._text = unescape(txt)
+            else
+                curr_element = unescape(txt)
+            end
         elseif event == luxl_mod.EVENT_END then
             return curr_element
         end

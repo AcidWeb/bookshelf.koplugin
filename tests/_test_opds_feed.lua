@@ -895,6 +895,48 @@ ok(cov_i ~= nil, "covered nav record present")
 eq(cov_i.opds.icon, nil, "big data uri is a cover, not an icon")
 eq(cov_i.opds.thumbnail_url, big_uri, "big data uri kept as the thumbnail")
 
+-- Series from the feed (GitHub issue 478): EPUB 3 style metadata, as
+-- Grimmory / BookLore serve it, reaches the record's series fields, which
+-- the top panel's series line reads. parse() hands <meta> over as a list,
+-- each with its attributes and its text in _text.
+local function acqEntry(extra)
+    local e = { title = "Oathbringer", author = { name = "Brandon Sanderson" }, id = "urn:s3",
+                link = { { rel = "http://opds-spec.org/acquisition", type = "application/epub+zip", href = "/dl/3.epub" } } }
+    for k, v in pairs(extra or {}) do e[k] = v end
+    return { feed = { entry = { e } } }
+end
+local rs = Feed.mapEntries(acqEntry{ meta = {
+    { property = "belongs-to-collection", id = "series", _text = "The Stormlight Archive" },
+    { property = "group-position", refines = "#series", _text = "3.0" },
+} }, "http://h/opds", "k").records[1]
+eq(rs.series_name, "The Stormlight Archive", "series name from belongs-to-collection")
+eq(rs.series, "The Stormlight Archive", "the series field the [if:series] test reads")
+eq(rs.series_num, "3", "group-position 3.0 reads as 3")
+local rh = Feed.mapEntries(acqEntry{ meta = {
+    { property = "belongs-to-collection", id = "c1", _text = "Novellas" },
+    { property = "group-position", refines = "#c1", _text = "2.5" },
+} }, "http://h/opds", "k").records[1]
+eq(rh.series_num, "2.5", "a half position is kept")
+local rn = Feed.mapEntries(acqEntry{}, "http://h/opds", "k").records[1]
+eq(rn.series_name, nil, "no series metadata: no series"); eq(rn.series_num, nil, "and no number")
+local rp = Feed.mapEntries(acqEntry{ meta = {
+    { property = "belongs-to-collection", id = "s", _text = "Solo" },
+} }, "http://h/opds", "k").records[1]
+eq(rp.series_name, "Solo", "a series without a position"); eq(rp.series_num, nil, "has no number")
+-- OPDS 2.0: metadata.belongsTo.series, an array or a single object
+local r2 = Feed.mapEntries({ is_opds2 = true, publications = { {
+    metadata = { title = "Rhythm of War", author = "Brandon Sanderson",
+                 belongsTo = { series = { { name = "The Stormlight Archive", position = 4 } } } },
+    links = { { rel = "http://opds-spec.org/acquisition", type = "application/epub+zip", href = "/dl/4.epub" } },
+} } }, "http://h/opds2", "k").records[1]
+eq(r2 and r2.series_name, "The Stormlight Archive", "OPDS 2.0 belongsTo.series name")
+eq(r2 and r2.series_num, "4", "OPDS 2.0 position")
+local r2o = Feed.mapEntries({ is_opds2 = true, publications = { {
+    metadata = { title = "X", belongsTo = { series = { name = "Solo", position = "1" } } },
+    links = { { rel = "http://opds-spec.org/acquisition", type = "application/epub+zip", href = "/dl/x.epub" } },
+} } }, "http://h/opds2", "k").records[1]
+eq(r2o and r2o.series_name, "Solo", "OPDS 2.0 series as one object")
+
 -- parse(): only when a KOReader tree provides luxl (needs luajit's ffi)
 local koreader_dir = os.getenv("KOREADER_DIR") or "/usr/lib/koreader"
 local have_ffi = pcall(require, "ffi")
@@ -912,6 +954,21 @@ if have_ffi and f then
     ok(type(cat) == "table" and cat.feed and cat.feed.entry, "parse yields a feed table")
     local r3 = Feed.mapEntries(cat, "http://h/", "k")
     eq(#r3.records, 1, "parsed entry maps to a record")
+
+    -- Grimmory's series metadata through the real parser (issue 478)
+    local gxml = [[<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>Words of Radiance</title><id>g2</id>
+    <author><name>Brandon Sanderson</name></author>
+    <meta property="belongs-to-collection" id="series">The Stormlight Archive</meta>
+    <meta property="group-position" refines="#series">2.0</meta>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/g2.epub"/>
+  </entry>
+</feed>]]
+    local gr = Feed.mapEntries(Feed.parse(gxml), "http://h/", "k").records[1]
+    eq(gr and gr.series_name, "The Stormlight Archive", "parse(): series name through the parser")
+    eq(gr and gr.series_num, "2", "parse(): series position through the parser")
+    eq(gr and gr.title, "Words of Radiance", "parse(): the title is untouched")
 
     -- parseOsd(): a Gutenberg-shaped OpenSearch description with several Url
     -- types (html, atom, a bare OSD self-reference) - the atom one is picked
