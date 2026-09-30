@@ -87,4 +87,26 @@ t.test("the swipes are wired on the top panel only, and down stays clear of KORe
     assert(src:find('Gestures.on("top_panel_rows")', 1, true), "no switch to turn the gesture off")
 end)
 
+-- The panel grows to show more of the book's description; its cover keeps
+-- the size it had before the swipe (maintainer: "the cover grows to fill most
+-- of the space and you don't see much more description").
+t.test("the top panel's cover is capped at the panel's size before the swipe", function()
+    local store = { top_panel_rows_taken = 1 }
+    local env = {
+        BookshelfSettings = { read = function(k) return store[k] end },
+        tonumber = tonumber, type = type,
+        _asCoverGrid = function(f) return f() end,
+    }
+    local cap = load("return function(self, hide_chip_bar)\n" .. extract("BookshelfWidget:_heroCoverCapH(hide_chip_bar)") .. "\nend",
+        "cap", "t", env)()
+    local w = { rows = 1 }
+    function w:_baseShelves() return self.rows end
+    function w:_collapsedGridSplit(_hide, n) return 300, 900 - 200 * n end   -- the panel shrinks per row
+    eq(cap(w, false), 500, "the panel's height with the taken row back (two rows)")
+    store.top_panel_rows_taken = nil
+    eq(cap(w, false), nil, "nothing taken: no cap")
+    local sizing = src:match("local hero_cover_w, hero_cover_h\n(.-)\n    %-%- Title bar removed")
+    assert(sizing and sizing:find("self:_heroCoverCapH(hide_chip_bar)", 1, true), "the cover is not capped")
+end)
+
 t.done()

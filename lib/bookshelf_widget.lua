@@ -1544,6 +1544,16 @@ function BookshelfWidget:_rebuild()
         hero_cover_h = hero_cover_h_natural
     else
         hero_cover_h = math.max(1, hero_h)
+        -- Rows taken by a swipe down on the panel (issue 465) are room for the
+        -- book's description, not for a bigger cover: the cover keeps the
+        -- size it had before the swipe, and the details column gets the
+        -- width and the height (maintainer).
+        local cover_cap = self:_heroCoverCapH(hide_chip_bar)
+        self._hero_text_h = nil
+        if cover_cap and hero_cover_h > cover_cap then
+            hero_cover_h = cover_cap
+            self._hero_text_h = hero_h   -- the details take the panel's height
+        end
         -- Cover WIDTH stays 2:3-derived so an ordinary cover fills the region at
         -- full size (matching the shelf, where 2:3 covers keep their size). True
         -- aspect is applied inside HeroCard: it keeps this width for covers that
@@ -4793,6 +4803,9 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         height       = hero_h,
         cover_w      = hero_cover_w,
         cover_h      = hero_cover_h,
+        -- Taller than the cover while a swipe has grown the panel: the
+        -- description gets the room (see _heroCoverCapH).
+        text_h       = self._hero_text_h,
         pad          = PAD,
         device_state = device_state,
         tags_builder = tags_builder,
@@ -15085,6 +15098,21 @@ end
 -- styles are sized based on the number of cover rows").
 function BookshelfWidget:_coverRows()
     return _asCoverGrid(function() return self:_baseShelves() end) or 1
+end
+
+-- _heroCoverCapH(hide_chip_bar) -> the tallest the top panel's cover may be
+-- while a swipe has taken rows: the panel's height with those rows back on
+-- the shelf, which is the cover's height before the swipe. nil when none are
+-- taken (the cover fills the panel, as it always has).
+function BookshelfWidget:_heroCoverCapH(hide_chip_bar)
+    local taken = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
+    if taken <= 0 then return nil end
+    local h = _asCoverGrid(function()
+        local _shelf_h, hero = self:_collapsedGridSplit(hide_chip_bar, self:_baseShelves() + taken)
+        return hero
+    end)
+    if type(h) == "number" and h > 0 then return h end
+    return nil
 end
 
 -- _nudgeCoverRows(delta): the cover grid's collapsed row count, a step.
