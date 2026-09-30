@@ -19869,12 +19869,58 @@ end
 -- forceRePaint is the whole point. setDirty only queues, and the caller's work
 -- runs before UIManager next paints - so the border would appear at the same
 -- instant as the view it was supposed to precede, which is no feedback at all.
+--
+-- The tile alone, and undithered (issue 448). It was a whole-screen refresh
+-- carrying the widget's dither hint, and on a colour Kobo with HW dithering
+-- on, a Book stack folder's page edges beside the ring came out as black and
+-- white noise. The mark is a black ring: nothing in it needs dithering.
+-- UIManager ORs the widget's `dithered` into every refresh of the repaint,
+-- so the hint is cleared for this one and put back after.
 function BookshelfWidget:_markTapped(fp)
     if not fp or self._tap_selected_fp == fp then return end
+    -- Before the rebuild: the painted tiles carry their rects, the new ones
+    -- will not until they paint, in the same places.
+    local rect = self:_tapTileRect(fp)
     self._tap_selected_fp = fp
     self:_rebuild()
-    UIManager:setDirty(self, "ui")
+    if rect then
+        -- The ring paints outside the tile, as in _repaintSelectionHighlight.
+        local PAD = Screen:scaleBySize(4)
+        rect = Geom:new{ x = rect.x - PAD, y = rect.y - PAD,
+                         w = rect.w + 2 * PAD, h = rect.h + 2 * PAD }
+        UIManager:setDirty(self, function() return "ui", rect, false end)
+    else
+        UIManager:setDirty(self, "ui")
+    end
+    local keep = self.dithered
+    self.dithered = nil
     UIManager:forceRePaint()
+    self.dithered = keep
+end
+
+-- _tapTileRect(fp) -> the painted rect of the tile _markTapped marks, or nil.
+-- A folder tile is keyed on its first book, so it is matched before its front
+-- cover: the cover's rect leaves out the pile of page edges behind it.
+function BookshelfWidget:_tapTileRect(fp)
+    local function find(node, depth)
+        if type(node) ~= "table" or depth > 16 then return nil end
+        local f = node.folder
+        if type(f) == "table" and f.first_book and f.first_book.filepath == fp
+                and node.dimen and node.dimen.w then
+            return node.dimen
+        end
+        if type(node.book) == "table" and node.book.filepath == fp
+                and node.dimen and node.dimen.w then
+            return node.dimen
+        end
+        for _i, c in ipairs(node) do
+            local g = find(c, depth + 1)
+            if g then return g end
+        end
+        return nil
+    end
+    local g = find(self._inner_vgroup, 0)
+    return g and g:copy() or nil
 end
 
 -- Open a scrollable viewer with the full book description. Same
