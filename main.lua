@@ -2448,6 +2448,7 @@ function Bookshelf:scanPageCounts(opts)
         skipped   = skipped,
         filename  = {},
         calibre   = {},
+        words     = {},
         publisher = {},
         hardcover = {},
         rendered  = {},
@@ -2534,6 +2535,7 @@ function Bookshelf:scanPageCounts(opts)
             -- reader who unticked it wants the other sources to replace it.
             local trusted = not opts.recount and not echo
                             and (psrc == "print" or psrc == "user" or psrc == "calibre"
+                                 or psrc == "words"
                                  or psrc == "filename" or psrc == "stable"
                                  or pc_src == "stable")
             if trusted then
@@ -2700,6 +2702,37 @@ function Bookshelf:scanPageCounts(opts)
             end
             return rest
         end
+        -- Word counts (issue 455): a count the book states about itself (fan
+        -- fiction from FanFicFare or AO3) or a Calibre words column, at the
+        -- dialog's words a page. Off by default, and BEFORE the render when
+        -- on: a reader who ticks it wants those books counted by their words,
+        -- and the render counts every other book as before. A zip read per
+        -- book, in this process, only for books nothing above answered.
+        -- wordsPass(list) -> the books it could not count.
+        local function wordsPass(list)
+            if report.cancelled or not opts.words then return list end
+            local ok_p, Probe = pcall(require, "lib/bookshelf_pagemap_probe")
+            if not ok_p then return list end
+            local per_page = tonumber(opts.words_per_page) or 250
+            local rest = {}
+            for _i, fp in ipairs(list) do
+                maybeBreathe()
+                if job.stopped then report.cancelled = true end
+                local words = not report.cancelled
+                    and ((opts.word_column and Repo.calibrePagesFor
+                          and Repo.calibrePagesFor(fp, opts.word_column))
+                         or Probe.statedWords(fp))
+                local n = words and Probe.pagesFromWords(words, per_page)
+                if n then
+                    persist(fp, n, "words")
+                    report.words[#report.words + 1] = { name = nameFor(fp), pages = n }
+                else
+                    rest[#rest + 1] = fp
+                end
+            end
+            return rest
+        end
+        todo = wordsPass(todo)
         SpineShelf.flushPersist()
         -- The slow pass was chosen (or not) in the dialog, before any of this.
         if report.cancelled or #todo == 0 or opts.render == false then

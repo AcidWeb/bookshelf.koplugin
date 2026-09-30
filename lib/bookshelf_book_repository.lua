@@ -1508,6 +1508,32 @@ function Repo.calibrePageColumn()
     return nil
 end
 
+-- calibreWordColumn() -> the Calibre column holding word counts (the Count
+-- Pages plugin's #words, or one FanFicFare's Calibre plugin fills), chosen the
+-- way calibrePageColumn chooses: "words" wins, else the "word" column the most
+-- books fill (issue 455). calibrePagesFor reads a book's value from it.
+function Repo.calibreWordColumn()
+    if BookshelfSettings.read("calibre_metadata") ~= true then return nil end
+    local counts = {}
+    for _i, fp in ipairs(Repo.getAllFilepaths()) do
+        local fields = CalibreMeta.fieldsFor(fp, true)
+        if fields then
+            for key, v in pairs(fields) do
+                if key:find("word", 1, true) and tonumber(v) and tonumber(v) > 0 then
+                    counts[key] = (counts[key] or 0) + 1
+                end
+            end
+        end
+    end
+    if counts.words then return "words", counts.words end
+    local best, n = nil, 0
+    for key, c in pairs(counts) do
+        if c > n or (c == n and best and key < best) then best, n = key, c end
+    end
+    if best then return best, n end
+    return nil
+end
+
 -- calibrePagesFor(filepath, column) -> that book's count in the column, or nil.
 function Repo.calibrePagesFor(filepath, column)
     if type(column) ~= "string" then return nil end

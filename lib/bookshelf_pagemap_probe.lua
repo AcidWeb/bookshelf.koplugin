@@ -121,38 +121,107 @@ local function _scanReader(rd)
     return nil
 end
 
-function M.publisherPages(filepath)
+-- _withReader(filepath, scan) -> scan(rd)'s results, or nil. Opens the EPUB's
+-- zip and hands the reader back on EVERY path, including a throw. libarchive's
+-- allocations are ffi.gc-wrapped, so a dropped handle is not freed when it
+-- leaves scope: it waits for LuaJIT to collect the small cdata that owns it,
+-- and LuaJIT paces its collector off the Lua heap, which a scan like this
+-- barely moves. One corrupt entry per book across a large library is how a
+-- device runs out of memory (issue 388).
+local function _withReader(filepath, scan, what)
     if type(filepath) ~= "string"
             or not filepath:lower():match("%.epub$") then
         return nil
     end
-    local ok, pages, source = pcall(function()
+    local ok, a, b = pcall(function()
         local Archiver = require("ffi/archiver")
         local rd = Archiver.Reader:new()
         if not rd:open(filepath) then return nil end
         -- Index every entry once so extractToMemory's seek() can find keys
         -- in any order (the reader indexes lazily as it iterates).
         for _ in rd:iterate() do end -- luacheck: ignore
-        -- The reader goes back on EVERY path, including a throw. libarchive's
-        -- allocations are ffi.gc-wrapped, so a dropped handle is not freed
-        -- when it leaves scope: it waits for LuaJIT to collect the small cdata
-        -- that owns it, and LuaJIT paces its collector off the Lua heap, which
-        -- a scan like this barely moves. One corrupt entry per book across a
-        -- large library is how a device runs out of memory (issue 388).
-        local ok_scan, n, src = pcall(_scanReader, rd)
+        local ok_scan, n, src = pcall(scan, rd)
         pcall(function() rd:close() end)
         if not ok_scan then error(n, 0) end
         return n, src
     end)
     if not ok then
-        logger.dbg("[bookshelf] pagemap probe failed:", tostring(pages))
+        logger.dbg("[bookshelf] " .. what .. " failed:", tostring(a))
         return nil
     end
+    return a, b
+end
+
+function M.publisherPages(filepath)
+    local pages, source = _withReader(filepath, _scanReader, "pagemap probe")
     if pages then
         logger.dbg(string.format("[bookshelf] pagemap probe: %d pages (%s) %s",
             pages, tostring(source), filepath))
     end
     return pages, source
+end
+
+-- ── Stated word counts (issue 455) ─────────────────────────────────────────
+-- Fan fiction carries its length as a word count, and says so in the book:
+-- FanFicFare on its title page ("<b>Words:</b> 123,456", or a table row), AO3
+-- in the preface that opens the book ("Words: 45,210 Chapters: 12/12"). Only
+-- those two places are read, so a novel that happens to contain "Words:" in a
+-- chapter is never mistaken for one.
+
+-- wordsFromText(html) -> the number after "Words:", or nil.
+function M.wordsFromText(html)
+    if type(html) ~= "string" then return nil end
+    local plain = html:gsub("<[^>]*>", " ")
+    local num = plain:match("Words:%s*(%d[%d,%.\194\160 ]*)")
+    if not num then return nil end
+    local n = tonumber((num:gsub("%D", "")))
+    if n and n > 0 then return n end
+    return nil
+end
+
+local function _scanWords(rd)
+    local function slurp(key)
+        if not (key and rd.entries[key]) then return nil end
+        return rd:extractToMemory(key)
+    end
+    local container = slurp("META-INF/container.xml")
+    local opf_path = container
+                     and container:match('full%-path%s*=%s*"([^"]+)"')
+    if not opf_path then return nil end
+    opf_path = urldecode(opf_path)
+    local opf = slurp(opf_path)
+    if not opf then return nil end
+    local opf_dir = opf_path:match("^(.*)/[^/]+$") or ""
+    local hrefs = {}
+    for tag in opf:gmatch("<item[%s][^>]*>") do
+        local id = tag:match('%sid%s*=%s*"([^"]-)"')
+        local href = tag:match('%shref%s*=%s*"([^"]-)"')
+        if id and href then hrefs[id] = urldecode(href) end
+    end
+    -- FanFicFare's title page by its manifest id, then the first document in
+    -- the spine (AO3's preface; also FanFicFare's title page when it leads).
+    local tried = {}
+    local function try(id)
+        local href = id and hrefs[id]
+        if not href or tried[href] then return nil end
+        tried[href] = true
+        return M.wordsFromText(slurp(dirjoin(opf_dir, href)))
+    end
+    local n = try("title_page")
+    if n then return n end
+    return try(opf:match('<itemref[^>]-idref%s*=%s*"([^"]-)"'))
+end
+
+-- statedWords(filepath) -> the word count the EPUB states, or nil.
+function M.statedWords(filepath)
+    return (_withReader(filepath, _scanWords, "word count probe"))
+end
+
+-- pagesFromWords(words, per_page) -> pages, rounded up; nil for no count.
+function M.pagesFromWords(words, per_page)
+    words, per_page = tonumber(words), tonumber(per_page)
+    if not words or words <= 0 or not per_page or per_page <= 0 then return nil end
+    return math.ceil(words / per_page)
 end
 
 return M

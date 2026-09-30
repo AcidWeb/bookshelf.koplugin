@@ -118,4 +118,74 @@ t.test("probe: a file that is not an EPUB opens nothing at all", function()
     assert(state.closed == 0, "nothing opened, nothing to close")
 end)
 
+-- ── statedWords (issue 455): a word count the book states about itself ─────
+
+local OPF_FFF = [[<package><metadata>
+<dc:contributor role="bkp">FanFicFare [https://github.com/JimmXinu/FanFicFare]</dc:contributor>
+</metadata><manifest>
+<item id="title_page" href="OEBPS/title_page.xhtml" media-type="application/xhtml+xml"/>
+<item id="file0001" href="OEBPS/file0001.xhtml" media-type="application/xhtml+xml"/>
+</manifest><spine><itemref idref="title_page"/><itemref idref="file0001"/></spine></package>]]
+
+t.test("statedWords: FanFicFare's title page", function()
+    local state = installArchiver({
+        ["META-INF/container.xml"] = CONTAINER,
+        ["OEBPS/content.opf"]      = OPF_FFF,
+        ["OEBPS/OEBPS/title_page.xhtml"] = [[<p><b>Status:</b> Completed<br />
+<b>Words:</b> 123,456<br /><b>Chapters:</b> 30</p>]],
+    })
+    H.eq(freshProbe().statedWords("/books/f.epub"), 123456)
+    H.eq(state.closed, 1, "reader not closed")
+end)
+
+t.test("statedWords: FanFicFare's title page in table mode", function()
+    installArchiver({
+        ["META-INF/container.xml"] = CONTAINER,
+        ["OEBPS/content.opf"]      = OPF_FFF,
+        ["OEBPS/OEBPS/title_page.xhtml"] = [[<table><tr><td><b>Words:</b></td><td>9,870</td></tr></table>]],
+    })
+    H.eq(freshProbe().statedWords("/books/g.epub"), 9870)
+end)
+
+t.test("statedWords: AO3's preface, the first document in the spine", function()
+    installArchiver({
+        ["META-INF/container.xml"] = CONTAINER,
+        ["OEBPS/content.opf"]      = [[<package><manifest>
+<item id="preface" href="preface.xhtml" media-type="application/xhtml+xml"/>
+<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+</manifest><spine><itemref idref="preface"/><itemref idref="ch1"/></spine></package>]],
+        ["OEBPS/preface.xhtml"] = [[<dl><dt>Stats:</dt><dd>Published: 2021-03-04 Words: 45,210 Chapters: 12/12</dd></dl>]],
+    })
+    H.eq(freshProbe().statedWords("/books/h.epub"), 45210)
+end)
+
+t.test("statedWords: a book that states none answers nil, and hands the reader back", function()
+    local state = installArchiver({
+        ["META-INF/container.xml"] = CONTAINER,
+        ["OEBPS/content.opf"]      = [[<package><manifest>
+<item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest>
+<spine><itemref idref="c1"/></spine></package>]],
+        ["OEBPS/c1.xhtml"] = [[<p>Call me Ishmael. Words: fail me.</p>]],
+    })
+    H.eq(freshProbe().statedWords("/books/i.epub"), nil)
+    H.eq(state.closed, 1, "reader not closed")
+end)
+
+t.test("statedWords: a corrupt entry still hands the reader back", function()
+    local state = installArchiver({
+        ["META-INF/container.xml"] = CONTAINER,
+        ["OEBPS/content.opf"]      = OPF_FFF,
+    }, "OEBPS/content.opf")
+    H.eq(freshProbe().statedWords("/books/j.epub"), nil)
+    H.eq(state.closed, 1, "reader dropped on a throw")
+end)
+
+t.test("pagesFromWords: rounds up, and answers nothing for nothing", function()
+    local P = freshProbe()
+    H.eq(P.pagesFromWords(123456, 250), 494)
+    H.eq(P.pagesFromWords(100, 250), 1)
+    H.eq(P.pagesFromWords(nil, 250), nil)
+    H.eq(P.pagesFromWords(1000, 0), nil)
+end)
+
 t.done()

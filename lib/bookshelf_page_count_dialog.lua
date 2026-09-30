@@ -19,18 +19,26 @@ local _            = require("lib/bookshelf_i18n").gettext
 
 local M = {}
 
-M.SETTING = "page_count_scan"   -- { publisher=, hardcover=, calibre=, filename=, render=, recount= }
+M.SETTING = "page_count_scan"   -- { publisher=, hardcover=, calibre=, filename=, render=, recount=, words=, words_per_page= }
 
--- options() -> the remembered choices, every source on by default.
+-- Words a page for the word-count source (issue 455): 250 is a paperback's
+-- page, the figure the reporter asked for, and 500 a dense one.
+M.WORDS_PER_PAGE = { 250, 300, 500 }
+
+-- options() -> the remembered choices, every source on by default except word
+-- counts, which only a reader of fan fiction wants.
 function M.options()
     local saved = Settings.read(M.SETTING)
     local o = { publisher = true, hardcover = true, calibre = true, filename = true,
-                render = true, recount = false }
+                render = true, recount = false, words = false }
     if type(saved) == "table" then
         for k in pairs(o) do
             if saved[k] ~= nil then o[k] = saved[k] and true or false end
         end
     end
+    o.words_per_page = 250
+    local wpp = type(saved) == "table" and tonumber(saved.words_per_page)
+    if wpp and wpp > 0 then o.words_per_page = math.floor(wpp) end
     return o
 end
 
@@ -51,9 +59,20 @@ local function calibreColumn()
     return nil
 end
 
+-- wordColumn() -> the Calibre words column's name, or nil (see
+-- Repo.calibreWordColumn).
+local function wordColumn()
+    local ok, Repo = pcall(require, "lib/bookshelf_book_repository")
+    if not (ok and Repo and Repo.calibreWordColumn) then return nil end
+    local ok_c, key = pcall(Repo.calibreWordColumn)
+    if ok_c and key then return key end
+    return nil
+end
+
 -- anySource(o, hc, cal) -> whether the scan would have anything to use.
 function M.anySource(o, hc, cal)
-    return o.publisher or (hc and o.hardcover) or (cal and o.calibre) or o.filename or o.render
+    return o.publisher or (hc and o.hardcover) or (cal and o.calibre) or o.filename
+        or o.render or o.words or false
 end
 
 -- deleteScanned(on_done): ask, then clear every count earlier scans stored.
@@ -195,6 +214,7 @@ function Dialog:init()
                 opts.hardcover = opts.hardcover and hc
                 opts.calibre = (opts.calibre and cal) or false
                 if self.scope then opts.paths = self.scope.paths end
+                if opts.words then opts.word_column = wordColumn() end
                 self.start(opts)
             end,
         },
@@ -222,6 +242,38 @@ function Dialog:init()
                        or _("No books are linked to Hardcover."),
             checked = hc and o.hardcover, enabled = hc, callback = source("hardcover"),
         }
+        -- Word counts (issue 455), with the words a page as three radios on
+        -- a line under it, indented to sit under the label like a hint.
+        local wrd, wrd_cb = option{
+            label = _("Word counts (fast)"),
+            hint  = _("Fan fiction from FanFicFare or AO3 states its word count, and a Calibre words column works too. Those books are counted by their words, before your reading settings."),
+            checked = o.words, callback = source("words"),
+        }
+        local indent = wrd_cb._checkmark and wrd_cb._checkmark.dimen.w or Screen:scaleBySize(30)
+        local wpp_label = TextWidget:new{ text = _("Words a page:"), face = hint_face }
+        local wpp_radios = {}
+        local wpp_w = math.floor((iw - indent - wpp_label:getSize().w - gap) / #M.WORDS_PER_PAGE)
+        local wpp = HorizontalGroup:new{ align = "center", HorizontalSpan:new{ width = indent }, wpp_label,
+                                         HorizontalSpan:new{ width = gap } }
+        for _i, n in ipairs(M.WORDS_PER_PAGE) do
+            local rb
+            rb = CheckButton:new{
+                text = tostring(n), checked = o.words_per_page == n, radio = true,
+                width = wpp_w, parent = dialog, show_parent = dialog,
+                callback = function()
+                    o.words_per_page = n
+                    save()
+                    for want, b in pairs(wpp_radios) do
+                        b:initCheckButton(want == n)
+                        UIManager:setDirty(self, function() return "ui", b.dimen end)
+                    end
+                end,
+            }
+            wpp_radios[n] = rb
+            wpp[#wpp + 1] = rb
+        end
+        local wpp_block = VerticalGroup:new{ align = "left", wpp, VerticalSpan:new{ width = gap } }
+
         local cal_hint
         if cal then
             cal_hint = T(_("The #%1 column in your Calibre metadata, as the Count Pages plugin fills in. Often an estimate."), cal)
@@ -276,7 +328,7 @@ function Dialog:init()
             VerticalSpan:new{ width = pad },
             heading(_("Use page counts from, in this order")),
             VerticalSpan:new{ width = gap },
-            pub, hcv, ren, clb, fnm,
+            pub, hcv, wrd, wpp_block, ren, clb, fnm,
             VerticalSpan:new{ width = gap },
             heading(_("Which books")),
             VerticalSpan:new{ width = gap },
