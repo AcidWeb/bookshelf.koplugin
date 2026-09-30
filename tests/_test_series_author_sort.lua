@@ -221,4 +221,46 @@ t.test("a group carrying books_meta sorts by its author", function()
     eq(surname(shaped("Culture", { "Iain M. Banks", "Iain M. Banks" })), "banks")
 end)
 
+-- ── Standalone books on a mixed Series shelf ────────────────────────────────
+
+t.test("a standalone book on a Series shelf sorts under its own author", function()
+    -- Issue 351, later report: a Series shelf showing "Standalone and books in
+    -- series", sorted by surname, then series or title, then series number,
+    -- put every series first and every standalone after, the standalones in
+    -- title order. The standalone shape carried no author, so its surname key
+    -- was empty and the comparator sent it to the end.
+    local function shaped(name, a)
+        return { series_name = name, books_meta = { { author = a } } }
+    end
+    local items = {
+        shaped("Wayfarers", "Becky Chambers"),
+        { standalone = true, filepath = "/b/Piranesi.epub", title = "Piranesi",
+          author = "Susanna Clarke", book_count = 0 },
+        shaped("Imperial Radch", "Ann Leckie"),
+        { standalone = true, filepath = "/b/Circe.epub", title = "Circe",
+          author = "Madeline Miller", book_count = 0 },
+        { standalone = true, filepath = "/b/Babel.epub", title = "Babel",
+          author = "R. F. Kuang", book_count = 0 },
+    }
+    SortEngine.sort(items, { { key = "author_surname" }, { key = "series_or_title" },
+                             { key = "series_index" } })
+    local got = {}
+    for i, it in ipairs(items) do got[i] = it.title or it.series_name end
+    eq(table.concat(got, ", "), "Wayfarers, Piranesi, Babel, Imperial Radch, Circe",
+        "standalones did not interleave by author")
+end)
+
+t.test("the standalone shape the comparator sees carries an author", function()
+    -- The producer side, for the same reason as the two tests above.
+    local src = {}
+    for line in io.lines("lib/bookshelf_book_repository.lua") do
+        if not line:match("^%s*%-%-") then src[#src + 1] = line end
+    end
+    src = table.concat(src, "\n")
+    local shape = src:match("standalones%[#standalones %+ 1%] = {(.-)}")
+    assert(shape, "the standalone shape moved or was renamed")
+    assert(shape:match("author%s*="), "standalone books carry no author, so a surname sort sends them all to the end")
+    assert(shape:match("author_sort%s*="), "the standalone shape drops author_sort")
+end)
+
 t.done()

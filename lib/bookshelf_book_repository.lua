@@ -5357,6 +5357,11 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
                 title        = book.title,
                 genres       = book.genres,
                 lang         = book.lang,
+                -- The author, so a surname sort files the book among the
+                -- series (351). Without it the key was empty and every
+                -- standalone went to the end of the shelf.
+                author       = book.author,
+                author_sort  = book.author_sort,
                 latest       = read_time[book.filepath] or c.mtime or 0,
                 latest_added = c.mtime or 0,
                 -- Sort-only field (hydration replaces this shape with a real
