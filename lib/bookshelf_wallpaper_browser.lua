@@ -62,11 +62,17 @@ function WB.inUse(key, item)
     return v == item.name
 end
 
+-- perPage() -> pictures to a page: one, large, in portrait; a row of four in
+-- landscape, where one would be a small picture in a wide box.
+function WB.perPage()
+    local Screen = require("device").screen
+    return (Screen:getWidth() > Screen:getHeight()) and 4 or 1
+end
+
 -- startPage(key, items, per_page) -> the page showing the wallpaper in use,
--- so the picker opens on the current choice (per_page: WB.PER_PAGE).
-WB.PER_PAGE = 4
+-- so the picker opens on the current choice.
 function WB.startPage(key, items, per_page)
-    per_page = math.max(1, per_page or WB.PER_PAGE)
+    per_page = math.max(1, per_page or 1)
     for i, item in ipairs(items) do
         if WB.inUse(key, item) then return math.ceil(i / per_page) end
     end
@@ -96,9 +102,9 @@ function WB.choose(key, item)
     pcall(function() WP().free() end)
 end
 
--- Decoded previews, a few pages' worth: a page is four, and going back a page
--- is free. A page's four are always the newest, so the cache never frees a
--- preview still on screen.
+-- Decoded previews, a few pages' worth: a page is one picture (four in
+-- landscape), and going back a page is free. A page's are always the newest,
+-- so the cache never frees a preview still on screen.
 local _previews, _order = {}, {}
 local PREVIEW_KEEP = 8
 local function preview(path, w, h)
@@ -246,15 +252,10 @@ function WB.show(key, on_change, on_closed)
     local config = {
         title = (key == WP().FULL_SETTING) and _("Full screen shelves image") or _("Default wallpaper image"),
         no_search = true,
-        -- Four to a page, two across: each chosen with a tap and marked by
-        -- its radio, without the picture changing size.
-        -- Landscape: one row of four, or portrait pictures in short wide
-        -- cells come out tiny.
-        grid_cols = function()
-            local Screen = require("device").screen
-            return (Screen:getWidth() > Screen:getHeight()) and 4 or 2
-        end,
-        cells_per_page = function() return WB.PER_PAGE end,
+        -- One to a page in portrait, a row of four in landscape (perPage);
+        -- each marked by its radio, so choosing one does not resize it.
+        grid_cols = function() return WB.perPage() end,
+        cells_per_page = function() return WB.perPage() end,
         -- Short, so the shelf shows around it and a tap can be seen there:
         -- the grid about 45% of the screen's height, whatever its DPI.
         rows_per_page = function() return LibraryModal.rowsForShare(0.45) end,
@@ -280,7 +281,7 @@ function WB.show(key, on_change, on_closed)
         item_at = function(i) return self.items[i] end,
         footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
     }
-    modal = LibraryModal:new{ config = config, page = WB.startPage(key, self.items, WB.PER_PAGE) }
+    modal = LibraryModal:new{ config = config, page = WB.startPage(key, self.items, WB.perPage()) }
     UIManager:show(modal)
     return modal
 end

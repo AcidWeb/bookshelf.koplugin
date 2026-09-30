@@ -88,8 +88,8 @@ end)
 t.test("the picker opens on the page of the wallpaper in use", function()
     store = { wallpaper_default = "leaves.png" }
     local e = WB.entries("wallpaper_default", WB.ALL)
-    eq(WB.startPage("wallpaper_default", e), 1, "the second picture is on the first page of four")
-    eq(WB.startPage("wallpaper_default", e, 1), 2, "one to a page: the second page")
+    eq(WB.startPage("wallpaper_default", e, 1), 2, "one to a page (portrait): the second page")
+    eq(WB.startPage("wallpaper_default", e, 4), 1, "four to a page (landscape): the first")
     store = {}
     eq(WB.startPage("wallpaper_default", e), 1, "nothing chosen: None, the first page")
 end)
