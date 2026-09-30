@@ -111,4 +111,16 @@ t.test("the pickers put KOReader's menu away while open and bring it back once",
         "the wallpaper picker does not put the menu away")
 end)
 
+t.test("choosing a plain plank colour comes back to the plank picker, not the menu", function()
+    local pb = io.open("lib/bookshelf_plank_browser.lua"):read("*a")
+    local tap = pb:match("on_cell_tap = function%(o%)(.-)\n        end,")
+    assert(tap and tap:find("opts.pick_colour(before, reopen)", 1, true), "the colour dialog is not told to come back")
+    local closed = pb:match("on_closed = function%(%)(.-)\n        end,")
+    assert(closed and closed:find("if not self.reopening", 1, true), "the menu comes back between the picker and the dialog")
+    local pc = settings:match("function Settings:_pickColor%(.-\nend\n")
+    assert(pc and pc:find("wood.on_done", 1, true), "the colour dialogs have no way to say they closed")
+    local pp = settings:match("function Settings:_pickPlank%(.-\nend\n")
+    assert(pp and pp:find("on_done = on_done", 1, true), "the plank colour dialog does not pass it on")
+end)
+
 t.done()

@@ -1842,7 +1842,9 @@ end
 -- dialog, opened by the plank picker's Plain color. The plank is the colour
 -- once a colour is picked; Revert puts back the plank that was there before
 -- (before: the choice the picker replaced; bookshelf_theme_pack).
-function Settings:_pickPlank(touchmenu_instance, refresh, before)
+-- on_done (optional): the dialog closed, however; the plank picker passes it
+-- to come back to itself instead of to the menu, which it keeps hidden.
+function Settings:_pickPlank(touchmenu_instance, refresh, before, on_done)
     local TP = require("lib/bookshelf_theme_pack")
     refresh = refresh or function() self:_markDirty() end
     before = before or TP.plankChoice()
@@ -1850,6 +1852,7 @@ function Settings:_pickPlank(touchmenu_instance, refresh, before)
         _("Shelf plank color (% black)"), touchmenu_instance, refresh, nil, {
             on_colour = function() TP.choosePlank("colour") end,
             revert = function() TP.choosePlank(before) end,
+            on_done = on_done,
         })
 end
 
@@ -1908,8 +1911,8 @@ function Settings:_plankRow(markDirty)
                         markDirty()
                     end
                 end,
-                pick_colour = function(before)
-                    self:_pickPlank(touchmenu_instance, markDirty, before)
+                pick_colour = function(before, on_done)
+                    self:_pickPlank(touchmenu_instance, markDirty, before, on_done)
                 end,
             })
         end,
@@ -1925,6 +1928,9 @@ function Settings:_plankRow(markDirty)
     }
 end
 
+-- wood.on_done (optional): runs once when the dialog closes, however, and the
+-- menu is then left alone (the caller keeps it hidden): the palette is handed
+-- a stand-in menu whose refresh is on_done, the % dialog an on_close.
 -- wood (optional, the plank only): { on_colour = fn, revert = fn } -- picking
 -- a colour makes the plank the colour (on_colour), Revert restores the plank
 -- that was there. special_tile / extra_button (a palette tile, a button in
@@ -1935,6 +1941,21 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
     local Color         = require("lib/bookshelf_color")
     local Screen        = require("device").screen
         refresh = refresh or function() self:_markDirty() end
+        -- wood.on_done: once, when the dialog closes; the caller's menu is
+        -- not touched (see above).
+        local on_done, menu_for_dialog = nil, touchmenu_instance
+        if wood and wood.on_done then
+            local fired = false
+            on_done = function()
+                if fired then return end
+                fired = true
+                wood.on_done()
+            end
+            menu_for_dialog = { updateItems = on_done }
+        end
+        -- The % dialog closes through on_done instead, and is given no menu.
+        local nudge_menu = touchmenu_instance
+        if on_done then nudge_menu = nil end
         -- Suffix routes day vs night-mode storage to separate keys so
         -- editing in night mode doesn't clobber the user's day colors
         -- and vice versa. Mirrors CoverProgress.resolvedColors().
@@ -1984,7 +2005,7 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                     if wood and wood.revert then wood.revert() end
                     refresh()
                 end,
-                touchmenu_instance, nil, nil, wood and wood.special_tile or nil)
+                menu_for_dialog, nil, nil, wood and wood.special_tile or nil)
             return
         end
 
@@ -2005,7 +2026,7 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                 if wood and wood.on_colour and not wood.toggling then wood.on_colour() end
                 refresh()
             end,
-            nil, nil, nil, touchmenu_instance,
+            on_done, nil, nil, nudge_menu,
             function()
                 BookshelfSettings.delete(key)
                 refresh()

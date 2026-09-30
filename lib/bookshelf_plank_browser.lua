@@ -195,9 +195,10 @@ end
 --   opts.on_change   after each choice, so the shelf behind catches up
 --   opts.on_closed   once, however the picker closes (the caller brings its
 --                    menu back); before pick_colour's dialog opens
---   opts.pick_colour function(before): the plank colour dialog, after the
---                    plain colour is chosen; before is the choice it replaced
---                    (the dialog's Revert puts it back)
+--   opts.pick_colour function(before, on_done): the plank colour dialog, after
+--                    the plain colour is chosen; before is the choice it
+--                    replaced (the dialog's Revert puts it back), on_done
+--                    reopens the picker when the dialog closes
 function PB.show(opts)
     opts = opts or {}
     local LibraryModal = require("lib/bookshelf_library_modal")
@@ -259,9 +260,18 @@ function PB.show(opts)
             TP().choosePlank(PB.choiceOf(o))
             self.changed = true
             if o.kind == "colour" then
+                -- The colour dialog in its place, then back here on the same
+                -- tab when it closes (reopen); the menu stays away meanwhile.
+                self.reopening = true
                 close()
                 if opts.on_change then pcall(opts.on_change, full) end
-                if opts.pick_colour then opts.pick_colour(before) end
+                local function reopen()
+                    local again = {}
+                    for k, v in pairs(opts) do again[k] = v end
+                    again.chip = self.chip
+                    PB.show(again)
+                end
+                if opts.pick_colour then opts.pick_colour(before, reopen) else reopen() end
                 return
             end
             if full then self.items = items() end   -- "Pack off" goes
@@ -275,7 +285,9 @@ function PB.show(opts)
         -- what the quick per-tap updates leave on e-ink.
         on_closed = function()
             if self.changed then UIManager:setDirty("all", "full") end
-            if opts.on_closed then pcall(opts.on_closed) end
+            -- Closed for the colour dialog: the reopened picker brings the
+            -- menu back when it closes.
+            if not self.reopening and opts.on_closed then pcall(opts.on_closed) end
         end,
     }
     modal = LibraryModal:new{ config = config,
