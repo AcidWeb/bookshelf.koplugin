@@ -4290,15 +4290,14 @@ function Settings:_whileReadingSubItems()
         text      = _("Show status line"),
         help_text = _("Puts Bookshelf's status line across the top of the reader, drawn by the same code that draws it on the shelf, so it reads the same in both. Edit the line itself under Settings > Status line. If you also use Bookends, its top row and any top-anchored progress bar move down to make space."),
         checked_func = function()
-            return require("lib/status_line").showInReader(G_reader_settings)
+            return require("lib/status_line").showInReader(BookshelfSettings.view())
         end,
         callback = function()
             local StatusLine = require("lib/status_line")
-            local on = not StatusLine.showInReader(G_reader_settings)
-            G_reader_settings:saveSetting(StatusLine.SHOW_IN_READER_KEY, on)
-            -- Flushed, like Regions.write does: saveSetting is in-memory only,
-            -- and a switch the user just flipped should survive a hard reset.
-            G_reader_settings:flush()
+            local on = not StatusLine.showInReader(BookshelfSettings.view())
+            -- save() flushes: a switch the user just flipped should survive a
+            -- hard reset.
+            BookshelfSettings.save("status_in_reader", on)
             refreshReaderStatusLine()
         end,
         separator = true,

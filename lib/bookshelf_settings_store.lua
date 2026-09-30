@@ -102,6 +102,21 @@ end
 
 function Store.wasPresent() return _file_present_at_load end
 
+-- view() -> a readSetting-shaped view of this store, for code written against
+-- a LuaSettings object: lib/status_line, which is shared word for word with
+-- Bookends and still names the three status-line keys by their old
+-- settings.reader.lua names, read here under their new ones.
+local VIEW_NAMES = {
+    bookshelf_hero_regions     = "hero_regions",
+    bookshelf_status_in_reader = "status_in_reader",
+    bookshelf_reader_status_h  = "reader_status_h",
+}
+local _view
+function Store.view()
+    _view = _view or { readSetting = function(_self, k) return Store.read(VIEW_NAMES[k] or k) end }
+    return _view
+end
+
 local function _migrate(s)
     if s:readSetting("migrated") then return end
     local prefix = "bookshelf_"
@@ -168,11 +183,32 @@ local function _relocateAux(s)
     s:flush()
 end
 
+-- One-shot (5.3): the three status-line settings lived in KOReader's
+-- settings.reader.lua, so a backup of settings/bookshelf/ missed them. Moved
+-- into this file; a value already here wins. Bookends reads them too, and
+-- follows them here in its own update.
+local READER_KEYS = {
+    bookshelf_hero_regions     = "hero_regions",
+    bookshelf_status_in_reader = "status_in_reader",
+    bookshelf_reader_status_h  = "reader_status_h",
+}
+local function _moveReaderKeys(s)
+    if s:readSetting("reader_keys_moved") or type(G_reader_settings) ~= "table" then return end
+    for old, new in pairs(READER_KEYS) do
+        local v = G_reader_settings:readSetting(old)
+        if v ~= nil and s:readSetting(new) == nil then s:saveSetting(new, v) end
+        if v ~= nil then G_reader_settings:delSetting(old) end
+    end
+    s:saveSetting("reader_keys_moved", true)
+    s:flush()
+end
+
 local function _open()
     if _settings then return _settings end
     _settings = LuaSettings:open(SETTINGS_PATH)
     _migrate(_settings)
     _relocateAux(_settings)
+    _moveReaderKeys(_settings)
     return _settings
 end
 

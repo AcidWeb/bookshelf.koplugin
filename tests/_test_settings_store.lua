@@ -208,4 +208,36 @@ t.test("expandedTapAction: resolves explicit values + legacy fallback", function
     lua_store.expanded_tap_action = nil
 end)
 
+-- The three status-line settings (5.3): out of KOReader's settings.reader.lua,
+-- into bookshelf's own file, so backing up settings/bookshelf/ keeps them.
+t.test("the status-line settings move out of KOReader's settings file, once", function()
+    greader = { bookshelf_hero_regions = { status = { template = "x" } },
+                bookshelf_status_in_reader = true, bookshelf_reader_status_h = 42 }
+    lua_store = { migrated = true, hero_regions = { title = { bold = true } } }
+    local S = loadStore()
+    eq(S.read("status_in_reader"), true)
+    eq(S.read("reader_status_h"), 42)
+    eq(S.read("hero_regions").title.bold, true, "a value already in bookshelf's file wins")
+    eq(greader.bookshelf_hero_regions, nil); eq(greader.bookshelf_status_in_reader, nil)
+    eq(greader.bookshelf_reader_status_h, nil, "nothing is left in KOReader's file")
+    eq(S.view():readSetting("status_in_reader"), true, "a readSetting view for lib/status_line")
+end)
+
+t.test("bookshelf's status-line code reads bookshelf's own settings", function()
+    -- lib/status_line (identical to Bookends') keeps the old names; the view
+    -- reads them under the new ones.
+    local SL = dofile("lib/status_line.lua")
+    lua_store = { migrated = true, reader_keys_moved = true, status_in_reader = true, reader_status_h = 30 }
+    local S = loadStore()
+    eq(SL.showInReader(S.view()), true)
+    eq(SL.reservedHeight(S.view()), 30)
+    for _i, f in ipairs({ "lib/bookshelf_hero_regions.lua", "lib/bookshelf_reader_status.lua", "lib/bookshelf_settings.lua" }) do
+        local src = io.open(f):read("*a")
+        assert(not src:find("G_reader_settings:saveSetting(Regions.SETTINGS_KEY", 1, true)
+            and not src:find("G_reader_settings:saveSetting(StatusLine.", 1, true)
+            and not src:find("showInReader(G_reader_settings)", 1, true)
+            and not src:find("G_reader_settings:readSetting(Regions.SETTINGS_KEY)", 1, true), f .. " still uses KOReader's settings file")
+    end
+end)
+
 t.done()

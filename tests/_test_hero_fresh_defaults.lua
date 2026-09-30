@@ -7,6 +7,12 @@ _G.G_reader_settings = {
     delSetting  = function(_, k) if k == "bookshelf_hero_regions" then stored = nil end end,
     flush = function() end,
 }
+-- The layout lives in bookshelf's own settings since 5.3.
+package.loaded["lib/bookshelf_settings_store"] = {
+    read = function(k) if k == "hero_regions" then return stored end end,
+    save = function(k, v) if k == "hero_regions" then stored = v end end,
+    delete = function(k) if k == "hero_regions" then stored = nil end end,
+}
 local Regions = dofile("lib/bookshelf_hero_regions.lua")
 
 stored = { title = { font_size = 99 } }   -- pretend a customization exists

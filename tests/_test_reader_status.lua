@@ -46,6 +46,15 @@ _G.G_reader_settings = {
     isTrue      = function(_self, k) return STORE[k] == true end,
 }
 
+-- Bookshelf's own settings since 5.3; lib/status_line reads them through
+-- view(), under their old names.
+local NAMES = { bookshelf_hero_regions = "hero_regions", bookshelf_status_in_reader = "status_in_reader",
+                bookshelf_reader_status_h = "reader_status_h" }
+package.loaded["lib/bookshelf_settings_store"] = {
+    read = function(k) return STORE[k] end,
+    save = function(k, v) STORE[k] = v end,
+    view = function() return { readSetting = function(_s, k) return STORE[NAMES[k] or k] end } end,
+}
 local StatusLine   = require("lib/status_line")
 local Regions      = require("lib/bookshelf_hero_regions")
 local ReaderStatus = require("lib/bookshelf_reader_status")
@@ -56,10 +65,10 @@ local eq = dofile("tests/_helpers.lua").eq
 -- Put a template on the status region and turn the strip on.
 local function configure(template, opts)
     opts = opts or {}
-    STORE[StatusLine.SHOW_IN_READER_KEY] = (opts.on ~= false)
+    STORE[NAMES[StatusLine.SHOW_IN_READER_KEY]] = (opts.on ~= false)
     local entry = { template = template }
     if opts.disabled then entry.disabled = true end
-    STORE[StatusLine.SETTINGS_KEY] = { status = entry }
+    STORE[NAMES[StatusLine.SETTINGS_KEY]] = { status = entry }
     Regions.invalidateCache()
 end
 
@@ -80,8 +89,8 @@ end)
 t.test("the shipped default line does use the frontlight tokens", function()
     -- It is "[if:light]  %light_icon%light_pct[/if]", so brightness changes
     -- must reach it out of the box. This is the case the bug was reported on.
-    STORE[StatusLine.SHOW_IN_READER_KEY] = true
-    STORE[StatusLine.SETTINGS_KEY] = nil
+    STORE[NAMES[StatusLine.SHOW_IN_READER_KEY]] = true
+    STORE[NAMES[StatusLine.SETTINGS_KEY]] = nil
     Regions.invalidateCache()
     eq(ReaderStatus.usesTokens(FRONTLIGHT), true)
     eq(ReaderStatus.usesTokens(BATTERY), true)

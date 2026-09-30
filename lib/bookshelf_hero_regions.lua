@@ -6,7 +6,9 @@
 local Regions = {}
 
 
-Regions.SETTINGS_KEY = "bookshelf_hero_regions"
+-- In bookshelf's own settings (settings/bookshelf/settings.lua) since 5.3;
+-- until then in KOReader's settings.reader.lua as "bookshelf_hero_regions".
+Regions.SETTINGS_KEY = "hero_regions"
 
 -- Render order from top to bottom. Renderer and chooser modal both use
 -- this list. Adding a region means adding it here AND adding a default.
@@ -164,7 +166,7 @@ end
 
 -- Read raw stored table (no resolution). Helper for snapshot/restore.
 local function readRaw()
-    return G_reader_settings:readSetting(Regions.SETTINGS_KEY) or {}
+    return require("lib/bookshelf_settings_store").read(Regions.SETTINGS_KEY) or {}
 end
 
 -- read() — returns a fully-resolved table keyed by region name. Always
@@ -206,8 +208,7 @@ function Regions.write(key, entry)
     if not isRegionKey(key) then return end
     local stored = readRaw()
     stored[key] = entry
-    G_reader_settings:saveSetting(Regions.SETTINGS_KEY, stored)
-    G_reader_settings:flush()
+    require("lib/bookshelf_settings_store").save(Regions.SETTINGS_KEY, stored)   -- flushes
     Regions.invalidateCache()
 end
 
@@ -284,8 +285,7 @@ function Regions.applyFreshInstallDefaults()
             stored[key] = entry
         end
     end
-    G_reader_settings:saveSetting(Regions.SETTINGS_KEY, stored)
-    G_reader_settings:flush()
+    require("lib/bookshelf_settings_store").save(Regions.SETTINGS_KEY, stored)   -- flushes
     Regions.invalidateCache()
 end
 

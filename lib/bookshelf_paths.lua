@@ -10,9 +10,10 @@
 --                        cache, updater downloads, cached release notes.
 --
 -- Not ours, and left where they are: KOReader's own files (history,
--- collections, book sidecars, settings.reader.lua, which still holds the
--- three status-line keys bookends reads too), other plugins' settings, and
--- the fonts KOReader needs in its fonts folder.
+-- collections, book sidecars, settings.reader.lua), other plugins' settings,
+-- and the fonts KOReader needs in its fonts folder. The three status-line
+-- settings that were in settings.reader.lua are now in our settings file
+-- (lib/bookshelf_settings_store moves them).
 --
 -- The folders are made on first use; lib/bookshelf_storage_move brings files
 -- over from the old flat layout.

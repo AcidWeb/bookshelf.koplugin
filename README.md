@@ -967,7 +967,7 @@ Everything of yours is in one folder, so backing it up (or copying it to another
 | Kobo | `/mnt/onboard/.adds/koreader/settings/bookshelf/` |
 | Android | `<koreader-dir>/settings/bookshelf/` |
 
-It holds your settings (`settings.lua`), micro-module data, Hardcover links and cache, page counts (`book_facts.sqlite3`), and the `wallpapers`, `ornaments`, `quotes` and `micromodules` folders. Caches that rebuild themselves (cover images, the OPDS feed cache, update downloads) are in `koreader/cache/bookshelf/`, which you don't need to keep. Three status-line settings stay in KOReader's own `settings.reader.lua`, where Bookends reads them too.
+It holds your settings (`settings.lua`), micro-module data, Hardcover links and cache, page counts (`book_facts.sqlite3`), and the `wallpapers`, `ornaments`, `quotes` and `micromodules` folders. Caches that rebuild themselves (cover images, the OPDS feed cache, update downloads) are in `koreader/cache/bookshelf/`, which you don't need to keep.
 
 Until 5.3 these files sat loose in `koreader/settings/` (`bookshelf.lua` and `bookshelf_*`); they move into the folder by themselves on the first start of 5.3. Existing v1 settings migrate automatically on first launch -- legacy keys are read from `settings.reader.lua`, copied across with the `bookshelf_` prefix stripped, and removed from the global file.
 
@@ -976,7 +976,7 @@ Until 5.3 these files sat loose in `koreader/settings/` (`bookshelf.lua` and `bo
 | Key | Shape |
 |-----|-------|
 | `tabs` | Ordered list of shelf records (id, label, icon, source, filter, sort_priority, enabled). |
-| `bookshelf_hero_regions` (in `settings.reader.lua`, shared with Bookends) | Per-section overrides (sparse). One entry per section (status / rating / title / author / metadata / description / tags / progress) with any subset of template, font_face, font_size, bold, uppercase, alignment, disabled, bar_style, bar_height. The interactive **tags** section also takes per-category toggles (show_author / show_series / show_collections / show_genres / show_folder) plus font_size and alignment. |
+| `hero_regions` | Per-section overrides (sparse). One entry per section (status / rating / title / author / metadata / description / tags / progress) with any subset of template, font_face, font_size, bold, uppercase, alignment, disabled, bar_style, bar_height. The interactive **tags** section also takes per-category toggles (show_author / show_series / show_collections / show_genres / show_folder) plus font_size and alignment. |
 | `font_scale` | Global zoom for top panel text (50-200%). |
 | `chip_font_scale` | Shelf menu font size (50-300%). |
 | `chip_flex_widths` | Boolean. When true, longer-labelled shelves get more horizontal space than icon-only ones. |

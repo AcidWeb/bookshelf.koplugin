@@ -53,7 +53,7 @@ end
 function ReaderStatus.enabled()
     local StatusLine = statusLine()
     if not StatusLine then return false end
-    return StatusLine.showInReader(G_reader_settings)
+    return StatusLine.showInReader(require("lib/bookshelf_settings_store").view())
 end
 
 --- Does the line actually name any of these tokens?
@@ -206,8 +206,10 @@ function ReaderStatus.publishHeight(h)
     _published = h
     local ok, StatusLine = pcall(require, "lib/status_line")
     if not ok or not StatusLine then return end
+    -- Saved (flushed) on a change, which is rare, so Bookends reading
+    -- bookshelf's settings file sees the current height.
     pcall(function()
-        G_reader_settings:saveSetting(StatusLine.RESERVED_KEY, h)
+        require("lib/bookshelf_settings_store").save("reader_status_h", h)
     end)
 end
 
