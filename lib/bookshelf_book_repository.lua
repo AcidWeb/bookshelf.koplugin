@@ -7142,11 +7142,16 @@ function Repo.enrichStats(book)
     if not ok_conn or not conn then return end
 
     -- Roll-ups from the book table (kept in sync by ReaderStatistics).
+    -- KOReader keys a row by title + authors + md5 and starts a NEW row when
+    -- the title or authors change outside its own editor (a Calibre resend,
+    -- say), so one md5 can have two rows. The one it opened last is the one it
+    -- is reading into; an arbitrary one showed 27 minutes left in a book
+    -- KOReader put at 19 hours (Reddit report).
     local id_book, total_read_time, total_read_pages, pages_total
     local ok_q, err = pcall(function()
         local stmt = conn:prepare(
             "SELECT id, total_read_time, total_read_pages, pages "
-            .. "FROM book WHERE md5 = ? LIMIT 1")
+            .. "FROM book WHERE md5 = ? ORDER BY last_open DESC LIMIT 1")
         local row = stmt:reset():bind(md5):step()
         stmt:close()
         if row then
