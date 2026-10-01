@@ -3,7 +3,7 @@ An ornament full screen: the "zoom" tap action (an ornaments.json record's
 "tap": "zoom", which a pack can set for all its pieces). The piece is drawn as
 large as the screen allows, with a panel under it holding its name and, when
 the record has one, its "info" text in a scrolling area -- a print's title,
-artist and notes in the Japan pack.
+artist and notes in the Ukiyo-e pack.
 
 Built the way the full-screen micro-module view is (bookshelf_micro_fullscreen):
 the shelf's wallpaper as the ground (white without one), and the panel painted
