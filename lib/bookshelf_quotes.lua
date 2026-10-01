@@ -318,7 +318,8 @@ local function buildPool(budget)
         end
     end
     if st.dirty and F and F.flush then pcall(F.flush) end
-    return pool, total
+    -- st.budget spent: books are left that were never counted.
+    return pool, total, st.budget ~= nil and st.budget <= 0
 end
 
 -- _pickAt(pool, total, files, k) -> the kth of every highlight and quotes-file
@@ -631,7 +632,15 @@ function Quotes.ofTheDay()
         if source == "files" then
             return (#files > 0) and pickQuote(files) or nil
         end
-        local pool, total = buildPool(Quotes.INDEX_BUDGET)
+        local pool, total, more = buildPool(Quotes.INDEX_BUDGET)
+        -- Nothing found yet, and books left that were never counted: count
+        -- on, a budget at a time, rather than say "No highlights yet" while
+        -- they sit in the history (the first pick after an upgrade, behind
+        -- many books opened without a highlight).
+        for _round = 2, 3 do
+            if total > 0 or not more then break end
+            pool, total, more = buildPool(Quotes.INDEX_BUDGET)
+        end
         local all = total + #files
         if all == 0 then return nil end
         local k

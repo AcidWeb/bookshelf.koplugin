@@ -75,10 +75,8 @@ t.test("a book far down the history is found, once the index has reached it", fu
     for i = 1, 40 do hist[i] = "/b/" .. i; lib[hist[i]] = book(0) end
     lib["/b/35"] = book(3)
     local Q = fresh(hist, lib)
-    -- One pick indexes at most a budget of unknown books (no slower than the
-    -- old walk); a few opens reach the whole history.
-    for _i = 1, 3 do Q.reroll(); Q.ofTheDay() end
-    Q.reroll()
+    -- A pick that finds nothing counts on, a budget at a time, rather than
+    -- say "No highlights yet" with books never looked at.
     local q = Q.ofTheDay()
     assert(q and q.filepath == "/b/35", "the only book with highlights was never reached")
 end)
