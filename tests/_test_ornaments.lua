@@ -1003,7 +1003,7 @@ t.test("json: the shelf honours padding everywhere it reserves or paints the gap
     local sh = io.open("lib/bookshelf_spine_shelf.lua"):read("*a")
     local n = select(2, sh:gsub("SpineShelf%.ornPad%(", ""))
     assert(n >= 4, "padding is applied in only " .. n .. " places (section gap, row-end reserve, both row-end sides)")
-    assert(sh:find("local stand_top = stand_h - pl.above", 1, true), "a piece does not stand on the plank")
+    assert(sh:find("return stand_h - pl.above - off", 1, true), "a piece does not stand on the plank")
     -- Two ceilings (row end and bare plank; section gap), and a third
     -- assignment that only ever LOWERS it: the deck's squeeze, for a one-row
     -- page whose book has to fit beside its end piece.
@@ -1022,7 +1022,7 @@ t.test("menu fix: a height nudge moves a piece, it never changes its size", func
     local a, b, c = at(-0.25), at(0), at(0.6)
     eq(a.h, b.h, "lowering changed the size"); eq(b.h, c.h, "raising changed the size")
     eq(a.below, b.below, "lowering changed the file's overhang"); eq(c.below, b.below)
-    eq(a.t, -0.25); eq(c.t, 0.6)
+    eq(a.offset, -0.25); eq(c.offset, 0.6); eq(a.anchor, "bottom")
 end)
 
 t.test("menu fix: a mirror change reaches a piece already dealt", function()
@@ -1054,18 +1054,33 @@ t.test("the odds, budgets and deck are gone from the module", function()
     end
 end)
 
-t.test("hang is gone: no directive, no field; height 100% or more reaches the shelf above", function()
+t.test("hang is the top anchor: no directive, no hang field", function()
     local O = fresh()
     assert(O.FIELDS.hang == nil, "hang is still a field")
-    eq(O.FIELDS.lift.default, 0, "height does not default to standing")
-    assert(O.FIELDS.lift.max > 1, "height cannot go behind the shelf above")
+    eq(O.FIELDS.lift.default, 0, "height does not default to the anchor")
+    eq(O.FIELDS.anchor.default, "bottom", "a piece does not stand by default")
     local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")
     assert(not src:find("bookshelf:hang", 1, true), "the hang directive is still read")
-    local e = { name = "bat.png", path = "/o/bat.png", aspect = 1, overhang = 0, lift = 1 }
+    local e = { name = "bat.png", path = "/o/bat.png", aspect = 1, overhang = 0, lift = 0, anchor = "top" }
     local pl = O.place(e, 1000, 400, {}, 1)
-    eq(pl.t, 1); eq(pl.below, 0)
-    eq(O.place(e, 1000, 400, { stand = true }, 1).t, 0, "a piece told to stand does not stand")
+    eq(pl.anchor, "top"); eq(pl.offset, 0); eq(pl.below, 0)
+    local st = O.place(e, 1000, 400, { stand = true }, 1)
+    eq(st.anchor, "bottom", "a piece told to stand does not stand"); eq(st.offset, 0)
     eq(pl.hang, nil, "placements still carry hang")
+end)
+
+t.test("the menu has the anchor between mirror and tap, and switching it starts from the anchor", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    local m = src:find('MIRROR_LABEL[entry.mirror or "off"]', 1, true)
+    local a = src:find('_("Anchor: top")', 1, true)
+    local tp = src:find('_("Tap: none")', 1, true)
+    assert(m and a and tp and m < a and a < tp, "the anchor button is not between Mirror and Tap")
+    assert(src:find('setAnchor(entry.anchor == "top" and "bottom" or "top")', 1, true), "the button does not switch the anchor")
+    local sa = src:match("local function setAnchor%(v%)(.-)\n    end\n")
+    -- Explicit values, not cleared ones: clearing would fall back to what the
+    -- pack's own file says, so a pack's top piece could never be stood.
+    assert(sa and sa:find('Orn.readerSet(entry, "anchor", v)', 1, true), "the anchor is not stored")
+    assert(sa:find('Orn.readerSet(entry, "lift", 0)', 1, true), "the height offset is kept across a switch of anchor")
 end)
 
 t.test("a row-end piece's negative padding: flush at the shelf end, tucked behind the books", function()

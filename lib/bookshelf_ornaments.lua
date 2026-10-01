@@ -670,11 +670,15 @@ M.FIELDS = {
     -- 5%, not half: a reader may want a piece small (maintainer). Not zero,
     -- which would leave its slot empty while it still takes its turn.
     scale  = { kind = "number", min = 0.05, max = 4, default = 1 },
-    -- Height, as a place between the two shelves: 0 standing on its own,
-    -- 1 its drawing's top against the underside of the shelf above (see
-    -- SpineShelf.ornamentY), past 1 behind that shelf, below 0 dangling in
-    -- front of its own plank. Pinned to the shelves, so a piece set to meet
-    -- the shelf above still does after a change of shelf size (maintainer).
+    -- What the piece is pinned to: "bottom" stands it on its own plank,
+    -- "top" puts its drawing's top against the underside of the shelf above
+    -- (a bat, a broomstick), whatever the piece's or the shelf's size.
+    anchor = { kind = "enum", values = { bottom = true, top = true }, default = "bottom" },
+    -- Height: how far from its anchor, in the shelf's stand height (+ up), so
+    -- a step moves every piece the same distance (see SpineShelf.ornamentY).
+    -- It used to be a share of the room left above the piece, which shrank
+    -- to nothing for one filling the shelf (maintainer: "for a tall
+    -- ornament ... the % height doesn't act usefully").
     lift   = { kind = "number", min = -1, max = 1.5, default = 0 },
     pad    = { kind = "number", min = -1,  max = 2, default = 0 },
     night  = { kind = "enum", values = { invert = true, off = true } },
@@ -748,6 +752,7 @@ local function applyLayers(e, layers)
         return nil
     end
     e.scale  = get("scale") or 1
+    e.anchor = get("anchor") or "bottom"
     e.lift   = get("lift") or 0
     e.pad    = get("pad") or 0
     local night = get("night")
@@ -755,9 +760,9 @@ local function applyLayers(e, layers)
     e.mirror = get("mirror") or "off"
     e.tap    = get("tap")
     e.info   = get("info")
-    -- A piece that meets the shelf above (or goes behind it) wants one: the
-    -- deck keeps it off a page's top shelf (Deck.dealer).
-    e.reaches_above = e.lift >= 1 or nil
+    -- A piece hanging from the shelf above wants one: the deck keeps it off
+    -- a page's top shelf (Deck.dealer).
+    e.reaches_above = (e.anchor == "top") or nil
 end
 
 M._applyLayers = applyLayers
@@ -1260,16 +1265,17 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
     if not entry then return nil end
     local width, height = M.sizeFor(entry, cap_px, stand_h, o)
     -- Below the plank's surface: the file's own overhang, sized by sizeFor
-    -- to stay on the plank. Height (entry.lift) is placed by the shelf, which
-    -- knows where the shelf above is (SpineShelf.ornamentY).
+    -- to stay on the plank. The anchor and height (entry.anchor, entry.lift)
+    -- are placed by the shelf, which knows where the shelf above is
+    -- (SpineShelf.ornamentY).
     local below = math.floor(height * (entry.overhang or 0))
     if o.max_below and below > o.max_below then below = o.max_below end
-    local t = o.stand and 0 or (entry.lift or 0)
-    -- Where the drawing's top is inside the picture: 100% meets the shelf
-    -- above with the DRAWING, not the file's transparent top room. Probed
-    -- only for a piece that is raised or lowered.
+    local anchor = (not o.stand and entry.anchor == "top") and "top" or "bottom"
+    local offset = o.stand and 0 or (entry.lift or 0)
+    -- Where the drawing's top is inside the picture: the top anchor meets the
+    -- shelf above with the DRAWING, not the file's transparent top room.
     local content_top = 0
-    if t ~= 0 and entry.path then
+    if anchor == "top" and entry.path then
         local _l, ct = M.contentBox(entry)
         if ct then content_top = math.floor(ct * height + 0.5) end
     end
@@ -1278,7 +1284,8 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
     local mirror = entry.mirror == "always"
                    or (entry.mirror == "alternate" and (deal_no or 1) % 2 == 0)
     return {
-        entry = entry, w = width, h = height, t = t, content_top = content_top,
+        entry = entry, w = width, h = height, anchor = anchor, offset = offset,
+        content_top = content_top,
         above = height - below, below = below,
         mirror = mirror,
         -- Extra room each side, in px (negative: tighter, even behind the
@@ -1605,7 +1612,7 @@ end
 -- room is right on the shelf and wasted here, as in the browser. pl.crop is
 -- the drawn part, in the rendered picture's px.
 function M.previewPlacement(entry, h, max_w)
-    local proxy = setmetatable({ scale = 1, pad = 0, lift = 0 },
+    local proxy = setmetatable({ scale = 1, pad = 0, lift = 0, anchor = "bottom" },
                                { __index = entry })
     local l, t, r, b
     if entry.path then l, t, r, b = M.contentBox(entry) end

@@ -6118,11 +6118,12 @@ end
 -- it moves down by one row pitch (row top to row top). Spine rows carry the
 -- list (SpineShelf.rowWidget's _hanging); other views' rows have none.
 function BookshelfWidget:_hangUnder(rows, pitch)
-    -- A piece's height is a place between its shelf and the one above
-    -- (SpineShelf.ornamentY), built against the layout's nominal row gap;
-    -- the real one, with the screen's slack spread into it (GridMargins), is
-    -- only known now. Each row noted its pieces off 0%: move each by its
-    -- height times the difference, so 100% meets the shelf above exactly.
+    -- A piece anchored to the top was placed against the layout's nominal
+    -- row gap (SpineShelf.ornamentY); the real one, with the screen's slack
+    -- spread into it (GridMargins), is only known now. Each row noted those
+    -- (t = 1): move each by the difference, so it meets the shelf above
+    -- exactly. A piece anchored to the bottom is measured from its own plank
+    -- and needs nothing.
     for r = 2, #rows do
         for _i, n in ipairs(rows[r] and rows[r]._orn_list or {}) do
             local slack = (pitch - (n.rh or 0)) - (n.gap or 0)
@@ -6147,7 +6148,7 @@ function BookshelfWidget:_hangUnder(rows, pitch)
         for _i, n in ipairs(rows[r] and rows[r]._orn_list or {}) do
             local pl = n.w.placement
             local y = (n.w.overlap_offset or { 0, 0 })[2] or 0
-            if n.t < 0 and pl and pl.h and y + pl.h > pitch and y < pitch and rows[r + 1] then
+            if n.dangle and pl and pl.h and y + pl.h > pitch and y < pitch and rows[r + 1] then
                 Orn = Orn or require("lib/bookshelf_ornaments")
                 local keep = pitch - y
                 n.w.placement = setmetatable({ crop = { x = 0, y = 0, w = pl.w, h = keep } }, { __index = pl })

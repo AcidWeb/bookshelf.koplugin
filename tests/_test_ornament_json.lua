@@ -83,16 +83,20 @@ t.test("defaults when there is no file", function()
     svg(new .. "/cat.svg")
     local e = byName(O)["cat.svg"]
     eq(e.scale, 1); eq(e.lift, 0); eq(e.pad, 0); eq(e.mirror, "off")
+    eq(e.anchor, "bottom", "a piece does not stand by default")
     eq(e.reaches_above, nil); eq(e.tap, nil)
 end)
 
 t.test("a pack's file places its pieces", function()
     local O, new = setup()
     svg(new .. "/Autumn/owl.svg")
-    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "lift": 1, "mirror": "alternate" } }')
+    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "anchor": "top", "mirror": "alternate" }, "fox.svg": { "lift": 1 } }')
+    svg(new .. "/Autumn/fox.svg")
     local e = byName(O)["Autumn/owl.svg"]
-    eq(e.scale, 1.5); eq(e.lift, 1); eq(e.mirror, "alternate")
-    eq(e.reaches_above, true, "a height of 100% does not reach the shelf above")
+    eq(e.scale, 1.5); eq(e.anchor, "top"); eq(e.mirror, "alternate")
+    eq(e.reaches_above, true, "a piece anchored to the top does not reach the shelf above")
+    local fox = byName(O)["Autumn/fox.svg"]
+    eq(fox.anchor, "bottom"); eq(fox.reaches_above, nil, "a raised piece is not one hanging from the shelf above")
 end)
 
 t.test("the reader's own file wins, field by field, keyed Pack/file", function()
@@ -327,7 +331,8 @@ t.test("menu: a picture of the piece under its name, even while it is switched o
     eq(pl.h, 60, "the preview is not the fixed height")
     eq(pl.w, 120, "the preview lost the piece's shape")
     eq(pl.mirror, true, "the preview ignores the mirror setting")
-    eq(pl.t, 0, "the preview shows the piece's height, not its drawing"); eq(pl.below, 6, "the file's own 10% overhang")
+    eq(pl.offset, 0, "the preview shows the piece's height, not its drawing")
+    eq(pl.anchor, "bottom", "the preview shows the piece's anchor"); eq(pl.below, 6, "the file's own 10% overhang")
     assert(pl.entry == e, "the preview does not render the piece itself")
     eq(O.previewPlacement(e, 60, 50).w, 50, "a wide piece overflows the dialog")
     local src = io.open("lib/bookshelf_ornaments.lua"):read("*a")

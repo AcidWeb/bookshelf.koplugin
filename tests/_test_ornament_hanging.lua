@@ -114,12 +114,14 @@ t.test("a tall standing piece stays in front of its own shelf while its top goes
     eq(select(2, rw:gsub("SpineShelf%.ownRowPart%(", "")), 4, "every slot must keep its own-row part")
 end)
 
-t.test("height is a place between the two shelves: 100% meets the shelf above whatever the sizes", function()
-    -- Maintainer: a piece set to just touch the shelf above drifted off it
-    -- when the shelf size or row count changed, because height was measured
-    -- in the piece's own height. Now 0 = standing, 1 = the DRAWING's top (its
-    -- transparent top room skipped) against the underside of the shelf above,
-    -- worked out from the actual geometry each paint.
+t.test("height: an anchor (bottom on the plank, top under the shelf above) and an offset in shelf heights", function()
+    -- Maintainer: "for a tall ornament, if you increase size so it's nearly
+    -- full height of the shelf, the % height doesn't act usefully". Height was
+    -- a fraction of the space left ABOVE the piece, so a piece filling the
+    -- shelf moved a few px for 10%. Now the anchor pins a piece to its plank
+    -- (bottom) or under the shelf above (top, the drawing's top against the
+    -- underside, whatever the sizes), and height moves it from there by a
+    -- share of the shelf's stand height, the same for every piece.
     local body = shelf:match("\n(function SpineShelf%.ornamentY%(pl, stand_h, opts%)\n.-\nend)\n")
     assert(body, "ornamentY not found")
     local env = setmetatable({ SpineShelf = {}, Screen = { scaleBySize = function(_s, v) return v end } },
@@ -129,18 +131,21 @@ t.test("height is a place between the two shelves: 100% meets the shelf above wh
     f()
     local Y = env.SpineShelf.ornamentY
     for _i, g in ipairs({ { stand = 280, head = 40 }, { stand = 190, head = 30 }, { stand = 400, head = 60 } }) do
-        local pl = { above = 200, h = 200, t = 1, content_top = 25 }
+        local pl = { above = 200, h = 200, anchor = "top", offset = 0, content_top = 25 }
         local top = Y(pl, g.stand, { lift_headroom = g.head })
-        eq(top + pl.content_top, -(g.head + 2), "100% does not meet the shelf above at stand " .. g.stand)
-        pl.t = 0
-        eq(Y(pl, g.stand, { lift_headroom = g.head }), g.stand - 200, "0% is not standing")
-        pl.t = 0.5
-        local mid = Y(pl, g.stand, { lift_headroom = g.head })
-        local lo, hi = g.stand - 200, -(g.head + 2) - 25
-        assert(math.abs(mid - (lo + hi) / 2) <= 1, "50% is not halfway")
+        eq(top + pl.content_top, -(g.head + 2), "top does not meet the shelf above at stand " .. g.stand)
+        pl.offset = -0.1
+        eq(Y(pl, g.stand, { lift_headroom = g.head }), top + math.floor(0.1 * g.stand + 0.5), "-10% from the top is not a tenth of the shelf lower")
+        pl.anchor, pl.offset = "bottom", 0
+        eq(Y(pl, g.stand, { lift_headroom = g.head }), g.stand - 200, "bottom at 0% is not standing")
     end
-    local pl = { above = 200, h = 200, t = -0.2, content_top = 0 }
-    assert(Y(pl, 280, { lift_headroom = 40 }) > 80, "below 0% does not dangle")
+    -- The same step moves a small piece and one filling the shelf alike.
+    local small = { above = 60,  h = 60,  anchor = "bottom", offset = 0.1 }
+    local tall  = { above = 270, h = 270, anchor = "bottom", offset = 0.1 }
+    eq((280 - 60) - Y(small, 280, {}), 28)
+    eq((280 - 270) - Y(tall, 280, {}), 28, "a tall piece moves less than a small one for the same step")
+    local dangle = { above = 200, h = 200, anchor = "bottom", offset = -0.2 }
+    assert(Y(dangle, 280, {}) > 80, "below 0% does not dangle")
     assert(not shelf:find("hang_lift", 1, true), "the old hang offset is still read")
 end)
 
@@ -183,7 +188,7 @@ t.test("a piece dangling into the row below is painted in front of that row's bo
     local pl = { w = 300, h = 120, entry = {} }
     local glasses = { name = "glasses", placement = pl, overlap_offset = { 50, 300 } }
     local books2 = { name = "books2" }
-    local rows = { { { name = "plank1" }, glasses, _orn_list = { { w = glasses, t = -0.1, gap = 40, rh = 340 } } },
+    local rows = { { { name = "plank1" }, glasses, _orn_list = { { w = glasses, t = 0, dangle = true, gap = 40, rh = 340 } } },
                    { { name = "plank2" }, books2 } }
     hang({}, rows, 380)                      -- row 2 starts 380 below row 1's top
     local below = rows[2][#rows[2]]

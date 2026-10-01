@@ -4213,20 +4213,23 @@ end
 -- spines stood on it. opts: plan, row (a {first,last} slice or nil for an
 -- empty row), width, height, gap, on_book_tap/on_book_hold/on_book_open.
 -- ornamentY(pl, stand_h, opts) -> the y (row coordinates) a placement's top
--- goes at. Height (pl.t, the piece's lift) is a place between the two
--- shelves, worked out from the actual geometry on every paint, so it stays
--- put relative to both when the shelf size or row count changes
--- (maintainer): 0 stands on this row's plank (the file's overhang below its
--- feet), 1 puts the top of the DRAWING (pl.content_top skips the file's
--- transparent top room) against the underside of the plank above, which is
--- the row gap above this row's top (lift_headroom, one hairline kept back).
--- Past 1 it goes behind that shelf; below 0 it dangles in front of its own.
+-- goes at. The anchor pins the piece: "bottom" stands it on this row's plank
+-- (the file's overhang below its feet), "top" puts the top of the DRAWING
+-- (pl.content_top skips the file's transparent top room) against the
+-- underside of the plank above, which is the row gap above this row's top
+-- (lift_headroom, one hairline kept back), whatever the sizes. The offset
+-- (pl.offset, the piece's height) moves it from there by a share of the stand
+-- height, + up, so a step is the same distance for every piece (maintainer:
+-- a share of the room left above a piece shrank to nothing for a tall one).
+-- Below the plank it dangles in front of its own; above the shelf above it
+-- goes behind that shelf.
 function SpineShelf.ornamentY(pl, stand_h, opts)
-    local stand_top = stand_h - pl.above
-    local t = pl.t or 0
-    if t == 0 then return stand_top end
-    local meet_top = -((opts and opts.lift_headroom or 0) + Screen:scaleBySize(2)) - (pl.content_top or 0)
-    return math.floor(stand_top + (meet_top - stand_top) * t + 0.5)
+    local off = math.floor((pl.offset or 0) * stand_h + 0.5)
+    if pl.anchor == "top" then
+        local meet_top = -((opts and opts.lift_headroom or 0) + Screen:scaleBySize(2)) - (pl.content_top or 0)
+        return meet_top - off
+    end
+    return stand_h - pl.above - off
 end
 
 -- behindAbove(pl, y, opts) -> is the piece painted by the row ABOVE, before
@@ -4258,13 +4261,18 @@ function SpineShelf.ownRowPart(w_, Orn)
     return c
 end
 
--- noteOrn(list, w_, opts, part): a piece off 0% height, remembered with the
--- row gap it was placed against, for BookshelfWidget:_hangUnder to correct
--- once the real gap between rows is known.
+-- noteOrn(list, w_, opts, part): a piece the widget may still have to move,
+-- remembered with the row gap it was placed against, for
+-- BookshelfWidget:_hangUnder: one anchored to the top, placed against the
+-- layout's nominal gap (t = 1: it follows the real gap all the way), and one
+-- lowered below its plank, which may dangle into the row beneath (dangle).
 function SpineShelf.noteOrn(list, w_, opts, part)
-    local t = w_.placement and w_.placement.t or 0
-    if t == 0 then return end
-    list[#list + 1] = { w = w_, t = t, part = part, rh = opts.height,
+    local pl = w_.placement
+    if not pl then return end
+    local top = pl.anchor == "top"
+    local dangle = not top and (pl.offset or 0) < 0
+    if not (top or dangle) then return end
+    list[#list + 1] = { w = w_, t = top and 1 or 0, dangle = dangle, part = part, rh = opts.height,
                         gap = (opts.lift_headroom or 0) + Screen:scaleBySize(2) }
 end
 

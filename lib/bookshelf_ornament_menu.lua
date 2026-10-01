@@ -220,6 +220,15 @@ function M.show(entry, bw, piece)
         entry = Orn.current(entry)
         redraw()
     end
+    -- setAnchor(v): pinned to the plank ("bottom") or under the shelf above
+    -- ("top"), from the anchor itself: the old height meant somewhere else.
+    -- Stored, not cleared, so a pack's own top piece can still be stood.
+    local function setAnchor(v)
+        Orn.readerSet(entry, "anchor", v)
+        Orn.readerSet(entry, "lift", 0)
+        entry = Orn.current(entry)
+        redraw()
+    end
     local function nudge(field, sign, big)
         local step = M.STEPS[field][big and 2 or 1]
         set(field, M.nudged(entry, field, sign * step))
@@ -319,10 +328,13 @@ function M.show(entry, bw, piece)
             bigButton("lift", 1),
         },
         -- One row, short labels: the menu has to fit a small screen whole.
-        -- (No hang switch: raising the height to 100% meets the shelf above.)
+        -- The anchor between them (maintainer): what Height counts from.
         {
             { text_func = function() return MIRROR_LABEL[entry.mirror or "off"] end,
               callback = function() set("mirror", MIRROR_NEXT[entry.mirror or "off"]) end },
+            { text_func = function()
+                return entry.anchor == "top" and _("Anchor: top") or _("Anchor: bottom")
+            end, callback = function() setAnchor(entry.anchor == "top" and "bottom" or "top") end },
             { text_func = function()
                 local tap = entry.tap
                 return tap and T(_("Tap: %1"), (tap.zoom and _("Zoom")) or tap.label or _("set"))
