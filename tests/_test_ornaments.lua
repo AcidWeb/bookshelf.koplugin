@@ -1068,4 +1068,28 @@ t.test("hang is gone: no directive, no field; height 100% or more reaches the sh
     eq(pl.hang, nil, "placements still carry hang")
 end)
 
+t.test("a row-end piece's negative padding: flush at the shelf end, tucked behind the books", function()
+    -- Device report (Death's-head Moth, padding -20% at a row end): "padding
+    -- did the job on the right, but lots of space left on the left, and the
+    -- book on the far end of the shelf is being pushed off". The plan gave the
+    -- piece w + 2p (p < 0: less than its width, so more books), the row drew it
+    -- with w + one positive pad, and pushed it inwards by p. One rule for both:
+    -- the shelf-end side cannot go below zero, the books' side takes p.
+    local src = io.open("lib/bookshelf_spine_shelf.lua"):read("a")
+    local pad = src:match("(function SpineShelf%.ornPad%(base, pl%).-\nend\n)")
+    local room = src:match("(function SpineShelf%.rowEndRoom%(base, pl%).-\nend\n)")
+    assert(room, "no SpineShelf.rowEndRoom")
+    local SS = {}
+    assert(load("local SpineShelf = ...\n" .. pad .. room))(SS)
+    eq(SS.rowEndRoom(10, { w = 100, pad_px = 0 }), 120, "no padding: a pad each side, as before")
+    eq(SS.rowEndRoom(10, { w = 100, pad_px = 20 }), 160)
+    eq(SS.rowEndRoom(10, { w = 100, pad_px = -30 }), 80, "negative: nothing at the shelf end, -20 into the books")
+    local plan_space = src:match("local function space%(kind, pl%)(.-)\n    end\n")
+    assert(plan_space and plan_space:find('kind == "rowend"', 1, true)
+           and plan_space:find("SpineShelf.rowEndRoom(", 1, true), "the plan reserves a row end some other way")
+    local body = src:match("function SpineShelf%.rowWidget.-\nend\n")
+    assert(body:find("local reserve = SpineShelf.rowEndRoom(pad_o, rowo)", 1, true),
+        "the row reserves a different room from the one the plan gave")
+end)
+
 t.done()

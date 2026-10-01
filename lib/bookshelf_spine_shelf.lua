@@ -4062,6 +4062,7 @@ function SpineShelf.plan(items, opts)
         return orn.mod.place(e, budget, orn.stand_h, o, deal_no)
     end
     local function space(kind, pl)
+        if kind == "rowend" then return SpineShelf.rowEndRoom(orn and orn.pad or 0, pl) end
         local p = SpineShelf.ornPad(orn and orn.pad or 0, pl)
         if kind == "lead" then return pl.w + p end
         return pl.w + 2 * p
@@ -4277,6 +4278,18 @@ function SpineShelf.ornPad(base, pl)
     return math.max(-math.floor((pl and pl.w or 0) / 2), (base or 0) + (pl and pl.pad_px or 0))
 end
 
+-- rowEndRoom(base, pl) -> the width a row-end piece takes from its row: its
+-- own, its padding on the books' side, and on the shelf-end side the padding
+-- only when it is positive. Negative padding cannot reach past the end of the
+-- shelf, so the piece stands flush there and tucks into the books instead
+-- (device report: a -20% moth left room on the left and pushed the far book
+-- off the shelf, because the plan counted the padding twice and the row once).
+-- The plan's reserve and the row's are this one function.
+function SpineShelf.rowEndRoom(base, pl)
+    local p = SpineShelf.ornPad(base, pl)
+    return (pl and pl.w or 0) + math.max(0, p) + p
+end
+
 function SpineShelf.rowWidget(opts)
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local HorizontalSpan  = require("ui/widget/horizontalspan")
@@ -4366,7 +4379,7 @@ function SpineShelf.rowWidget(opts)
         local rowo = opts.row and opts.row.ornament
         if rowo then
             local pad_o   = math.max(opts.gap or 0, SpineShelf.plankUnit(opts.height))
-            local reserve = rowo.w + pad_o
+            local reserve = SpineShelf.rowEndRoom(pad_o, rowo)
             local span    = opts.width - 2 * margin0 - reserve
             lead = margin0 + (rowo.side == "left" and reserve or 0)
                    + math.max(0, math.floor((span - content_w) / 2))
