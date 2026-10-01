@@ -99,13 +99,13 @@ t.test("a pack's file places its pieces", function()
     eq(fox.anchor, "bottom"); eq(fox.reaches_above, nil, "a raised piece is not one hanging from the shelf above")
 end)
 
-t.test("the reader's own file wins, field by field, keyed Pack/file", function()
+t.test("the reader's own file adjusts the pack's, field by field, keyed Pack/file", function()
     local O, new = setup()
     svg(new .. "/Autumn/owl.svg")
     write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "pad": 0.1 } }')
     write(new .. "/ornaments.json", '{ "Autumn/owl.svg": { "scale": 0.8 } }')
     local e = byName(O)["Autumn/owl.svg"]
-    eq(e.scale, 0.8, "the reader's scale")
+    eq(e.scale, 1.2, "the reader's scale, on top of the pack's")
     eq(e.pad, 0.1, "the pack's padding, which the reader did not change")
 end)
 
@@ -160,7 +160,7 @@ t.test("a reader's change applies at once, and is written when asked", function(
     write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.5, "pad": 0.1 } }')
     local e = byName(O)["Autumn/owl.svg"]
     O.readerSet(e, "scale", 0.7)
-    eq(e.scale, 0.7, "not applied to the piece")
+    eq(e.scale, 1.05, "not applied to the piece, on top of the pack's")
     eq(e.pad, 0.1, "the pack's other values went")
     local written
     O._encode = function(t) written = t; return "{}" end
@@ -168,6 +168,26 @@ t.test("a reader's change applies at once, and is written when asked", function(
     eq(written["Autumn/owl.svg"].scale, 0.7, "keyed Pack/file in the reader's file")
     local f = io.open(new .. "/Autumn/ornaments.json"):read("*a")
     assert(not f:find("0.7", 1, true), "the pack's own file was written")
+end)
+
+t.test("a pack's values are the reader's starting point: size multiplies, padding and height add", function()
+    -- Maintainer: a pack maker's sizes and heights "become the 0% settings",
+    -- so a reader's Reset goes back to the pack's own, and the menu shows 100%
+    -- and 0% there. Anchor, mirror and tap still simply replace the pack's.
+    local O, new = setup()
+    svg(new .. "/Autumn/owl.svg")
+    write(new .. "/Autumn/ornaments.json", '{ "owl.svg": { "scale": 1.6, "lift": 0.1, "pad": 0.05, "mirror": "always" } }')
+    local e = byName(O)["Autumn/owl.svg"]
+    eq(e.scale, 1.6); eq(e.lift, 0.1)
+    eq(O.readerValue(e, "scale"), 1, "the menu does not start from 100% at the pack's size")
+    eq(O.readerValue(e, "lift"), 0)
+    O.readerSet(e, "scale", 1.25); O.readerSet(e, "lift", -0.05); O.readerSet(e, "pad", 0.05)
+    O.readerSet(e, "mirror", "off")
+    eq(e.scale, 2.0); eq(e.lift, 0.05); eq(e.pad, 0.1); eq(e.mirror, "off")
+    O.readerSet(e, "scale", 4)
+    eq(e.scale, 4, "the product is not kept to the limits")
+    O.readerReset(e)
+    eq(e.scale, 1.6, "reset does not go back to the pack's own size"); eq(e.lift, 0.1)
 end)
 
 t.test("reset drops the reader's record; the pack shows again", function()
@@ -195,12 +215,15 @@ end)
 t.test("nudges step on a grid and stop at the limits", function()
     package.loaded["ffi/util"] = { template = function(s) return s end }
     package.loaded["lib/bookshelf_ornaments"] = fresh()
+    local O = package.loaded["lib/bookshelf_ornaments"]
     local Menu = dofile("lib/bookshelf_ornament_menu.lua")
-    local e = { scale = 1, lift = 0, pad = 0 }
-    local v = 0
-    for _i = 1, 3 do e.lift = Menu.nudged(e, "lift", 0.1) end
-    eq(e.lift, 0.3, "three steps of 0.1 drifted")
-    e.scale = 3.9
+    -- Nudges step the reader's own adjustment (Ornaments.readerValue).
+    O._reader, O._reader_mtime = {}, nil
+    O.readerTable = function() return O._reader end
+    local e = { name = "x.svg" }
+    for _i = 1, 3 do O.readerSet(e, "lift", Menu.nudged(e, "lift", 0.1)) end
+    eq(O.readerValue(e, "lift"), 0.3, "three steps of 0.1 drifted")
+    O.readerSet(e, "scale", 3.9)
     eq(Menu.nudged(e, "scale", 0.25), 4, "past the most a nudge allows")
     local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
     assert(src:find("\\xEE\\xA1\\x82", 1, true) and src:find("\\xEE\\xA0\\xBF", 1, true),

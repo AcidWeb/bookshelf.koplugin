@@ -72,9 +72,11 @@ local Deck = require("lib/bookshelf_ornament_deck")
 local function pct(v) return string.format("%+d%%", math.floor((v or 0) * 100 + 0.5)) end
 
 -- nudged(entry, field, delta) -> the new value, clamped, rounded to the step
--- grid so repeated taps do not drift (0.1 + 0.2 ~= 0.3).
+-- grid so repeated taps do not drift (0.1 + 0.2 ~= 0.3). From the reader's
+-- own adjustment, not the piece's value: a pack's size and height are the
+-- reader's 100% and 0% (Ornaments.RELATIVE).
 function M.nudged(entry, field, delta)
-    local cur = entry[field] or O().FIELDS[field].default or 0
+    local cur = O().readerValue(entry, field) or O().FIELDS[field].default or 0
     local v = O().cleanField(field, cur + delta)
     return math.floor(v * 100 + 0.5) / 100
 end
@@ -313,16 +315,16 @@ function M.show(entry, bw, piece)
             placeGlyph(CHEV_RIGHT, 1),
         },
         plusMinus("scale", function()
-            return T(_("Size: %1"), string.format("%d%%", math.floor((entry.scale or 1) * 100 + 0.5)))
+            return T(_("Size: %1"), string.format("%d%%", math.floor((Orn.readerValue(entry, "scale") or 1) * 100 + 0.5)))
         end),
         plusMinus("pad", function()
-            return T(_("Padding: %1"), pct(entry.pad))
+            return T(_("Padding: %1"), pct(Orn.readerValue(entry, "pad")))
         end),
         -- Down on the left, up on the right, as - and + are on the rows above.
         {
             bigButton("lift", -1),
             glyph(CHEV_DOWN, "lift", -1),
-            { text_func = function() return T(_("Height: %1"), pct(entry.lift)) end,
+            { text_func = function() return T(_("Height: %1"), pct(Orn.readerValue(entry, "lift"))) end,
               callback = function() set("lift", nil) end },
             glyph(CHEV_UP, "lift", 1),
             bigButton("lift", 1),

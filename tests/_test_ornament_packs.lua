@@ -280,7 +280,9 @@ t.test("commitPack moves a pack's records from the reader's file into the pack's
     O._reader_dirty = true
     eq(O.commitPack("Autumn"), 2)
     local pj = O._decode(readFile(O.dir() .. "/Autumn/ornaments.json"))
-    eq(pj["leaf.svg"].scale, 1.4, "the editor's value did not win")
+    -- The reader's values are adjustments to the pack's: folded in, they
+    -- become the pack's own, and the reader's 100% / 0% start from there.
+    assert(math.abs(pj["leaf.svg"].scale - 1.26) < 1e-9, "the editor's size was not folded into the pack's: " .. tostring(pj["leaf.svg"].scale))
     eq(pj["leaf.svg"].lift, 0.5, "the pack's own value was lost")
     eq(pj["acorn.svg"].pad, 0.1)
     local rt = O.readerTable()

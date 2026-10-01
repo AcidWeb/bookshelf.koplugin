@@ -737,18 +737,45 @@ function M.readJson(path)
     return t
 end
 
+-- The reader's size, padding and height are ADJUSTMENTS to what the layers
+-- under it say (a pack's own values): size multiplies, padding and height
+-- add, so a pack maker's settings are the reader's 100% and 0%, and Reset goes
+-- back to them (maintainer). The rest simply replace.
+M.RELATIVE = { scale = "mul", pad = "add", lift = "add" }
+
 -- applyLayers(e, layers): merge the settings layers (highest first) over the
 -- directives already on e, and derive what the painters read.
 local function applyLayers(e, layers)
+    local function from(i, name)
+        local layer = layers[i]
+        local rec = layer and layer[e.lookup and e.lookup[i] or e.name]
+        if type(rec) == "table" and rec[name] ~= nil then
+            local v = M.cleanField(name, rec[name])
+            if v ~= nil then return v end
+            logger.warn("[bookshelf] ornaments: ignoring", name, "=", tostring(rec[name]), "for", e.name)
+        end
+        return nil
+    end
     local function get(name)
-        for _i, layer in ipairs(layers) do
-            local rec = layer and layer[e.lookup and e.lookup[_i] or e.name]
-            if type(rec) == "table" and rec[name] ~= nil then
-                local v = M.cleanField(name, rec[name])
-                if v ~= nil then return v end
-                logger.warn("[bookshelf] ornaments: ignoring", name, "=", tostring(rec[name]), "for", e.name)
+        local rel = M.RELATIVE[name]
+        for i = 1, #layers do
+            if not (rel and i == e._reader_at) then
+                local v = from(i, name)
+                if v ~= nil then
+                    if rel and e._reader_at then
+                        local r = from(e._reader_at, name)
+                        if r ~= nil then
+                            v = (rel == "mul") and v * r or v + r
+                            -- Thousandths: 1.5 x 0.8 is 1.2, not 1.2000000000000002.
+                            v = M.cleanField(name, math.floor(v * 1000 + 0.5) / 1000)
+                        end
+                    end
+                    return v
+                end
             end
         end
+        -- Nothing under the reader's: its own value, from the default.
+        if rel and e._reader_at then return from(e._reader_at, name) end
         return nil
     end
     e.scale  = get("scale") or 1
@@ -799,6 +826,16 @@ function M.readerTable()
     M._reader = path and M.readJson(path) or {}
     M._reader_mtime = mt
     return M._reader
+end
+
+-- readerValue(entry, field) -> the reader's own value for a field, or its
+-- default: for size, padding and height the reader's ADJUSTMENT (see
+-- M.RELATIVE), 100% / 0% at the pack's own value, which the menu shows.
+function M.readerValue(entry, field)
+    local rec = entry and entry.name and M.readerTable()[entry.name]
+    local v = type(rec) == "table" and M.cleanField(field, rec[field]) or nil
+    if v == nil then v = M.FIELDS[field] and M.FIELDS[field].default end
+    return v
 end
 
 -- readerGet(name) -> the reader's record for a piece (a copy), or {}.
@@ -906,7 +943,17 @@ function M.commitPack(pack)
         if type(key) == "string" and key:sub(1, #prefix) == prefix and type(rec) == "table" then
             local file = key:sub(#prefix + 1)
             local out = type(pj[file]) == "table" and pj[file] or {}
-            for k, v in pairs(rec) do out[k] = v end
+            -- Adjustments fold into the pack's values (M.RELATIVE); the rest
+            -- replace them.
+            for k, v in pairs(rec) do
+                local rel = M.RELATIVE[k]
+                local base = M.cleanField(k, out[k])
+                if rel and base ~= nil and type(v) == "number" then
+                    v = M.cleanField(k, (rel == "mul") and base * v or base + v)
+                    v = math.floor(v * 1000 + 0.5) / 1000
+                end
+                out[k] = v
+            end
             pj[file] = out
             moved[#moved + 1] = key
         end

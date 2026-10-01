@@ -1107,4 +1107,12 @@ t.test("a row-end piece's negative padding: flush at the shelf end, tucked behin
         "the row reserves a different room from the one the plan gave")
 end)
 
+t.test("the menu shows and nudges the reader's own adjustment, not the pack's value", function()
+    local src = io.open("lib/bookshelf_ornament_menu.lua"):read("*a")
+    local nud = src:match("function M%.nudged%(entry, field, delta%)(.-)\nend\n")
+    assert(nud and nud:find("readerValue(entry, field)", 1, true), "a nudge starts from the pack's value")
+    assert(src:find('readerValue(entry, "scale")', 1, true) and src:find('readerValue(entry, "pad")', 1, true)
+           and src:find('readerValue(entry, "lift")', 1, true), "the labels show the pack's values")
+end)
+
 t.done()
