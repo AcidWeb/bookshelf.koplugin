@@ -10,7 +10,8 @@
 -- with the pack instead of only shaping this reader's shelf.
 --
 -- Pieces stand at the size a reader sees: the live shelf's row height when
--- it is a spine shelf, three rows to a screen otherwise.
+-- it is a spine shelf, a third of the screen otherwise. One row of them, at
+-- the bottom, under an empty shelf; the menu opens in the room above.
 local Blitbuffer      = require("ffi/blitbuffer")
 local Device          = require("device")
 local Geom            = require("ui/geometry")
@@ -114,9 +115,10 @@ function Editor:_rebuild()
     if not shelf_h then
         shelf_h = math.floor((h - top - footer_h - n_rows * gap) / n_rows)
     end
-    -- As many rows as fit at that height: with no top panel there is room
-    -- for more than the shelf shows (or fewer, under the title bar).
-    n_rows = math.max(1, math.floor((h - top - footer_h) / (shelf_h + gap)))
+    -- One row of pieces, at the bottom: the adjust menu opens in the room
+    -- above it, so it never covers the piece being changed (maintainer). An
+    -- empty shelf stands over it, for pieces anchored to the top to hang from.
+    n_rows = 1
 
     local fh      = SpineShelf.plankFace(shelf_h)
     local inset   = SpineShelf.plankInset(SpineShelf.plankUnit(shelf_h))
@@ -135,8 +137,10 @@ function Editor:_rebuild()
     end)
     local face = BFont:getFace(BFont.getUIFontFace() or "cfont", math.max(8, math.floor(14 * scale / 100 + 0.5)))
     local items = {}
+    local n_on, n_off = 0, 0
     for _i, e in ipairs((Orn.listAll())) do
         if e.pack == self.pack then
+            if Orn.isOff(e.name) then n_off = n_off + 1 else n_on = n_on + 1 end
             local pl = Orn.place(e, budget, stand_h,
                                  { max_room = w - 2 * margin, max_below = below }, 1)
             if pl then
@@ -156,6 +160,16 @@ function Editor:_rebuild()
 
     local kids = { dimen = Geom:new{ w = w, h = h }, Ground:new{ dimen = Geom:new{ w = w, h = h } } }
     local rows_w, hang_w = {}, {}
+    -- The name badges hang below the plank: room for them over the info line.
+    local row_y = h - footer_h - shelf_h - Screen:scaleBySize(26)
+    -- The shelf above: a plank and nothing on it, so a top piece meets it.
+    local above_y = row_y - gap - shelf_h
+    if above_y + shelf_h > top then
+        local g0 = SpineShelf.ornamentRow{ width = w, height = shelf_h, row_index = 1,
+                                           lift_headroom = headroom, items = {} }
+        g0.overlap_offset = { 0, above_y }
+        rows_w[#rows_w + 1] = g0
+    end
     for r, row in ipairs(self._pages[self.page] or {}) do
         local list = {}
         for _j, cell in ipairs(row) do
@@ -164,9 +178,9 @@ function Editor:_rebuild()
             list[#list + 1] = { pl = it.pl, label = it.label, badge_w = it.badge_w,
                                 x = cell.x + math.floor((it.slot - it.pl.w) / 2) }
         end
-        local y = top + gap + (r - 1) * (shelf_h + gap)
+        local y = row_y
         local g, hanging = SpineShelf.ornamentRow{
-            width = w, height = shelf_h, row_index = r, lift_headroom = headroom, items = list,
+            width = w, height = shelf_h, row_index = r + 1, lift_headroom = headroom, items = list,
         }
         g.overlap_offset = { 0, y }
         rows_w[#rows_w + 1] = g
@@ -179,8 +193,8 @@ function Editor:_rebuild()
     for _i, hw in ipairs(hang_w) do kids[#kids + 1] = hw end
     for _i, g in ipairs(rows_w) do kids[#kids + 1] = g end
     local foot = TextWidget:new{
-        text = T(_("%1 pieces · page %2 of %3 · swipe for more · long-press a piece to adjust it"),
-                 #items, self.page, math.max(1, #self._pages)),
+        text = T(_("%1 on, %2 off · page %3 of %4 · swipe for more · long-press to adjust"),
+                 n_on, n_off, self.page, math.max(1, #self._pages)),
         face = face, padding = 0, max_width = w - 2 * margin,
     }
     foot.overlap_offset = { math.floor((w - foot:getSize().w) / 2), h - footer_h + math.floor((footer_h - foot:getSize().h) / 2) }
@@ -227,7 +241,9 @@ end
 
 function M.open(pack, bw)
     local e = Editor:new{ pack = pack, bw = bw }
-    UIManager:show(e)
+    -- A full refresh: it replaces the whole shelf, and a partial one left
+    -- the shelf's ghost under it on e-ink (maintainer).
+    UIManager:show(e, "full")
     return e
 end
 
