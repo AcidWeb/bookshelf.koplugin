@@ -897,6 +897,7 @@ function M.listAll()
     -- once per scan TTL. Same key as AssetFolder.scan: the folder's mtime and
     -- its sorted names.
     local key_parts = {}
+    local watch = {}                        -- every folder scanned, for folderStamp
     local loose, loose_root = {}, {}        -- name -> true, name -> root
     local pack_set, pack_files = {}, {}     -- pack -> true; pack -> { file -> root }
     for _r, d in ipairs(roots) do
@@ -915,6 +916,7 @@ function M.listAll()
             end
         end)
         if ok_l then
+            watch[#watch + 1] = d
             table.sort(names)
             table.sort(packs)
             key_parts[#key_parts + 1] = d .. "\3" .. tostring(mtime) .. "|" .. table.concat(names, "\0")
@@ -923,6 +925,7 @@ function M.listAll()
                 if not loose[n] then loose[n], loose_root[n] = true, d end
             end
             for _i, pack in ipairs(packs) do
+                watch[#watch + 1] = d .. "/" .. pack
                 local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
                 key_parts[#key_parts + 1] = "\1" .. pack .. "\2" .. tostring(pk) .. "\5"
                     .. tostring(fs.attributes(d .. "/" .. pack .. "/" .. M.JSON_NAME, "modification"))
@@ -935,6 +938,7 @@ function M.listAll()
         end
     end
     local key = table.concat(key_parts, "\4")
+    M._watch = watch
     if M._all_cache and M._all_key == key then return M._all_cache, M._all_packs end
     local names = {}
     for n in pairs(loose) do names[#names + 1] = n end
@@ -1026,6 +1030,32 @@ function M.delete(entry)
     if set[entry.name] then set[entry.name] = nil; saveSet(M.OFF_KEY, set) end
     M._all_cache, M._all_key, M._list_cache, M._list_key = nil, nil, nil, nil
     return true
+end
+
+-- folderStamp() -> { [folder] = mtime } for each folder the last scan walked
+-- (the roots and every pack); before any scan, the roots alone. Stats only,
+-- never a listing, so the shelf's new-file poll can ask every few seconds.
+M._watch = nil
+function M.folderStamp()
+    local fs = lfs()
+    if not fs then return {} end
+    local out = {}
+    for _i, d in ipairs(M._watch or M.roots()) do
+        out[d] = fs.attributes(d, "modification") or false
+    end
+    return out
+end
+
+-- stampChanged(prev, now) -> whether an ornament folder changed between two
+-- stamps. Only folders in both count: a folder that is new to the watch list
+-- arrived because a scan found it, and a new pack ALSO changes its root's
+-- mtime, which is in both. A folder that went missing is a change.
+function M.stampChanged(prev, now)
+    if type(prev) ~= "table" or type(now) ~= "table" then return false end
+    for d, m in pairs(prev) do
+        if now[d] == nil or now[d] ~= m then return true end
+    end
+    return false
 end
 
 -- invalidate(): forget the cached lists (the browser, after a change).

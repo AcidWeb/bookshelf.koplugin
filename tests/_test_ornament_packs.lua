@@ -191,4 +191,54 @@ t.test("while deferred, switches are kept in memory and written once at the end"
     eq(saved, 1, "after the end, saves are ordinary again")
 end)
 
+-- ── The new-file poll watches the ornament folders too ───────────────────────
+-- Maintainer: "piggyback on the background check for new books, to check for
+-- new ornaments without having to go in/out or refresh anything". The poll
+-- runs every few seconds, so this is stats only, never a listing.
+
+local function touchAt(path, secs) os.execute("touch -d @" .. secs .. " '" .. path .. "'") end
+
+t.test("folderStamp: steady while nothing changes, moves when a pack or the folder does", function()
+    local O = setup()
+    O.listAll()                                   -- the scan records the pack folders
+    local s1 = O.folderStamp()
+    eq(O.stampChanged(s1, O.folderStamp()), false, "the stamp moved with nothing changed")
+    svg(O.dir() .. "/Autumn/pumpkin.svg"); touchAt(O.dir() .. "/Autumn", os.time() + 10)
+    local s2 = O.folderStamp()
+    eq(O.stampChanged(s1, s2), true, "a piece added to a pack went unseen")
+    os.execute("mkdir -p '" .. O.dir() .. "/Birds'"); touchAt(O.dir(), os.time() + 20)
+    eq(O.stampChanged(s2, O.folderStamp()), true, "a new pack went unseen")
+end)
+
+t.test("a scan that only widens the watch list is not a change", function()
+    -- On the rig the first baseline was taken before any scan (the roots
+    -- alone), and the scan then added the pack folders: a false "change" and
+    -- a needless rebuild at every start.
+    local O = setup()
+    local before = O.folderStamp()                -- no scan yet: roots only
+    O.listAll()
+    eq(O.stampChanged(before, O.folderStamp()), false, "the scan's own pack folders read as a change")
+end)
+
+t.test("folderStamp lists no folder", function()
+    local O = setup()
+    O.listAll()
+    local lists = 0
+    local real = lfs_shim.dir
+    O._lfs = setmetatable({ dir = function(p) lists = lists + 1; return real(p) end }, { __index = lfs_shim })
+    O.folderStamp()
+    O._lfs = lfs_shim
+    eq(lists, 0, "the poll's check lists a folder every tick")
+end)
+
+t.test("the shelf's file poll rescans ornaments when their folders change", function()
+    local w = io.open("lib/bookshelf_widget.lua"):read("*a")
+    local tick = w:match("function BookshelfWidget:_filePollTick%(%)(.-)\nend\n")
+    assert(tick and tick:find("Orn.folderStamp()", 1, true), "the poll does not look at the ornament folders")
+    assert(tick:find("Orn.invalidate()", 1, true), "a change does not drop the cached ornament list")
+    local start = w:match("function BookshelfWidget:_startFilePoll%(%)(.-)\nend\n")
+    assert(start and start:find("if self._orn_stamp == nil then", 1, true),
+        "re-arming re-baselines the ornament stamp, so pieces added during sleep are swallowed")
+end)
+
 t.done()

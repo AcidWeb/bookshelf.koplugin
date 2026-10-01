@@ -14043,6 +14043,16 @@ end
 -- per-collection layouts (~10-100 dirs) without paying for outliers.
 local FILE_POLL_MAX_SUBDIRS = 200
 
+-- _ornamentStamp() -> the ornament folders' stamp, or nil while the ornament
+-- module has not been loaded (no spine shelf yet, so nothing to refresh).
+-- Stats only; see Ornaments.folderStamp.
+local function _ornamentStamp()
+    local Orn = package.loaded["lib/bookshelf_ornaments"]
+    if not (Orn and Orn.folderStamp) then return nil end
+    local ok, stamp = pcall(function() return Orn.folderStamp() end)
+    return ok and stamp or nil
+end
+
 local function _snapshotHomeDirs()
     local home = G_reader_settings:readSetting("home_dir")
     if not home or home == "" then return nil end
@@ -14116,6 +14126,10 @@ function BookshelfWidget:_startFilePoll()
     -- be compared against.
     if self._home_dir_mtimes == nil then
         self._home_dir_mtimes = _snapshotHomeDirs()
+    end
+    -- The ornament folders' stamp, kept the same way (see _ornamentStamp).
+    if self._orn_stamp == nil then
+        self._orn_stamp = _ornamentStamp()
     end
     self._file_poll_fn    = function() self:_filePollTick() end
     -- The first tick after a start or a resume is prompt whatever the idle
@@ -14225,6 +14239,30 @@ function BookshelfWidget:_filePollTick()
         end
     end
     self._home_dir_mtimes = snap or prev
+    -- Ornaments piggyback on the same tick (maintainer): a piece copied into
+    -- the ornaments folder, or a pack added, shows on the shelf without
+    -- leaving it. A stat per folder; the cached list is dropped so the next
+    -- plan rescans, and the deck takes the new pieces in.
+    local orn_changed = false
+    local Orn = package.loaded["lib/bookshelf_ornaments"]
+    if Orn and Orn.folderStamp then
+        local ok_s, stamp = pcall(function() return Orn.folderStamp() end)
+        if ok_s and stamp then
+            if self._orn_stamp ~= nil and Orn.stampChanged(self._orn_stamp, stamp) then
+                orn_changed = true
+                Orn.invalidate()
+            end
+            self._orn_stamp = stamp
+        end
+    end
+    if orn_changed and not changed and self:_isSpineMode() then
+        logger.dbg("[bookshelf] file poll detected an ornament folder change; rebuilding")
+        UIManager:nextTick(function()
+            if self._file_poll_fn == nil then return end  -- widget torn down
+            self:_rebuild()
+            UIManager:setDirty(self, "ui")
+        end)
+    end
     if changed then
         logger.dbg("[bookshelf] file poll detected dir mtime change; rebuilding")
         local Repo = require("lib/bookshelf_book_repository")
