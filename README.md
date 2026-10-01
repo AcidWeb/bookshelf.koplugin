@@ -169,7 +169,7 @@ Tap a spine and the book lifts off the shelf (and shows in the top panel); tap i
 
 **Spine text direction.** Which way a title runs down a spine: **Top to bottom** (the default, how British and American books are printed) or **Bottom to top** (Continental European). Set it once for the whole library under **menu -> Settings -> Library & search**.
 
-**Ornaments.** Drop PNG or SVG files into the `koreader/settings/bookshelf/ornaments` folder (beside the wallpapers) and they turn up in the gaps, standing on the plank like the books. A potted plant and a cactus are seeded there to start you off; delete them if you would rather not see them and they stay deleted.
+**Ornaments.** Drop PNG or SVG files into the `koreader/settings/bookshelf/ornaments` folder (beside the wallpapers) and they turn up in the gaps, standing on the plank like the books. A potted plant and a cactus are seeded there to start you off; delete them if you would rather not see them and they stay deleted. Ornaments from before 5.3, in `koreader/icons/bookshelf.ornaments`, move here by themselves on the first start.
 
 A folder of ornaments inside `ornaments` is a **pack**, which you can switch on and off as one. **menu > Wallpaper, ornaments and colours > Ornament collection** opens a browser of everything in the folder, with **All** and a tab per pack: tap an ornament to switch it off or on (the box in its corner is ticked while it is on), long-press it to switch it or delete it, and use the footer button on a pack's tab to switch the whole pack. Switched-off ornaments are faded, and **Add ornaments…** on the All tab shows where the folder is on your device.
 

@@ -24,6 +24,17 @@ local function fs()
         isDir = function(p) return lfs.attributes(p, "mode") == "directory" end,
         mkdir = function(p) return require("lib/bookshelf_fs").ensureDir(p) end,
         rename = os.rename,
+        -- lfs.dir returns two values; the loop must see both.
+        list = function(p)
+            local out = {}
+            pcall(function()
+                for n in lfs.dir(p) do
+                    if n ~= "." and n ~= ".." then out[#out + 1] = n end
+                end
+            end)
+            return out
+        end,
+        rmdir = function(p) return lfs.rmdir(p) end,
     }
 end
 
@@ -71,6 +82,21 @@ function M.run()
         end
         -- The scaled-cover cache was already under cache/, at its root.
         move(require("datastorage"):getDataDir() .. "/cache/bookshelf_covers", cdir .. "/scaled_covers")
+        -- Ornaments, from the folder they lived in before 5.3 (every 5.2
+        -- reader's) into settings/bookshelf/ornaments, entry by entry: the
+        -- new folder may already exist. A piece is named by its path inside
+        -- the folder, so the deck, switched-off pieces and packs carry over.
+        -- Hidden entries (a sync tool's markers) stay; the old folder goes
+        -- only once it is empty, and is still read for whatever stayed.
+        local old_orn = require("datastorage"):getDataDir() .. "/icons/bookshelf.ornaments"
+        if F.isDir(old_orn) then
+            local new_orn = sdir .. "/ornaments"
+            F.mkdir(new_orn)
+            for _i, name in ipairs(F.list(old_orn)) do
+                if name:sub(1, 1) ~= "." then move(old_orn .. "/" .. name, new_orn .. "/" .. name) end
+            end
+            if #F.list(old_orn) == 0 then F.rmdir(old_orn) end
+        end
         if moved > 0 then logger.info("[bookshelf] storage: moved", moved, "item(s) into", sdir, "and", cdir) end
     end)
     if not ok then logger.warn("[bookshelf] storage move failed:", tostring(err)) end

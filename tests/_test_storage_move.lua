@@ -32,6 +32,12 @@ local function setup()
         isDir = function(p) return sh("test -d '" .. p .. "' && echo y"):match("y") ~= nil end,
         mkdir = function(p) os.execute("mkdir -p '" .. p .. "'"); return true end,
         rename = os.rename,
+        list = function(p)
+            local out = {}
+            for n in sh("ls -A '" .. p .. "'"):gmatch("[^\n]+") do out[#out + 1] = n end
+            return out
+        end,
+        rmdir = function(p) return os.execute("rmdir '" .. p .. "'") end,
     }
     return Move, root
 end
@@ -111,6 +117,42 @@ t.test("Delete plugin settings leaves other plugins' files alone", function()
     local del = main:match("function Bookshelf:deletePluginSettings%(%)(.-)\nend\n")
     assert(del and not del:find("hardcoversync_settings", 1, true), "it deletes the Hardcover sync plugin's settings")
     assert(del:find("Paths.settingsDir()", 1, true) and del:find("Paths.cacheDir()", 1, true), "it misses the new folders")
+end)
+
+t.test("ornaments: the old icons/bookshelf.ornaments folder moves into settings/bookshelf/ornaments", function()
+    -- Maintainer: back up settings/bookshelf to back up bookshelf. Every 5.2
+    -- reader with ornaments has them in the old folder. A piece is named by its
+    -- path inside the folder, so the deck, switched-off pieces and packs carry
+    -- over unchanged.
+    local Move, root = setup()
+    local L = root .. "/icons/bookshelf.ornaments"
+    write(L .. "/cactus.svg", "c"); write(L .. "/Japan/wave.png", "w"); write(L .. "/Japan/pack.json", "j")
+    Move.run()
+    local N = root .. "/settings/bookshelf/ornaments"
+    eq(read(N .. "/cactus.svg"), "c")
+    eq(read(N .. "/Japan/wave.png"), "w", "a pack moves whole")
+    eq(read(N .. "/Japan/pack.json"), "j")
+    eq(exists(L), false, "the emptied old folder is left behind")
+end)
+
+t.test("ornaments: a piece already in the new folder wins, and its old twin stays", function()
+    local Move, root = setup()
+    local L, N = root .. "/icons/bookshelf.ornaments", root .. "/settings/bookshelf/ornaments"
+    write(N .. "/template.svg", "new"); write(N .. "/ornaments.json", "new-json")
+    write(L .. "/template.svg", "old"); write(L .. "/ornaments.json", "old-json"); write(L .. "/leaf.svg", "l")
+    write(L .. "/.stfolder/x", "sync")             -- a sync tool's marker stays put
+    Move.run(); Move.run()
+    eq(read(N .. "/template.svg"), "new"); eq(read(N .. "/ornaments.json"), "new-json")
+    eq(read(L .. "/template.svg"), "old", "the old copy was overwritten or deleted")
+    eq(read(N .. "/leaf.svg"), "l", "a piece with no twin did not move")
+    eq(exists(L .. "/.stfolder/x"), true, "a hidden entry was moved")
+    eq(exists(L), true, "a folder still holding things was removed")
+end)
+
+t.test("ornaments: no old folder, nothing happens", function()
+    local Move, root = setup()
+    Move.run()
+    eq(exists(root .. "/icons"), false)
 end)
 
 t.done()
