@@ -24,7 +24,7 @@ local Screen     = Device.screen
 local M = {}
 
 -- dp layout of the files; keep in step with shadowgen.py
-M.DP = { side = 12, up = 96, wall = 10, below = 0, above = 2,
+M.DP = { side = 16, up = 96, wall = 10, below = 0, above = 2,
          halo = 6, tile = 48, cap = 5, foot = 4 }
 -- joined wedges kept per set (a page holds a few dozen book heights)
 M.WEDGE_CACHE = 96
