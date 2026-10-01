@@ -22,6 +22,9 @@ local KEY_DAILY   = "micromodule_reading_goal_daily"    -- minutes (int)
 local KEY_WEEKLY  = "micromodule_reading_goal_weekly"   -- minutes (int, displayed as hours)
 local KEY_MONTHLY = "micromodule_reading_goal_monthly"  -- books   (int)
 local KEY_YEARLY  = "micromodule_reading_goal_yearly"   -- books   (int)
+-- Books read outside KOReader (paper, audio, another device), added to the
+-- year's count only: { year = YYYY, n = int }, so they start again each year.
+local KEY_OTHER   = "micromodule_reading_goal_other_books"
 
 local GOAL_ORDER = { "daily", "weekly", "monthly", "yearly" }
 
@@ -67,6 +70,22 @@ end
 local function readYearly()
     local v = tonumber(store().read(KEY_YEARLY, DEFAULTS.yearly)) or DEFAULTS.yearly
     return math.max(1, v)
+end
+
+-- readOtherBooks(year) -> the books read outside KOReader that year. A reader
+-- moving from SimpleUI kept them as its "physical books read this year", so an
+-- unset value starts from that number, once (a Reddit report: "the count for
+-- my annual reading goal is off ... I can't figure out a way to [change it]").
+local function readOtherBooks(year)
+    local v = store().read(KEY_OTHER)
+    if v == nil then
+        local sui = G_reader_settings
+            and tonumber(G_reader_settings:readSetting("navbar_reading_goal_physical"))
+        v = { year = year, n = (sui and sui > 0) and math.floor(sui) or 0 }
+        store().save(KEY_OTHER, v)
+    end
+    if type(v) ~= "table" or tonumber(v.year) ~= year then return 0 end
+    return math.max(0, math.floor(tonumber(v.n) or 0))
 end
 
 -- ─── View cycling ────────────────────────────────────────────────────────────
@@ -140,25 +159,65 @@ end
 local DATA_TTL = 30
 local _data_cache -- { at = <epoch>, data = <table|false> }
 
--- Count books with status "finished" whose last access was within the period.
-local function countFinishedBooks(period_start)
-    local ok_rh, rh = pcall(require, "readhistory")
-    if not ok_rh or not rh or not rh.hist then return 0 end
-    local Repo = require("lib/bookshelf_book_repository")
-    local count = 0
-    for _, entry in ipairs(rh.hist) do
+-- dateYM(d) -> year, month of a sidecar's summary.modified: KOReader writes
+-- "YYYY-MM-DD", and older sidecars a timestamp or an os.date table.
+local function dateYM(d)
+    if type(d) == "string" then
+        local y, m = d:match("^(%d%d%d%d)%-(%d%d)")
+        if y then return tonumber(y), tonumber(m) end
+        return nil
+    end
+    if type(d) == "number" then
+        local dt = os.date("*t", d)
+        return dt.year, dt.month
+    end
+    if type(d) == "table" and tonumber(d.year) then
+        return tonumber(d.year), tonumber(d.month)
+    end
+    return nil
+end
+
+-- countFinished(hist, now_t, since, statusOf, finishedOn) -> month, year
+-- Books finished this month and this year, counted under the date each was
+-- MARKED finished (summary.modified), so a book finished in December and
+-- opened again in January stays in the year it was read. The date it was last
+-- opened stands in when a sidecar has none. Candidates are the history entries
+-- opened since `since` (the start of the year), as before; one pass for both.
+local function countFinished(hist, now_t, since, statusOf, finishedOn)
+    local month, year, seen = 0, 0, {}
+    for _i, entry in ipairs(hist or {}) do
         local fp = entry.file
-        if fp then
-            local t = entry.time or 0
-            if t >= period_start then
-                local ok, _pct, status = pcall(Repo.readProgress, fp)
-                if ok and status == "finished" then
-                    count = count + 1
+        if fp and not seen[fp] and (entry.time or 0) >= since then
+            seen[fp] = true
+            if statusOf(fp) == "finished" then
+                local y, m = dateYM(finishedOn(fp))
+                if not y then
+                    local et = os.date("*t", entry.time or 0)
+                    y, m = et.year, et.month
+                end
+                if y == now_t.year then
+                    year = year + 1
+                    if m == now_t.month then month = month + 1 end
                 end
             end
         end
     end
-    return count
+    return month, year
+end
+
+local function countFinishedBooks(now_t, since)
+    local ok_rh, rh = pcall(require, "readhistory")
+    if not ok_rh or not rh or not rh.hist then return 0, 0 end
+    local Repo = require("lib/bookshelf_book_repository")
+    return countFinished(rh.hist, now_t, since,
+        function(fp)
+            local ok, _pct, status = pcall(Repo.readProgress, fp)
+            return ok and status or nil
+        end,
+        function(fp)
+            local ok, d = pcall(Repo.finishedOn, fp)
+            return ok and d or nil
+        end)
 end
 
 -- Single query for time-based goals (daily + weekly).
@@ -220,15 +279,12 @@ local function queryAllData()
 
     -- Book counts for monthly / yearly
     local t = os.date("*t", now)
-    local month_start = os.time{
-        year = t.year, month = t.month, day = 1,
-        hour = 0, min = 0, sec = 0 }
     local year_start = os.time{
         year = t.year, month = 1, day = 1,
         hour = 0, min = 0, sec = 0 }
 
-    local month_books = countFinishedBooks(month_start)
-    local year_books  = countFinishedBooks(year_start)
+    local month_books, year_books = countFinishedBooks(t, year_start)
+    year_books  = year_books + readOtherBooks(t.year)
 
     local data = {
         today_secs  = time_data.today_secs,
@@ -376,6 +432,50 @@ local function showSettings(ctx)
         }
     end
 
+    -- ── Books read outside KOReader, this year ──
+    -- Zero is a real answer here, so this has its own dialog rather than the
+    -- targets' Custom..., which takes only a positive number.
+    local function otherBooksBtn()
+        local year = os.date("*t").year
+        return {
+            text = T(_("Books read outside KOReader this year: %1"), readOtherBooks(year)),
+            callback = function()
+                UIManager:close(dialog)
+                local InputDialog = require("ui/widget/inputdialog")
+                local input_dlg
+                input_dlg = InputDialog:new{
+                    title = _("Books read outside KOReader this year"),
+                    description = _("Paper books, audiobooks or another reader: added to the yearly goal."),
+                    input_type = "number",
+                    input = tostring(readOtherBooks(year)),
+                    buttons = {{
+                        {
+                            text = _("Cancel"),
+                            callback = function()
+                                UIManager:close(input_dlg)
+                                showSettings(ctx)
+                            end,
+                        },
+                        {
+                            text = _("Save"),
+                            is_enter_default = true,
+                            callback = function()
+                                local v = tonumber(input_dlg:getInputText())
+                                if v and v >= 0 then
+                                    S.save(KEY_OTHER, { year = year, n = math.floor(v) })
+                                end
+                                UIManager:close(input_dlg)
+                                reload()
+                            end,
+                        },
+                    }},
+                }
+                UIManager:show(input_dlg)
+                input_dlg:onShowKeyboard()
+            end,
+        }
+    end
+
     dialog = ButtonDialog:new{
         title        = _("Reading goals"),
         title_align  = "center",
@@ -409,6 +509,7 @@ local function showSettings(ctx)
             { yearlyBtn(6),  yearlyBtn(12), yearlyBtn(24),
               yearlyBtn(36), yearlyBtn(52),
               customTargetBtn(_("Yearly challenge"), _("books"), readYearly, function(v) S.save(KEY_YEARLY, v) end) },
+            { otherBooksBtn() },
         },
     }
     UIManager:show(dialog)
@@ -555,4 +656,7 @@ return {
     end,
 
     show_settings = showSettings,
+
+    -- The counting and the other-books rule, for tests/_test_reading_goal_count.
+    _test = { countFinished = countFinished, dateYM = dateYM, readOtherBooks = readOtherBooks },
 }

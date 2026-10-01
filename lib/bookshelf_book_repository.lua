@@ -1431,6 +1431,10 @@ end
 -- caches further down, but buildBook (below) seeds it from the
 -- DocSettings handle it opens, and Lua upvalue scoping needs the local
 -- to exist before that function body is compiled.
+-- When each book was marked finished (its sidecar's summary.modified), or
+-- false for none: the reading goal counts a book in the year it was finished.
+-- readProgress fills it from the sidecar it already has open.
+local _finished_on = {}
 local _progress_cache, PROGRESS_CACHE_TTL
 
 -- _writeProgressCache(filepath, pct, status, rating, page_count, page_num)
@@ -2469,6 +2473,7 @@ function Repo.invalidateProgressCache(filepath)
     if filepath then
         _progress_cache[filepath] = nil
         _sidecar_memo[filepath] = nil
+        _finished_on[filepath] = nil
         for _key, entry in pairs(_light_meta_cache) do
             if entry and entry.map then
                 local rec = entry.map[filepath]
@@ -2484,6 +2489,7 @@ function Repo.invalidateProgressCache(filepath)
     else
         _progress_cache = {}
         _sidecar_memo = {}
+        _finished_on = {}
         for _key, entry in pairs(_light_meta_cache) do
             if entry and entry.map then
                 for _fp, rec in pairs(entry.map) do
@@ -2561,6 +2567,7 @@ function Repo.readProgress(filepath)
         if ok_sum and type(summary) == "table" then
             status = summary.status
             rating = tonumber(summary.rating)
+            _finished_on[filepath] = summary.modified or false
         end
         local ok_pm, stable_pages = pcall(ds.readSetting, ds, "pagemap_doc_pages")
         if ok_pm and stable_pages then
@@ -2634,6 +2641,26 @@ function Repo.readProgress(filepath)
     end
     _writeProgressCache(filepath, pct, status, rating, page_count, page_num, page_src)
     return pct, status, rating, page_count, page_num, page_src
+end
+
+-- Repo.finishedOn(filepath) -> the sidecar's summary.modified (the date its
+-- status was last set, "YYYY-MM-DD"), or nil. Remembered until the book's
+-- progress cache is dropped; readProgress usually answers it on the way.
+function Repo.finishedOn(filepath)
+    if not filepath then return nil end
+    local c = _finished_on[filepath]
+    if c == nil then
+        c = false
+        local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
+        if ok_ds and ds then
+            local ok_sum, summary = pcall(ds.readSetting, ds, "summary")
+            if ok_sum and type(summary) == "table" and summary.modified ~= nil then
+                c = summary.modified
+            end
+        end
+        _finished_on[filepath] = c
+    end
+    return c or nil
 end
 
 -- Repo.progressFor(filepath) -> pct, status, rating, page_count, opened, page_num
