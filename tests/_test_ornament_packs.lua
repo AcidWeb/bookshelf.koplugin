@@ -241,4 +241,59 @@ t.test("the shelf's file poll rescans ornaments when their folders change", func
         "re-arming re-baselines the ornament stamp, so pieces added during sleep are swallowed")
 end)
 
+-- ── Pack editor: adjustments made there go into the pack's own file ─────────
+
+local function readFile(p) local f = io.open(p); if not f then return nil end local s = f:read("*a"); f:close(); return s end
+
+t.test("commitPack moves a pack's records from the reader's file into the pack's", function()
+    local O = setup()
+    O._encode = function(t2)                      -- a stable stand-in for rapidjson
+        local keys = {}
+        for k in pairs(t2) do keys[#keys + 1] = k end
+        table.sort(keys)
+        local out = {}
+        for _i, k in ipairs(keys) do
+            local rec, fields = t2[k], {}
+            local fk = {}
+            for f in pairs(rec) do fk[#fk + 1] = f end
+            table.sort(fk)
+            for _j, f in ipairs(fk) do fields[#fields + 1] = f .. "=" .. tostring(rec[f]) end
+            out[#out + 1] = k .. ":" .. table.concat(fields, ",")
+        end
+        return table.concat(out, ";")
+    end
+    O._decode = function(text)
+        local t2 = {}
+        for rec in text:gmatch("[^;]+") do
+            local k, body = rec:match("^(.-):(.*)$")
+            if k then
+                t2[k] = {}
+                for f, v in body:gmatch("([%w_]+)=([^,]*)") do t2[k][f] = tonumber(v) or v end
+            end
+        end
+        return t2
+    end
+    -- What the pack already ships, and what the reader set.
+    local pf = assert(io.open(O.dir() .. "/Autumn/ornaments.json", "w")); pf:write("leaf.svg:lift=0.5,scale=0.9"); pf:close()
+    O._reader = { ["Autumn/leaf.svg"] = { scale = 1.4 }, ["Autumn/acorn.svg"] = { pad = 0.1 },
+                  ["Cats/leaf.svg"] = { scale = 2 }, ["template.svg"] = { scale = 0.5 } }
+    O._reader_dirty = true
+    eq(O.commitPack("Autumn"), 2)
+    local pj = O._decode(readFile(O.dir() .. "/Autumn/ornaments.json"))
+    eq(pj["leaf.svg"].scale, 1.4, "the editor's value did not win")
+    eq(pj["leaf.svg"].lift, 0.5, "the pack's own value was lost")
+    eq(pj["acorn.svg"].pad, 0.1)
+    local rt = O.readerTable()
+    eq(rt["Autumn/leaf.svg"], nil, "the record stayed in the reader's file, where it would go on winning")
+    eq(rt["Cats/leaf.svg"].scale, 2, "another pack's record was moved")
+    eq(rt["template.svg"].scale, 0.5, "a loose piece's record was moved")
+    eq(O.commitPack("Autumn"), 0, "a second commit found more to move")
+end)
+
+t.test("the settings menu offers the pack editor under Developer updates", function()
+    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
+    assert(st:find('_("Pack editor\\xE2\\x80\\xA6")', 1, true), "no Pack editor row")
+    assert(st:find('require("lib/bookshelf_pack_editor").choose(', 1, true), "the row does not open the editor")
+end)
+
 t.done()

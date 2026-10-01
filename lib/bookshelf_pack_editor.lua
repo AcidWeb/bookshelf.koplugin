@@ -1,0 +1,254 @@
+-- lib/bookshelf_pack_editor.lua
+-- The pack editor: one ornament pack alone on full-screen shelves, no books,
+-- each piece once with its name on a badge, for a pack maker to adjust before
+-- giving the pack out (maintainer). Reached from Updates > Developer updates.
+--
+-- A piece's long-press opens the shelf's own adjust menu, and the changes
+-- land in the reader's ornaments.json as they always do, so every nudge
+-- redraws at once. Leaving the editor moves this pack's records from there
+-- into the pack's own ornaments.json (Ornaments.commitPack), so they travel
+-- with the pack instead of only shaping this reader's shelf.
+--
+-- Pieces stand at the size a reader sees: the live shelf's row height when
+-- it is a spine shelf, three rows to a screen otherwise.
+local Blitbuffer      = require("ffi/blitbuffer")
+local Device          = require("device")
+local Geom            = require("ui/geometry")
+local GestureRange    = require("ui/gesturerange")
+local InputContainer  = require("ui/widget/container/inputcontainer")
+local OverlapGroup    = require("ui/widget/overlapgroup")
+local UIManager       = require("ui/uimanager")
+local Widget          = require("ui/widget/widget")
+local _               = require("lib/bookshelf_i18n").gettext
+local T               = require("ffi/util").template
+local Screen          = Device.screen
+
+local M = {}
+
+-- layout(items, row_w, n_rows, margin) -> pages: { { {i, x}, ... } per row }
+-- per page. items = { { slot = px each piece takes, with its room }, ... },
+-- laid left to right from the margin, a new row when the next one would run
+-- past the far margin, a new page after n_rows. A piece wider than a whole
+-- row still gets a row of its own. Pure, for the tests.
+function M.layout(items, row_w, n_rows, margin)
+    local pages, page, row, x = {}, nil, nil, nil
+    local function newRow()
+        if not page or #page >= n_rows then
+            page = {}
+            pages[#pages + 1] = page
+        end
+        row = {}
+        page[#page + 1] = row
+        x = margin
+    end
+    for i, it in ipairs(items) do
+        if not row or (#row > 0 and x + it.slot > row_w - margin) then newRow() end
+        row[#row + 1] = { i = i, x = x }
+        x = x + it.slot
+    end
+    return pages
+end
+
+local Ground = Widget:extend{}
+function Ground:paintTo(bb, x, y)
+    bb:paintRect(x, y, self.dimen.w, self.dimen.h, Blitbuffer.COLOR_WHITE)
+end
+
+local Editor = InputContainer:extend{
+    pack = nil,
+    bw = nil,          -- the shelf underneath, rebuilt on the way out
+    covers_fullscreen = true,
+}
+
+function Editor:init()
+    self.page = 1
+    self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
+    self.ges_events = {
+        Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } },
+    }
+    if Device:hasKeys() then
+        self.key_events = { Close = { { Device.input.group.Back } } }
+    end
+    -- The pieces' long-press is the shelf's adjust menu, redrawing this
+    -- screen; their tap does the same (a tap action would run otherwise).
+    local Orn = require("lib/bookshelf_ornaments")
+    self._handlers = Orn.handlers
+    local editor = self
+    local function menu(entry, _pl, piece)
+        require("lib/bookshelf_ornament_menu").show(entry, editor, piece)
+        return true
+    end
+    Orn.handlers = { hold = menu, tap = function(entry) return menu(entry) end }
+    self:_rebuild()
+end
+
+-- The geometry the live shelf uses, when it has spine rows to copy.
+function Editor:_rows()
+    local bw = self.bw
+    local d = bw and bw._shelf_dims
+    if bw and bw._isSpineMode and bw:_isSpineMode() and d and d.shelf_h and d.n_shelves then
+        return d.shelf_h, d.n_shelves, bw._spine_lift_headroom or 0
+    end
+    return nil, 3, Screen:scaleBySize(12)
+end
+
+function Editor:_rebuild()
+    local Orn = require("lib/bookshelf_ornaments")
+    local SpineShelf = require("lib/bookshelf_spine_shelf")
+    local TitleBar = require("ui/widget/titlebar")
+    local TextWidget = require("lib/bookshelf_colour_text")
+    local BFont = require("lib/bookshelf_fonts")
+    local w, h = self.dimen.w, self.dimen.h
+
+    local title = TitleBar:new{
+        width = w,
+        title = T(_("Pack editor: %1"), self.pack),
+        with_bottom_line = true,
+        close_callback = function() self:onClose() end,
+        show_parent = self,
+    }
+    local top = title:getSize().h
+    local shelf_h, n_rows, headroom = self:_rows()
+    local gap = math.max(headroom, Screen:scaleBySize(12))
+    local footer_h = Screen:scaleBySize(36)
+    if not shelf_h then
+        shelf_h = math.floor((h - top - footer_h - n_rows * gap) / n_rows)
+    end
+    -- As many rows as fit at that height: with no top panel there is room
+    -- for more than the shelf shows (or fewer, under the title bar).
+    n_rows = math.max(1, math.floor((h - top - footer_h) / (shelf_h + gap)))
+
+    local fh      = SpineShelf.plankFace(shelf_h)
+    local inset   = SpineShelf.plankInset(SpineShelf.plankUnit(shelf_h))
+    local stand_h = math.max(1, shelf_h - fh - inset)
+    local margin  = SpineShelf.endMargin(shelf_h)
+    -- The shelf's own sizing (SpineShelf.plan): one stand height wide at
+    -- most by default, the overhang kept on the plank, a plank unit of room.
+    local base    = SpineShelf.plankUnit(shelf_h)
+    local budget  = Orn.maxWidth(stand_h, w - 2 * margin)
+    local below   = SpineShelf.overhangReach(shelf_h)
+
+    -- Every piece in the pack, switched off or not, in the browser's order.
+    local scale = 100
+    pcall(function()
+        scale = require("lib/bookshelf_settings_store").read("stack_label_font_scale", 100) or 100
+    end)
+    local face = BFont:getFace(BFont.getUIFontFace() or "cfont", math.max(8, math.floor(14 * scale / 100 + 0.5)))
+    local items = {}
+    for _i, e in ipairs((Orn.listAll())) do
+        if e.pack == self.pack then
+            local pl = Orn.place(e, budget, stand_h,
+                                 { max_room = w - 2 * margin, max_below = below }, 1)
+            if pl then
+                local label = Orn.displayName(e)
+                if Orn.isOff(e.name) then label = T(_("%1 (off)"), label) end
+                local tw = TextWidget:new{ text = label, face = face, padding = 0 }
+                local badge_w = math.min(tw:getSize().w + Screen:scaleBySize(12), w - 2 * margin)
+                tw:free()
+                local pad = SpineShelf.ornPad(base, pl)
+                local slot = math.max(pl.w + 2 * pad, badge_w + Screen:scaleBySize(8))
+                items[#items + 1] = { pl = pl, label = label, badge_w = badge_w, slot = slot, pad = pad }
+            end
+        end
+    end
+    self._pages = M.layout(items, w, n_rows, margin)
+    self.page = math.max(1, math.min(self.page, #self._pages))
+
+    local kids = { dimen = Geom:new{ w = w, h = h }, Ground:new{ dimen = Geom:new{ w = w, h = h } } }
+    local rows_w, hang_w = {}, {}
+    for r, row in ipairs(self._pages[self.page] or {}) do
+        local list = {}
+        for _j, cell in ipairs(row) do
+            local it = items[cell.i]
+            -- Centred in its slot, so a short name's badge and the piece line up.
+            list[#list + 1] = { pl = it.pl, label = it.label, badge_w = it.badge_w,
+                                x = cell.x + math.floor((it.slot - it.pl.w) / 2) }
+        end
+        local y = top + gap + (r - 1) * (shelf_h + gap)
+        local g, hanging = SpineShelf.ornamentRow{
+            width = w, height = shelf_h, row_index = r, lift_headroom = headroom, items = list,
+        }
+        g.overlap_offset = { 0, y }
+        rows_w[#rows_w + 1] = g
+        for _k, hw in ipairs(hanging) do
+            hw.overlap_offset = { hw.overlap_offset[1], y + hw.overlap_offset[2] }
+            hang_w[#hang_w + 1] = hw
+        end
+    end
+    -- Pieces behind the shelf above first, then the rows over them.
+    for _i, hw in ipairs(hang_w) do kids[#kids + 1] = hw end
+    for _i, g in ipairs(rows_w) do kids[#kids + 1] = g end
+    local foot = TextWidget:new{
+        text = T(_("%1 pieces · page %2 of %3 · swipe for more · long-press a piece to adjust it"),
+                 #items, self.page, math.max(1, #self._pages)),
+        face = face, padding = 0, max_width = w - 2 * margin,
+    }
+    foot.overlap_offset = { math.floor((w - foot:getSize().w) / 2), h - footer_h + math.floor((footer_h - foot:getSize().h) / 2) }
+    kids[#kids + 1] = foot
+    title.overlap_offset = { 0, 0 }
+    kids[#kids + 1] = title
+    self[1] = OverlapGroup:new(kids)
+end
+
+function Editor:onSwipe(_arg, ges)
+    local dir = ges and ges.direction
+    local n = #(self._pages or {})
+    if dir == "west" and self.page < n then self.page = self.page + 1
+    elseif dir == "east" and self.page > 1 then self.page = self.page - 1
+    else return true end
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
+    return true
+end
+
+function Editor:onClose()
+    UIManager:close(self)
+    return true
+end
+
+function Editor:onCloseWidget()
+    local Orn = require("lib/bookshelf_ornaments")
+    Orn.handlers = self._handlers or Orn.handlers
+    local ok, n = pcall(Orn.commitPack, self.pack)
+    if ok and n and n > 0 then
+        UIManager:show(require("ui/widget/infomessage"):new{
+            text = T(_("Saved the settings of %1 pieces into the %2 pack."), n, self.pack),
+            timeout = 3,
+        })
+    end
+    local bw = self.bw
+    if bw and bw._rebuild then
+        UIManager:nextTick(function()
+            bw:_rebuild()
+            UIManager:setDirty(bw, "ui")
+        end)
+    end
+end
+
+function M.open(pack, bw)
+    local e = Editor:new{ pack = pack, bw = bw }
+    UIManager:show(e)
+    return e
+end
+
+-- choose(bw): which pack to edit, then the editor.
+function M.choose(bw)
+    local Orn = require("lib/bookshelf_ornaments")
+    local _all, packs = Orn.listAll()
+    if not packs or #packs == 0 then
+        UIManager:show(require("ui/widget/infomessage"):new{ text = _("There are no ornament packs to edit."), timeout = 3 })
+        return
+    end
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local d
+    local rows = {}
+    for _i, p in ipairs(packs) do
+        rows[#rows + 1] = {{ text = p, callback = function() UIManager:close(d); M.open(p, bw) end }}
+    end
+    rows[#rows + 1] = {{ text = _("Cancel"), callback = function() UIManager:close(d) end }}
+    d = ButtonDialog:new{ title = _("Pack editor"), title_align = "center", buttons = rows }
+    UIManager:show(d)
+end
+
+M._Editor = Editor
+return M

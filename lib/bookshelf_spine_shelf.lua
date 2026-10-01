@@ -4290,6 +4290,47 @@ function SpineShelf.rowEndRoom(base, pl)
     return (pl and pl.w or 0) + math.max(0, p) + p
 end
 
+-- ornamentRow(opts) -> a row of pieces alone on a plank (the pack editor,
+-- lib/bookshelf_pack_editor), built from the same parts as rowWidget's: the
+-- plank, its design, each piece at its own height (ornamentY), a name badge
+-- under each. opts: width, height, row_index, lift_headroom, items = {
+-- { pl = placement (Ornaments.place), x = left edge, label = text }, ... }.
+-- Returns the row and the pieces that go behind the shelf above (behindAbove),
+-- for the caller to paint before that row, as BookshelfWidget:_hangUnder does.
+function SpineShelf.ornamentRow(opts)
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local Orn = require("lib/bookshelf_ornaments")
+    local w, h = opts.width, opts.height
+    local fh      = SpineShelf.plankFace(h)
+    local inset   = SpineShelf.plankInset(SpineShelf.plankUnit(h))
+    local stand_h = math.max(1, h - fh - inset)
+    local kids = { dimen = Geom:new{ w = w, h = h },
+                   ShelfPlank:new{ dimen = Geom:new{ w = w, h = h } } }
+    local design = SpineShelf.plankDesignWidget(w, h)
+    if design then kids[#kids + 1] = design end
+    local hanging, spans = {}, {}
+    for _i, it in ipairs(opts.items or {}) do
+        local pl = it.pl
+        local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
+        w_.overlap_offset = { it.x, SpineShelf.ornamentY(pl, stand_h, opts) }
+        if SpineShelf.behindAbove(pl, w_.overlap_offset[2], opts) then
+            hanging[#hanging + 1] = w_
+            local part = SpineShelf.ownRowPart(w_, Orn)
+            if part then kids[#kids + 1] = part end
+        else
+            kids[#kids + 1] = w_
+        end
+        if it.label and it.badge_w then
+            spans[#spans + 1] = { x = it.x + math.floor((pl.w - it.badge_w) / 2),
+                                  w = it.badge_w, label = it.label }
+        end
+    end
+    if #spans > 0 then
+        kids[#kids + 1] = ShelfBadges:new{ dimen = Geom:new{ w = w, h = h }, spans = spans }
+    end
+    return OverlapGroup:new(kids), hanging, stand_h
+end
+
 function SpineShelf.rowWidget(opts)
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local HorizontalSpan  = require("ui/widget/horizontalspan")

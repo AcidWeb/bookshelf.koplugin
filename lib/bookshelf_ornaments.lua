@@ -884,6 +884,45 @@ function M.saveReader()
     return true
 end
 
+-- commitPack(pack) -> how many pieces' records moved. The pack editor's
+-- save (lib/bookshelf_pack_editor): the reader's records for the pack's
+-- pieces ("Pack/file.png") move into the pack's own ornaments.json (keyed by
+-- file name), field by field over what the pack had, so the pack ships with
+-- them; they leave the reader's file, where they would go on winning.
+function M.commitPack(pack)
+    local pdir = pack and M.packDir(pack)
+    if not pdir then return 0 end
+    local t = M.readerTable()
+    local prefix = pack .. "/"
+    local path = pdir .. "/" .. M.JSON_NAME
+    local pj = M.readJson(path)
+    local moved = {}
+    for key, rec in pairs(t) do
+        if type(key) == "string" and key:sub(1, #prefix) == prefix and type(rec) == "table" then
+            local file = key:sub(#prefix + 1)
+            local out = type(pj[file]) == "table" and pj[file] or {}
+            for k, v in pairs(rec) do out[k] = v end
+            pj[file] = out
+            moved[#moved + 1] = key
+        end
+    end
+    if #moved == 0 then return 0 end
+    -- The pack's file first: the reader's records go only once it is written.
+    local ok, text = pcall(encodeJson, pj)
+    local f = ok and type(text) == "string" and io.open(path, "w")
+    if not f then
+        logger.warn("[bookshelf] ornaments: could not write", path)
+        return 0
+    end
+    f:write(text); f:write("\n"); f:close()
+    for _i, key in ipairs(moved) do t[key] = nil end
+    local n = #moved
+    M._reader_dirty = true
+    M.saveReader()
+    M.invalidate()
+    return n
+end
+
 -- listAll() -> every ornament in the folders and their packs, switched off
 -- or not, sorted by pack (loose ones first) then name; and the pack names.
 -- Both folders are read (see M.dir); a relative path present in both is the

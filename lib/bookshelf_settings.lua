@@ -5858,6 +5858,20 @@ function Settings:_updateSubItems()
                     end,
                     enabled_func   = function() return false end,
                     keep_menu_open = true,
+                    separator      = true,
+                },
+                {
+                    -- For pack makers: a pack alone on the shelves, to
+                    -- adjust before giving it out (lib/bookshelf_pack_editor).
+                    text = _("Pack editor\xE2\x80\xA6"),
+                    callback = function(touchmenu_instance)
+                        if touchmenu_instance then UIManager:close(touchmenu_instance) end
+                        local ok_bw, BW = pcall(require, "lib/bookshelf_widget")
+                        local bw = (ok_bw and BW.live) or self._bw
+                        UIManager:nextTick(function()
+                            require("lib/bookshelf_pack_editor").choose(bw)
+                        end)
+                    end,
                 },
             },
         },

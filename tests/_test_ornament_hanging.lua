@@ -40,7 +40,9 @@ t.test("both ways a page is built hand them over", function()
 end)
 
 t.test("the row keeps hanging pieces out of its own children, in all three slots", function()
-    local n = select(2, shelf:gsub("hanging%[#hanging %+ 1%] = w_", ""))
+    -- In rowWidget itself: the pack editor's ornamentRow has its own.
+    local row_body = shelf:match("function SpineShelf%.rowWidget.-\nend\n")
+    local n = select(2, row_body:gsub("hanging%[#hanging %+ 1%] = w_", ""))
     eq(n, 3, "row end, section gap and a lead piece at a row's start")
     assert(shelf:find("if ornament and SpineShelf.behindAbove(ornament.placement, ornament.overlap_offset[2], opts) then", 1, true), "bare plank")
     assert(shelf:find("row_group._hanging, row_group._orn_list = hanging, orn_list", 1, true))
