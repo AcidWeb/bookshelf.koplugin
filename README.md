@@ -642,10 +642,11 @@ Reflowable formats like EPUB have no fixed page count until something lays them 
 - **Use page counts from, in this order** -- tick the sources to try. The first one that has an answer for a book wins:
   1. **Publisher page numbers** -- the printed page numbers some books carry.
   2. **Hardcover editions** -- the page count of the edition each linked book is matched to (see [Hardcover enrichment](#hardcover-enrichment)).
-  3. **Word counts** -- off until you tick it. Fan fiction from FanFicFare or AO3 states its word count inside the book, and a Calibre words column (such as the Count Pages plugin's `#words`) works too; those books get one page per 250, 300 or 500 words, your choice.
-  4. **Your reading settings** -- lays each remaining book out in your own font and margins, so the count matches what you see when reading. The slow one.
-  5. **Calibre page column** -- a column such as `#pages`, as the Count Pages plugin fills in (needs the [Calibre metadata](#calibre-metadata-beta) beta).
-  6. **Page counts in file names** -- a `p(320)` style count in the file name, as some Calibre setups add.
+  3. **Your reading settings** -- lays each remaining book out in your own font and margins, so the count matches what you see when reading. The slow one.
+  4. **Calibre page column** -- a column such as `#pages`, as the Count Pages plugin fills in (needs the [Calibre metadata](#calibre-metadata-beta) beta).
+  5. **Page counts in file names** -- a `p(320)` style count in the file name, as some Calibre setups add.
+
+  Fan fiction from FanFicFare or AO3 states its word count inside the book, and a Calibre words column (such as the Count Pages plugin's `#words`) does the same job. When none of the above has a count for such a book (your reading settings is unticked, or the book could not be laid out), it gets one page per 250 words, or 300 or 500: **menu -> Settings -> Library & search -> Words a page for fan fiction**.
 - **Which books** -- **Only books without a page count**, or **Every book, replacing earlier counts**.
 - **Delete scanned page counts…** -- clears counts from earlier scans. Counts for books you have opened, and page counts in file names, are kept.
 

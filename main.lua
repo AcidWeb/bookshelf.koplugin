@@ -2720,25 +2720,30 @@ function Bookshelf:scanPageCounts(opts)
             end
             return rest
         end
-        -- Word counts (issue 455): a count the book states about itself (fan
-        -- fiction from FanFicFare or AO3) or a Calibre words column, at the
-        -- dialog's words a page. Off by default, and BEFORE the render when
-        -- on: a reader who ticks it wants those books counted by their words,
-        -- and the render counts every other book as before. A zip read per
-        -- book, in this process, only for books nothing above answered.
+        -- Between the Calibre column and the file name: a stated word count
+        -- (issue 455), the count fan fiction from FanFicFare or AO3 states
+        -- about itself, or a Calibre words column, at the library setting's
+        -- words a page. Nothing here counts words, and the render counts any
+        -- EPUB at the reader's own settings, so this is a fallback like the two
+        -- beside it: what is left when the render is off, and the renders that
+        -- failed. A zip read per book, in this process.
         -- wordsPass(list) -> the books it could not count.
+        local word_column
         local function wordsPass(list)
-            if report.cancelled or not opts.words then return list end
+            if report.cancelled or #list == 0 then return list end
             local ok_p, Probe = pcall(require, "lib/bookshelf_pagemap_probe")
             if not ok_p then return list end
-            local per_page = tonumber(opts.words_per_page) or 250
+            local per_page = tonumber(BookshelfSettings.read("words_per_page")) or 250
+            if word_column == nil then
+                word_column = (Repo.calibreWordColumn and Repo.calibreWordColumn()) or false
+            end
             local rest = {}
             for _i, fp in ipairs(list) do
                 maybeBreathe()
                 if job.stopped then report.cancelled = true end
                 local words = not report.cancelled
-                    and ((opts.word_column and Repo.calibrePagesFor
-                          and Repo.calibrePagesFor(fp, opts.word_column))
+                    and ((word_column and Repo.calibrePagesFor
+                          and Repo.calibrePagesFor(fp, word_column))
                          or Probe.statedWords(fp))
                 local n = words and Probe.pagesFromWords(words, per_page)
                 if n then
@@ -2750,11 +2755,10 @@ function Bookshelf:scanPageCounts(opts)
             end
             return rest
         end
-        todo = wordsPass(todo)
         SpineShelf.flushPersist()
         -- The slow pass was chosen (or not) in the dialog, before any of this.
         if report.cancelled or #todo == 0 or opts.render == false then
-            todo = filenamePass(calibrePass(todo))
+            todo = filenamePass(wordsPass(calibrePass(todo)))
             SpineShelf.flushPersist()
             report.remaining = #todo
             finish()
@@ -2855,7 +2859,7 @@ function Bookshelf:scanPageCounts(opts)
         report.remaining = #todo - processed
         -- A book the render could not lay out may still have a file name
         -- to go by; only what that leaves is reported as failed.
-        for _i, fp in ipairs(filenamePass(calibrePass(failed))) do
+        for _i, fp in ipairs(filenamePass(wordsPass(calibrePass(failed)))) do
             report.failed[#report.failed + 1] = nameFor(fp)
         end
         SpineShelf.flushPersist()
