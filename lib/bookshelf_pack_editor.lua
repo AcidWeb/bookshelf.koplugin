@@ -3,7 +3,9 @@
 -- each piece once with its name on a badge, for a pack maker to adjust before
 -- giving the pack out (maintainer). Reached from Updates > Developer updates.
 --
--- A piece's long-press opens the shelf's own adjust menu, and the changes
+-- The shelf's own adjust menu stays open over it, on the piece last tapped
+-- (one tap switches it to another; swiping to a page opens it on that page's
+-- first piece), and the changes
 -- land in the reader's ornaments.json as they always do, so every nudge
 -- redraws at once. Leaving the editor moves this pack's records from there
 -- into the pack's own ornaments.json (Ornaments.commitPack), so they travel
@@ -59,6 +61,9 @@ local Editor = InputContainer:extend{
     pack = nil,
     bw = nil,          -- the shelf underneath, rebuilt on the way out
     covers_fullscreen = true,
+    -- The adjust menu stays open over the editor (maintainer); its taps
+    -- outside it are not its own, so they come here, to pick another piece.
+    is_always_active = true,
 }
 
 function Editor:init()
@@ -66,22 +71,48 @@ function Editor:init()
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
     self.ges_events = {
         Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } },
+        TapPiece = { GestureRange:new{ ges = "tap", range = self.dimen } },
+        HoldPiece = { GestureRange:new{ ges = "hold", range = self.dimen } },
     }
     if Device:hasKeys() then
         self.key_events = { Close = { { Device.input.group.Back } } }
     end
-    -- The pieces' long-press is the shelf's adjust menu, redrawing this
-    -- screen; their tap does the same (a tap action would run otherwise).
+    -- A piece's own tap and long-press do nothing here: the editor picks
+    -- the piece itself (onTapPiece), tap action or not.
     local Orn = require("lib/bookshelf_ornaments")
     self._handlers = Orn.handlers
-    local editor = self
-    local function menu(entry, _pl, piece)
-        require("lib/bookshelf_ornament_menu").show(entry, editor, piece)
-        return true
-    end
-    Orn.handlers = { hold = menu, tap = function(entry) return menu(entry) end }
+    Orn.handlers = {}
     self:_rebuild()
+    -- The menu, open from the start, on the first piece.
+    UIManager:scheduleIn(0.3, function() self:_select(1) end)
 end
+
+-- _select(i) -> the adjust menu for the page's ith piece, in place of the
+-- one open. The menu redraws the editor as it goes (bw:_rebuild below).
+function Editor:_select(i)
+    local w_ = self._piece_ws and self._piece_ws[i]
+    if not w_ then return end
+    if self._menu then UIManager:close(self._menu); self._menu = nil end
+    self._selected = w_.placement.entry.name
+    local Menu = require("lib/bookshelf_ornament_menu")
+    self._menu = Menu.show(w_.placement.entry, self, w_.dimen)
+end
+
+function Editor:_pieceAt(pos)
+    for i, w_ in ipairs(self._piece_ws or {}) do
+        local d = w_.dimen
+        if d and d.x and pos.x >= d.x and pos.x < d.x + d.w and pos.y >= d.y and pos.y < d.y + d.h then
+            return i
+        end
+    end
+end
+
+function Editor:onTapPiece(_arg, ges)
+    local i = ges and ges.pos and self:_pieceAt(ges.pos)
+    if i then self:_select(i) end
+    return true
+end
+Editor.onHoldPiece = Editor.onTapPiece
 
 -- The geometry the live shelf uses, when it has spine rows to copy.
 function Editor:_rows()
@@ -160,6 +191,7 @@ function Editor:_rebuild()
 
     local kids = { dimen = Geom:new{ w = w, h = h }, Ground:new{ dimen = Geom:new{ w = w, h = h } } }
     local rows_w, hang_w = {}, {}
+    self._piece_ws = {}
     -- The name badges hang below the plank: room for them over the info line.
     local row_y = h - footer_h - shelf_h - Screen:scaleBySize(26)
     -- The shelf above: a plank and nothing on it, so a top piece meets it.
@@ -184,6 +216,18 @@ function Editor:_rebuild()
         }
         g.overlap_offset = { 0, y }
         rows_w[#rows_w + 1] = g
+        -- The pieces, left to right, for picking by tap (their dimen is set
+        -- where they paint).
+        local ws = {}
+        local function collect(n, d)
+            if type(n) ~= "table" or d > 4 then return end
+            if n.placement and n.placement.entry and not n.placement.crop then ws[#ws + 1] = n end
+            for _k, c in ipairs(n) do collect(c, d + 1) end
+        end
+        collect(g, 0)
+        for _k, hw in ipairs(hanging) do ws[#ws + 1] = hw end
+        table.sort(ws, function(a, b) return (a.overlap_offset[1] or 0) < (b.overlap_offset[1] or 0) end)
+        for _k, pw in ipairs(ws) do self._piece_ws[#self._piece_ws + 1] = pw end
         for _k, hw in ipairs(hanging) do
             hw.overlap_offset = { hw.overlap_offset[1], y + hw.overlap_offset[2] }
             hang_w[#hang_w + 1] = hw
@@ -193,7 +237,7 @@ function Editor:_rebuild()
     for _i, hw in ipairs(hang_w) do kids[#kids + 1] = hw end
     for _i, g in ipairs(rows_w) do kids[#kids + 1] = g end
     local foot = TextWidget:new{
-        text = T(_("%1 on, %2 off · page %3 of %4 · swipe for more · long-press to adjust"),
+        text = T(_("%1 on, %2 off · page %3 of %4 · swipe for more · tap a piece to adjust it"),
                  n_on, n_off, self.page, math.max(1, #self._pages)),
         face = face, padding = 0, max_width = w - 2 * margin,
     }
@@ -212,6 +256,8 @@ function Editor:onSwipe(_arg, ges)
     else return true end
     self:_rebuild()
     UIManager:setDirty(self, "ui")
+    -- The new page's first piece, once it has painted (its place is the menu's).
+    UIManager:scheduleIn(0.3, function() self:_select(1) end)
     return true
 end
 
@@ -221,6 +267,7 @@ function Editor:onClose()
 end
 
 function Editor:onCloseWidget()
+    if self._menu then UIManager:close(self._menu); self._menu = nil end
     local Orn = require("lib/bookshelf_ornaments")
     Orn.handlers = self._handlers or Orn.handlers
     local ok, n = pcall(Orn.commitPack, self.pack)
