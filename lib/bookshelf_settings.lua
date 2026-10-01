@@ -2088,6 +2088,37 @@ function Settings:_ornamentsRow()
     }
 end
 
+-- New ornaments first or last in the deck (lib/bookshelf_ornament_deck): first
+-- by default, so a reader who adds some sees them; last for a shelf that stays
+-- put, where everything already there keeps its place (maintainer).
+function Settings:_newOrnamentsRow()
+    local Deck = require("lib/bookshelf_ornament_deck")
+    local function choice(label, value)
+        return {
+            text = label,
+            checked_func = function()
+                return Deck.newAtStart() == (value == "start")
+            end,
+            radio = true,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save(Deck.NEW_AT_KEY, value)
+                BookshelfSettings.flush()
+            end,
+        }
+    end
+    return {
+        text_func = function()
+            return T(_("New ornaments: %1"), Deck.newAtStart() and _("first") or _("last"))
+        end,
+        help_text = _("Where ornaments you add join the order they are dealt onto the shelf in. First: you see them straight away, and the pieces already there move along to make room. Last: your shelf stays as it is, and the new ones come round in their turn."),
+        sub_item_table = {
+            choice(_("First, so you see them"), "start"),
+            choice(_("Last, so your shelf stays put"), "end"),
+        },
+    }
+end
+
 -- "Wallpaper, ornaments and colors": theme, the background itself, ornaments, and the
 -- accent colours. These were spread across two menus and a third level -- the
 -- theme under Colors, the background colour and panel shading under Wallpaper
@@ -2106,6 +2137,7 @@ function Settings:_backgroundSubItems()
     rows[#rows + 1] = self:_plankRow()
     rows[#rows].separator = true
     rows[#rows + 1] = self:_ornamentsRow()
+    rows[#rows + 1] = self:_newOrnamentsRow()
     rows[#rows].separator = true
     rows[#rows + 1] = {
         -- The long list of accents (progress bar, bookmarks, favourites,

@@ -179,7 +179,7 @@ Ready-made ornament packs, drawn to sit on the plank at the right size on colour
 
 How often they appear is per shelf, next to **Author on spine** in the shelf's style dialog: **None**, **Rarely**, **Often** or **Always**. **Rarely** puts a piece at the end of one shelf in four, **Often** at the end of every other shelf and in one section gap in four, and **Always** at the end of every shelf and in every other section gap. The ends alternate, and the books always move over to make room.
 
-Shape is up to you. A piece stands at 80% of the books' height and no wider than the books are tall; a wider one is scaled down to fit, never left out. Pieces come round in a fixed order, one of each before any repeats, so a shelf looks the same every time you come back to it, even after you add books. **Shuffle all** in an ornament's long-press menu, or a gesture set to **Bookshelf: shuffle ornaments**, picks a new order. New ornaments join the end of the order.
+Shape is up to you. A piece stands at 80% of the books' height and no wider than the books are tall; a wider one is scaled down to fit, never left out. Pieces come round in a fixed order, one of each before any repeats, so a shelf looks the same every time you come back to it, even after you add books. **Shuffle all** in an ornament's long-press menu, or a gesture set to **Bookshelf: shuffle ornaments**, picks a new order. Ornaments you add join the front of the order, so you see them straight away; to keep your shelf as it is instead, set **Wallpaper, ornaments and colors > New ornaments** to **Last**.
 
 **Long-press an ornament** on the shelf to adjust it where it stands: its size (up to the whole row), the padding either side of it (below zero it tucks behind the books beside it), its height (the arrows raise and lower it: 100% puts the top of the drawing against the shelf above, whatever the shelf size, which is how to hang a bat; past 100% it goes behind that shelf, below zero it dangles over its own), whether it is mirrored (always, or every other time it comes round), and an action to run when you tap it: any action, or **Zoom**, which shows the ornament full screen with its name (and, for pieces that come with one, a note about it). **Swap** opens the ornament browser so you can choose what stands there instead: the two pieces trade places in the order. The shelf redraws under the menu as you go; tap a value to reset it. Your changes follow the ornament onto every shelf, and are kept in an `ornaments.json` in the ornaments folder.
 
@@ -1011,6 +1011,7 @@ Until 5.3 these files sat loose in `koreader/settings/` (`bookshelf.lua` and `bo
 | `wallpaper_folder` | Extra folder the wallpaper list also reads from. |
 | `ornaments_off` / `ornament_packs_off` | Ornaments and packs switched off in the ornament browser, keyed by path within the ornaments folder / by pack folder name. |
 | `ornament_deck` | The order ornaments come round in, by path within the ornaments folder. **Swap** and **Shuffle all** change it. |
+| `ornament_new_at` | `"start"` (default) or `"end"`: where ornaments you add join that order. |
 | `search_include_genres` | Include genres and tags in search. Default on. |
 | `migrated` | One-shot flag; presence indicates v1 -> v2 migration has run. |
 

@@ -40,15 +40,35 @@ t.test("the saved order survives a reload", function()
     eq(table.concat(namesOf(D.order(pool({ "a", "b", "c" }))), ","), "c,a,b")
 end)
 
-t.test("new pieces go at the end; removed files are dropped", function()
+t.test("new pieces go first by default, so they are seen; removed files are dropped", function()
+    -- Maintainer: a reader who adds ornaments should see them; one who wants
+    -- the shelf to stay put can have them go last instead.
     local D, mem = fresh()
     mem["ornament_deck"] = { "c", "gone", "a" }
+    D.reconcile({ "a", "c", "new", "new2" })
+    eq(table.concat(mem["ornament_deck"], ","), "new,new2,c,a")
+end)
+
+t.test("set to last, new pieces go at the end and nothing else moves", function()
+    local D, mem = fresh()
+    mem["ornament_deck"] = { "c", "gone", "a" }
+    mem[D.NEW_AT_KEY] = "end"
     D.reconcile({ "a", "c", "new" })
     eq(table.concat(mem["ornament_deck"], ","), "c,a,new")
 end)
 
+t.test("a piece the order has not met joins it by the same rule", function()
+    local D, mem = fresh()
+    mem["ornament_deck"] = { "a", "b" }
+    eq(table.concat(namesOf(D.order(pool({ "a", "b", "n" }))), ","), "n,a,b")
+    mem["ornament_deck"] = { "a", "b" }
+    mem[D.NEW_AT_KEY] = "end"
+    eq(table.concat(namesOf(D.order(pool({ "a", "b", "n" }))), ","), "a,b,n")
+end)
+
 t.test("a deleted file that comes back is appended, not restored", function()
     local D, mem = fresh()
+    mem[D.NEW_AT_KEY] = "end"
     mem["ornament_deck"] = { "a", "b", "c" }
     D.reconcile({ "b", "c" })
     D.reconcile({ "a", "b", "c" })
@@ -435,7 +455,7 @@ t.test("sync reconciles the order with every piece on disk, once per scan", func
     local save = D._store.save
     D._store.save = function(k, v) saves = saves + 1; save(k, v) end
     D.sync(all)
-    eq(table.concat(mem["ornament_deck"], ","), "a,b,off1")
+    eq(table.concat(mem["ornament_deck"], ","), "off1,a,b", "new pieces join first by default")
     D.sync(all)
     eq(saves, 1, "the same scan reconciled twice")
     eq(D.swap("a", "off1"), true, "a piece that was off cannot be swapped to")
@@ -459,6 +479,16 @@ t.test("place and move: a piece's place among the pieces that are on, and one st
     eq(D.move("b", 1, { "a", "c", "b" }), true, "the last piece cannot move later")
     eq(table.concat(mem["ornament_deck"], ","), "b,off1,c,a", "later from the last did not trade with the first")
     eq(D.move("x", 1, { "x" }), false, "a piece alone has nowhere to go")
+end)
+
+t.test("the menu has the new-ornaments choice beside the collection", function()
+    local st = io.open("lib/bookshelf_settings.lua"):read("*a")
+    local bg = st:match("function Settings:_backgroundSubItems%(%)(.-)\nend\n")
+    assert(bg and bg:find("self:_ornamentsRow()", 1, true) and bg:find("self:_newOrnamentsRow()", 1, true),
+        "the choice is not in Wallpaper, ornaments and colors")
+    local row = st:match("function Settings:_newOrnamentsRow%(%)(.-)\nend\n")
+    assert(row and row:find("BookshelfSettings.save(Deck.NEW_AT_KEY, value)", 1, true), "the row does not save the choice")
+    assert(row:find('"start"),', 1, true) and row:find('"end"),', 1, true), "the row does not offer both choices")
 end)
 
 t.done()

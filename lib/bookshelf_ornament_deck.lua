@@ -13,6 +13,10 @@
 local M = {}
 
 M.ORDER_KEY = "ornament_deck"
+-- Where pieces new to the order go: "start" (the default: a reader who adds
+-- ornaments sees them first) or "end" (nothing already in the order moves, so
+-- the shelf stays as it was). Maintainer, 2026-10-01.
+M.NEW_AT_KEY = "ornament_new_at"
 M._store = nil   -- seam: { read = fn(k), save = fn(k, v) }
 M._rand  = nil   -- seam: fn(n) -> 1..n
 
@@ -46,6 +50,27 @@ local function saveOrder(list)
     _gen = _gen + 1
 end
 
+-- newAtStart() -> whether new pieces join the order at the front.
+function M.newAtStart()
+    local st = store()
+    local ok, v = pcall(function() return st and st.read(M.NEW_AT_KEY) end)
+    return not (ok and v == "end")
+end
+
+-- join(kept, new) -> kept with new added where the setting says.
+local function join(kept, new)
+    if #new == 0 then return kept end
+    local out = {}
+    if M.newAtStart() then
+        for _i, n in ipairs(new) do out[#out + 1] = n end
+        for _i, n in ipairs(kept) do out[#out + 1] = n end
+    else
+        for _i, n in ipairs(kept) do out[#out + 1] = n end
+        for _i, n in ipairs(new) do out[#out + 1] = n end
+    end
+    return out
+end
+
 function M.names()
     local out = {}
     for i, n in ipairs(readOrder() or {}) do out[i] = n end
@@ -63,8 +88,9 @@ local function shuffled(list)
 end
 
 -- reconcile(all_names): the saved order, kept to the pieces that exist, with
--- any new ones appended at the end (appending keeps every other position).
--- No saved order yet: a shuffle of all_names. Saved only when it changed.
+-- any new ones joined first or last (see NEW_AT_KEY; last keeps every other
+-- position). No saved order yet: a shuffle of all_names. Saved only when it
+-- changed.
 function M.reconcile(all_names)
     local saved = readOrder()
     if not saved then
@@ -77,10 +103,11 @@ function M.reconcile(all_names)
         if exists[n] and not seen[n] then out[#out + 1] = n; seen[n] = true
         else changed = true end
     end
+    local new = {}
     for _i, n in ipairs(all_names) do
-        if not seen[n] then out[#out + 1] = n; seen[n] = true; changed = true end
+        if not seen[n] then new[#new + 1] = n; seen[n] = true; changed = true end
     end
-    if changed then saveOrder(out) end
+    if changed then saveOrder(join(out, new)) end
 end
 
 -- sync(all): reconcile the saved order with every piece on disk (switched
@@ -98,7 +125,7 @@ end
 -- order(pool) -> the pool's entries in saved order. pool is the ENABLED
 -- pieces; switched-off ones stay in the saved order (not in the result), so
 -- switching one back on returns it to its place. Pieces in the pool that the
--- order has not met yet are reconciled in (appended) first.
+-- order has not met yet are joined in first, by the same rule as reconcile.
 function M.order(pool)
     local saved = readOrder()
     local known = {}
@@ -106,13 +133,15 @@ function M.order(pool)
     local missing = (saved == nil)
     for _i, e in ipairs(pool) do if not known[e.name] then missing = true end end
     if missing then
-        local all, seen = {}, {}
-        for _i, n in ipairs(saved or {}) do all[#all + 1] = n; seen[n] = true end
+        local kept, new, seen = {}, {}, {}
+        for _i, n in ipairs(saved or {}) do kept[#kept + 1] = n; seen[n] = true end
         for _i, e in ipairs(pool) do
-            if not seen[e.name] then all[#all + 1] = e.name; seen[e.name] = true end
+            if not seen[e.name] then new[#new + 1] = e.name; seen[e.name] = true end
         end
-        if saved then saveOrder(all) else saveOrder(shuffled(all)) end
-        saved = readOrder() or all
+        local list
+        if saved then list = join(kept, new) else list = shuffled(new) end
+        saveOrder(list)
+        saved = readOrder() or list
     end
     local by = {}
     for _i, e in ipairs(pool) do by[e.name] = e end
