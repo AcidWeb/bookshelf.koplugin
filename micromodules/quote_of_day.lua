@@ -160,6 +160,33 @@ showSettings = function(ctx)
     local ButtonDialog = require("ui/widget/buttondialog")
     local UIManager    = require("ui/uimanager")
     local dialog
+    -- Every book in the library counted for highlights (lib/bookshelf_quotes'
+    -- index), so books that are not in the history can be drawn from too.
+    -- The quote of the day fills the index by itself over its first picks;
+    -- this does it at once. Dismissing the message stops it.
+    local function scanLibrary()
+        local Trapper = require("ui/trapper")
+        local InfoMessage = require("ui/widget/infomessage")
+        Trapper:wrap(function()
+            local Repo = require("lib/bookshelf_book_repository")
+            local fps = Repo.getAllFilepaths and Repo.getAllFilepaths() or {}
+            local stopped = false
+            local books, quotes = Quotes.scanLibrary(fps, function(i, n)
+                if i % 10 == 1 or i == n then
+                    if not Trapper:info(T(_("Looking for highlights: book %1 of %2"), i, n)) then
+                        stopped = true
+                        return false
+                    end
+                end
+            end)
+            Trapper:clear()
+            UIManager:show(InfoMessage:new{
+                text = stopped and T(_("Stopped. So far: %1 highlights in %2 books."), quotes, books)
+                               or T(_("Found %1 highlights in %2 books."), quotes, books),
+                timeout = 4,
+            })
+        end)
+    end
     local function open(fn)
         return function() UIManager:close(dialog); fn() end
     end
@@ -186,6 +213,7 @@ showSettings = function(ctx)
     if source ~= "files" then
         rows[#rows + 1] = { { text = T(_("Books left out: %1"), Quotes.skippedBookCount()),
             callback = open(function() booksDialog(ctx) end) } }
+        rows[#rows + 1] = { { text = _("Scan library for highlights"), callback = open(scanLibrary) } }
         local colours = Quotes.coloursInUse()
         if #colours > 0 then
             local used = 0
