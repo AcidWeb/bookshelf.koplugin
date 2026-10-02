@@ -70,6 +70,7 @@ Bookshelf.MENU_ORDER = {
     "bookshelf_toggle",
     "bookshelf_shelf_size",
     "bookshelf_shelf_tabs",
+    "bookshelf_theme",
     "bookshelf_background",
     "bookshelf_hardcover",
     "bookshelf_settings",
@@ -765,6 +766,20 @@ function Bookshelf:buildMenuItems(menu_items)
     -- Settings > Colors and Settings > Wallpaper and ornaments, which put the
     -- theme, the background colour and the panel shading in three different
     -- menus (maintainer). Text size stays under Settings on purpose.
+    -- The look as a whole, a row of its own above the parts (maintainer,
+    -- 2026-10-02): light or dark, and the installed theme packs, which choose
+    -- wallpaper, plank, colours and ornaments together.
+    menu_items.bookshelf_theme = {
+        text_func = function()
+            return MenuIcons.label(MenuIcons.THEME, S:_shelfThemeText())
+        end,
+        help_text = S:_shelfThemeHelp(),
+        sub_item_table_func = function()
+            S._bw = _live_widget
+            return S:_shelfThemeSubItems()
+        end,
+    }
+
     menu_items.bookshelf_background = {
         text                = MenuIcons.label(MenuIcons.APPEARANCE,
                                   _("Wallpaper, ornaments and colors")),

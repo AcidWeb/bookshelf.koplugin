@@ -19,7 +19,7 @@ local CODE = table.concat({
     grab("\n(function Settings:_shelfThemeLabel%(%).-\nend)\n", "_shelfThemeLabel"),
     grab("\n(function Settings:_themePackLabel%(%).-\nend)\n", "_themePackLabel"),
     grab("\n(function Settings:_shelfThemeSubItems%(%).-\nend)\n", "_shelfThemeSubItems"),
-    grab("\n(function Settings:_shelfThemeRow%(%).-\nend)\n", "_shelfThemeRow"),
+    grab("\n(function Settings:_shelfThemeText%(%).-\nend)\n", "_shelfThemeText"),
 }, "\n")
 
 -- build(packs, current) -> the menu's rows and what the stubs saw.
@@ -47,6 +47,8 @@ local function build(packs, current)
             if m == "lib/bookshelf_theme_pack" then return TP end
             if m == "lib/bookshelf_cover_progress" then return { THEME_SETTING = "shelf_theme" } end
             if m == "ui/widget/infomessage" then return { new = function(_s, o) return o end } end
+            if m == "lib/bookshelf_ornaments" then return { dir = function() return "settings/bookshelf/ornaments" end } end
+            if m == "ffi/util" then return { realpath = function(p) return "/mnt/us/koreader/" .. p end } end
             return require(m)
         end,
     }, { __index = _G })
@@ -61,23 +63,40 @@ end
 local HW = { pack = "Halloween", name = "Halloween", description = "Bats and ghosts.", shelf = "dark" }
 local UK = { pack = "Ukiyo-e", name = "Ukiyo-e" }
 
-t.test("with no theme packs the menu is the three rows it always was", function()
+t.test("with no theme packs: Auto, Light, Dark, then Add theme", function()
     local self, S, seen = build({}, nil)
     local rows = S._shelfThemeSubItems(self)
-    eq(#rows, 3)
-    eq(rows[3].separator, nil, "a separator with nothing under it")
+    eq(#rows, 4)
+    eq(rows[3].separator, true)
+    eq(rows[4].text, "Add theme\xE2\x80\xA6")
     eq(seen.rescans, 1, "opening the menu did not rescan the packs")
 end)
 
-t.test("theme packs follow a separator: No theme pack, then each by name", function()
+t.test("theme packs follow a separator: No theme pack, then each by name, then Add theme", function()
     local self, S = build({ HW, UK }, "Halloween")
     local rows = S._shelfThemeSubItems(self)
-    eq(#rows, 6)
+    eq(#rows, 7)
     eq(rows[3].separator, true)
     eq(rows[4].text, "No theme pack"); eq(rows[5].text, "Halloween"); eq(rows[6].text, "Ukiyo-e")
     eq(rows[5].help_text, "Bats and ghosts.")
     for i = 4, 6 do eq(rows[i].radio, true); eq(rows[i].keep_menu_open, true) end
     eq(rows[4].checked_func(), false); eq(rows[5].checked_func(), true); eq(rows[6].checked_func(), false)
+    eq(rows[6].separator, true, "Add theme is not set apart")
+    eq(rows[7].text, "Add theme\xE2\x80\xA6")
+end)
+
+t.test("Add theme says where theme packs go, and where to get them", function()
+    -- Like the collection's Add ornaments: a findable path, the shop link as a
+    -- parameter (not part of the msgid, so a translation cannot break it).
+    local self, S, seen = build({}, nil)
+    local rows = S._shelfThemeSubItems(self)
+    eq(rows[4].keep_menu_open, true)
+    rows[4].callback(nil)
+    local text = seen.toasts[1]
+    assert(text, "no dialog")
+    assert(text:find("/mnt/us/koreader/settings/bookshelf/ornaments", 1, true), "no findable folder: " .. text)
+    assert(text:find("ko-fi.com/andyhazz/shop", 1, true), "no shop link")
+    assert(src:find('"ko-fi.com/andyhazz/shop")', 1, true), "the link is not a parameter")
 end)
 
 t.test("choosing a theme pack applies it, rebuilds the whole screen and says so", function()
@@ -103,10 +122,16 @@ end)
 t.test("the row names the light/dark choice and the theme", function()
     local self, S, seen = build({ HW, UK }, "Halloween")
     seen.store.shelf_theme = "dark"
-    eq(S._shelfThemeRow(self).text_func(), "Shelf theme: Dark, Halloween")
+    eq(S._shelfThemeText(self), "Shelf theme: Dark, Halloween")
     local self2, S2, seen2 = build({ HW }, nil)
     seen2.store.shelf_theme = "dark"
-    eq(S2._shelfThemeRow(self2).text_func(), "Shelf theme: Dark")
+    eq(S2._shelfThemeText(self2), "Shelf theme: Dark")
+end)
+
+t.test("Wallpaper, ornaments and colors no longer holds the theme row", function()
+    local bg = src:match("\nfunction Settings:_backgroundSubItems%(%)(.-)\nend\n")
+    assert(bg, "_backgroundSubItems moved")
+    assert(not bg:find("_shelfTheme", 1, true), "the theme row is still in the wallpaper menu")
 end)
 
 t.done()

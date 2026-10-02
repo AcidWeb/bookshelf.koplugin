@@ -1708,10 +1708,33 @@ function Settings:_shelfThemeSubItems()
             end,
         }
     end
+    -- Add theme...: where theme packs go and where to get them, like the
+    -- collection's Add ornaments. The shop link is a parameter, not part of
+    -- the msgid, so a translation cannot break it.
+    local function addThemeRow()
+        return {
+            text = _("Add theme\xE2\x80\xA6"),
+            keep_menu_open = true,
+            callback = function()
+                local InfoMessage = require("ui/widget/infomessage")
+                -- A findable path: the settings dir can be relative.
+                local dir = require("lib/bookshelf_ornaments").dir() or "?"
+                local ok, util = pcall(require, "ffi/util")
+                local real = ok and util.realpath and util.realpath(dir)
+                UIManager:show(InfoMessage:new{
+                    text = T(_("A theme pack brings a wallpaper, a plank, colors and ornaments together, and is chosen here. To add one, copy its folder into\n%1\nthen open this menu again.\n\nReady-made theme packs:\n%2"),
+                        real or dir, "ko-fi.com/andyhazz/shop"),
+                })
+            end,
+        }
+    end
     TP.rescan()
     local packs = TP.themePacks()
-    if #packs == 0 then return rows end
     rows[#rows].separator = true
+    if #packs == 0 then
+        rows[#rows + 1] = addThemeRow()
+        return rows
+    end
     -- A theme is the whole look (wallpaper, plank, colours, light or dark):
     -- the shelf is built again and the whole screen refreshed.
     local function done(touchmenu_instance, text)
@@ -1748,6 +1771,8 @@ function Settings:_shelfThemeSubItems()
             end,
         }
     end
+    rows[#rows].separator = true
+    rows[#rows + 1] = addThemeRow()
     return rows
 end
 
@@ -2186,8 +2211,9 @@ end
 -- Text size stays under Settings. A name broad enough to pull that in would
 -- pull in everything eventually ("that feels a bit of a slippery slope").
 function Settings:_backgroundSubItems()
-    local rows = { self:_shelfThemeRow() }
-    rows[#rows].separator = true
+    -- The theme (light or dark, theme packs) is a top-level row of its own
+    -- above this menu now (main.lua bookshelf_theme).
+    local rows = {}
     for _i, row in ipairs(self:_wallpaperMenu()) do
         rows[#rows + 1] = row
     end
@@ -2208,30 +2234,23 @@ function Settings:_backgroundSubItems()
     return rows
 end
 
--- The shelf's light/dark choice. Its own builder because it is shown in
--- "Wallpaper, ornaments and colors" rather than in the accent-colour list: theme,
--- background colour and panel shading were in three different menus and read
--- as unrelated settings (maintainer). One definition, so the two cannot drift.
-function Settings:_shelfThemeRow()
-    return {
-        text_func = function()
-            local pack = self:_themePackLabel()
-            if pack then return T(_("Shelf theme: %1, %2"), self:_shelfThemeLabel(), pack) end
-            return T(_("Shelf theme: %1"), self:_shelfThemeLabel())
-        end,
-        help_text = _("Light or dark colors for the shelf, independently "
+-- The Shelf theme row's label and help, for the top-level row (main.lua
+-- bookshelf_theme): light or dark, and the theme pack in use.
+function Settings:_shelfThemeText()
+    local pack = self:_themePackLabel()
+    if pack then return T(_("Shelf theme: %1, %2"), self:_shelfThemeLabel(), pack) end
+    return T(_("Shelf theme: %1"), self:_shelfThemeLabel())
+end
+
+function Settings:_shelfThemeHelp()
+    return _("Light or dark colors for the shelf, independently "
             .. "of KOReader's night mode -- so you can keep the rest of "
             .. "KOReader light and still have a dark shelf.\n\nCovers, "
             .. "wallpaper and ornaments are pictures and are never "
             .. "inverted; only the shelf's own colors change."
             .. "\n\nTheme packs installed in the ornaments folder are "
             .. "listed below: choosing one uses its wallpaper, plank, colors "
-            .. "and ornaments together. No theme pack puts your own back."),
-        keep_menu_open = true,
-        sub_item_table_func = function()
-            return self:_shelfThemeSubItems()
-        end,
-    }
+            .. "and ornaments together. No theme pack puts your own back.")
 end
 
 function Settings:_colorsSubItems()
