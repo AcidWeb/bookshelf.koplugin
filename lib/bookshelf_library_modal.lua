@@ -1157,6 +1157,25 @@ function LibraryModal:_renderFooter(content_width)
     return vg
 end
 
+-- _repaintIfResized(old): a refresh that changed the modal's size (it is
+-- sized to its content, centred) leaves part of where it was uncovered, and
+-- the modal's own dirty rect does not reach it: the windows underneath are
+-- repainted there (PW5: a copy of the title bar stayed on screen). old is the
+-- rectangle the last refresh recorded (self._shown_rect, centred as the
+-- CenterContainer centres it): frame.dimen will not do, FrameContainer sizes
+-- it once at its first paint and only moves it after, so it is also dropped
+-- on a resize, or taps outside the modal are judged by the old size.
+function LibraryModal:_repaintIfResized(old)
+    local size = self.frame:getSize()
+    local Screen = Device.screen
+    self._shown_rect = { x = math.floor((Screen:getWidth() - size.w) / 2),
+                         y = math.floor((Screen:getHeight() - size.h) / 2),
+                         w = size.w, h = size.h }
+    if not old or (size.w == old.w and size.h == old.h) then return end
+    self.frame.dimen = nil
+    UIManager:setDirty("all", "ui", Geom:new{ x = old.x, y = old.y, w = old.w, h = old.h })
+end
+
 -- Swipe paging, same convention as the main shelf: west = next, east = prev.
 -- _total_pages is set by the grid/list area render; clamp so a swipe at an
 -- edge is a no-op. Returns true to consume the gesture.
@@ -1188,6 +1207,20 @@ function LibraryModal:refresh()
     local chips = self:_renderChipStrip(cw)
     local pagination = self:_renderPagination(cw)
     local footer = self:_renderFooter(cw)
+    -- config.footer_min_rows: room for that many footer rows whatever this
+    -- refresh has, as a blank band above the footer (its buttons stay on the
+    -- modal's bottom edge), so a footer that changes with the page shown does
+    -- not resize the modal.
+    local footer_pad = 0
+    local min_rows = tonumber(self.config.footer_min_rows) or 0
+    local n_rows = self._footer_layout and #self._footer_layout or 0
+    if footer and n_rows > 0 and min_rows > n_rows then
+        local between = 2 * MARGIN + Size.line.thin
+        local row_h = (footer:getSize().h - (n_rows - 1) * between) / n_rows
+        footer_pad = math.floor((min_rows - n_rows) * (row_h + between) + 0.5)
+    end
+    -- Where the modal was, for _repaintIfResized below.
+    local old = self._shown_rect
 
     -- Sized to fit content rather than a screen fraction, so the dialog isn't
     -- bigger than necessary. Uses the row renderer's intrinsic card height
@@ -1250,11 +1283,12 @@ function LibraryModal:refresh()
     table.insert(body, VerticalSpan:new{ width = MARGIN })
     table.insert(body, padded(pagination))
     if footer then
-        table.insert(body, VerticalSpan:new{ width = MARGIN })
+        table.insert(body, VerticalSpan:new{ width = MARGIN + footer_pad })
         table.insert(body, padded(footer))
     end
 
     self.frame[1] = body
+    self:_repaintIfResized(old)
     -- The grid highlights its own focused cell inline (cell_renderer reads
     -- self._dpad_idx at render time above), but footer buttons are stock
     -- Button instances rebuilt fresh every refresh() -- their onFocus/invert

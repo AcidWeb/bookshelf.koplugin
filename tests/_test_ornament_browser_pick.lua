@@ -20,4 +20,58 @@ t.test("the browser's title is the collection, as its settings row", function()
         "the browser is not titled Ornament collection")
 end)
 
+local function method(text, name)
+    local body = text:match("\nfunction " .. name:gsub("[%.%(%):]", "%%%0") .. "\n(.-)\nend\n")
+    assert(body, name .. " not found")
+    return body
+end
+
+t.test("a pack with no ornaments (planks only) gets no chip", function()
+    -- PW5: the Planks pack's designs moved to the plank picker, and its chip
+    -- here opened an empty page.
+    local Orn = {
+        listAll = function()
+            return { { name = "Autumn/owl.png", pack = "Autumn" }, { name = "cat.svg" } },
+                   { "Autumn", "Planks" }
+        end,
+        isPackOff = function() return false end,
+    }
+    local chips = load("return function(self)\n" .. method(src, "Browser:_chips()") .. "\nend", "c", "t",
+        { O = function() return Orn end, _ = function(x) return x end, T = function(x) return x end,
+          ALL = "\0all", ipairs = ipairs, pairs = pairs })()
+    local got = {}
+    for _i, c in ipairs(chips({ chip = "\0all" })) do got[#got + 1] = c.label end
+    H.eq(table.concat(got, ","), "All,Autumn")
+end)
+
+t.test("switching packs keeps the browser one height", function()
+    -- PW5: a pack with Apply pack theme has two footer rows, one without has
+    -- one; the modal shrank and left a copy of its title bar on screen.
+    assert(src:find("footer_min_rows = self.opts.pick and 1 or 2,", 1, true), "the browser does not keep room for two footer rows")
+    local m = io.open("lib/bookshelf_library_modal.lua"):read("*a")
+    local r = method(m, "LibraryModal:refresh()")
+    assert(r:find("self.config.footer_min_rows", 1, true), "the modal ignores footer_min_rows")
+    assert(r:find("self:_repaintIfResized(old)", 1, true), "a resized modal does not repaint where it was")
+    -- _repaintIfResized: the rectangle the modal last had (centred on the
+    -- screen, recorded each refresh), repainted from the whole stack
+    -- underneath, only when the size changed; and the frame's dimen, which
+    -- FrameContainer sizes once at first paint, dropped so taps outside the
+    -- modal are judged by its new size.
+    local dirty = {}
+    local f = load("return function(self, old)\n" .. method(m, "LibraryModal:_repaintIfResized(old)") .. "\nend", "r", "t",
+        { UIManager = { setDirty = function(_u, w, mode, region) dirty[#dirty + 1] = { w, mode, region } end },
+          Geom = { new = function(_g, o) return o end }, math = math,
+          Device = { screen = { getWidth = function() return 1000 end, getHeight = function() return 1600 end } } })()
+    local self = { frame = { getSize = function() return { w = 100, h = 200 } end, dimen = { w = 100, h = 240 } } }
+    f(self, { x = 450, y = 680, w = 100, h = 240 })
+    H.eq(#dirty, 1); H.eq(dirty[1][1], "all"); H.eq(dirty[1][3].h, 240, "not the old rectangle")
+    H.eq(self.frame.dimen, nil, "the frame keeps hit-testing taps at its old size")
+    H.eq(self._shown_rect.y, 700, "the new rectangle is not recorded where it is centred")
+    dirty = {}
+    f(self, self._shown_rect)
+    H.eq(#dirty, 0, "a refresh at the same size repainted the stack")
+    f(self, nil)
+    H.eq(#dirty, 0, "the first refresh repainted the stack")
+end)
+
 t.done()

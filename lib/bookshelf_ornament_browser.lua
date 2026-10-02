@@ -183,17 +183,20 @@ end
 
 function Browser:_chips()
     local Orn = O()
-    local _all, packs = Orn.listAll()
+    local all, packs = Orn.listAll()
     -- All, then one per pack. No tab for the loose ornaments on their own:
     -- All already shows them, and a tab is for something you switch as one
-    -- (maintainer).
+    -- (maintainer). Nor for a pack with no ornaments: a planks-only pack's
+    -- designs are in the plank picker, and its tab here was an empty page.
+    local has = {}
+    for _i, e in ipairs(all or {}) do if e.pack then has[e.pack] = true end end
     local chips = { { key = ALL, label = _("All"), is_active = self.chip == ALL } }
     for _i, pack in ipairs(packs) do
-        chips[#chips + 1] = {
+        if has[pack] then chips[#chips + 1] = {
             key = pack,
             label = Orn.isPackOff(pack) and T(_("%1 (off)"), pack) or pack,
             is_active = self.chip == pack,
-        }
+        } end
     end
     return chips
 end
@@ -358,6 +361,10 @@ function Browser.show(on_change, opts)
         grid_cols = cols,
         cells_per_page = function() return cols() * 3 end,
         rows_per_page = 6,
+        -- A pack with Apply pack theme has two footer rows and one without
+        -- has one: room for two either way, so switching packs does not
+        -- resize the browser (PW5: it shrank and left its title bar behind).
+        footer_min_rows = self.opts.pick and 1 or 2,
         chip_strip = function() return self:_chips() end,
         on_chip_tap = function(key)
             self.chip = key
