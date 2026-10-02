@@ -47,10 +47,13 @@ end)
 t.test("switching packs keeps the browser one height", function()
     -- PW5: a pack with Apply pack theme has two footer rows, one without has
     -- one; the modal shrank and left a copy of its title bar on screen.
-    assert(src:find("footer_min_rows = self.opts.pick and 1 or 2,", 1, true), "the browser does not keep room for two footer rows")
+    -- Since the theme buttons left (Shelf theme menu), every pack's footer is
+    -- one row; the two-row reserve went with them. The resize repaint stays,
+    -- a general fix.
+    assert(not src:find("footer_min_rows", 1, true), "the browser still reserves two footer rows")
     local m = io.open("lib/bookshelf_library_modal.lua"):read("*a")
     local r = method(m, "LibraryModal:refresh()")
-    assert(r:find("self.config.footer_min_rows", 1, true), "the modal ignores footer_min_rows")
+    assert(not r:find("footer_min_rows", 1, true), "the modal's unused footer_min_rows is still there")
     assert(r:find("self:_repaintIfResized(old)", 1, true), "a resized modal does not repaint where it was")
     -- _repaintIfResized: the rectangle the modal last had (centred on the
     -- screen, recorded each refresh), repainted from the whole stack

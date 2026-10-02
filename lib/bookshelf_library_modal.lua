@@ -1207,18 +1207,6 @@ function LibraryModal:refresh()
     local chips = self:_renderChipStrip(cw)
     local pagination = self:_renderPagination(cw)
     local footer = self:_renderFooter(cw)
-    -- config.footer_min_rows: room for that many footer rows whatever this
-    -- refresh has, as a blank band above the footer (its buttons stay on the
-    -- modal's bottom edge), so a footer that changes with the page shown does
-    -- not resize the modal.
-    local footer_pad = 0
-    local min_rows = tonumber(self.config.footer_min_rows) or 0
-    local n_rows = self._footer_layout and #self._footer_layout or 0
-    if footer and n_rows > 0 and min_rows > n_rows then
-        local between = 2 * MARGIN + Size.line.thin
-        local row_h = (footer:getSize().h - (n_rows - 1) * between) / n_rows
-        footer_pad = math.floor((min_rows - n_rows) * (row_h + between) + 0.5)
-    end
     -- Where the modal was, for _repaintIfResized below.
     local old = self._shown_rect
 
@@ -1283,7 +1271,7 @@ function LibraryModal:refresh()
     table.insert(body, VerticalSpan:new{ width = MARGIN })
     table.insert(body, padded(pagination))
     if footer then
-        table.insert(body, VerticalSpan:new{ width = MARGIN + footer_pad })
+        table.insert(body, VerticalSpan:new{ width = MARGIN })
         table.insert(body, padded(footer))
     end
 

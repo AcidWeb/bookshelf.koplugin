@@ -48,19 +48,17 @@ t.test("pickers mark the choice with painted marks, not words", function()
 end)
 
 local browser = io.open("lib/bookshelf_ornament_browser.lua"):read("*a")
-t.test("the collection shows ornaments only, and offers Apply pack theme", function()
+t.test("the collection shows ornaments only, with no theme buttons", function()
     local items = browser:match("function Browser:_items%(%)(.-)\nend\n")
     assert(items and not items:find("plankEntries", 1, true), "plank tiles are still listed")
     assert(not browser:find("is_plank", 1, true), "plank branches are still there")
     local foot = browser:match("function Browser:_footerRows%(%)(.-)\nend\n")
-    assert(foot and foot:find('_("Apply pack theme")', 1, true), "no Apply pack theme")
-    assert(foot:find('_("Undo pack theme")', 1, true) and foot:find("TP.appliedPack() == pack", 1, true),
-        "the button does not become Undo for the applied pack")
-    assert(foot:find("ConfirmBox:new{", 1, true) and foot:find("TP.applySummary(pack)", 1, true),
-        "Apply does not ask first, naming what changes")
-    assert(not foot:find('_("Colors: on")', 1, true), "the colors toggle is still in the footer")
-    local apply = browser:match("function Browser:_applyTheme%(pack%)(.-)\nend\n")
-    assert(apply and apply:find('bookshelf_plank_browser").show(', 1, true), "several planks do not open the picker")
+    assert(foot, "_footerRows moved")
+    for _i, gone in ipairs({ "Apply pack theme", "Undo pack theme", "applySummary", "appliedPack" }) do
+        assert(not browser:find(gone, 1, true), gone .. " is still in the collection")
+    end
+    assert(not browser:find("function Browser:_applyTheme", 1, true), "_applyTheme is still there")
+    assert(foot:find("return { { self:_packAction(), close } }", 1, true), "the footer is not one row")
 end)
 
 t.test("Accent colors starts with a Color theme row; no override rows remain", function()
@@ -78,16 +76,6 @@ t.test("a Color theme from an off pack is marked, and choosing it switches the p
     local row = body and body:match("local theme_row = {(.-)\n    }\n")
     assert(row and row:find("isPackOff(p)", 1, true), "an off pack is not marked")
     assert(row:find("setPackOff(p, false)", 1, true), "choosing it does not switch the pack on")
-end)
-
-t.test("while a pack's theme is applied its tab offers Undo, not Switch pack off as well", function()
-    local foot = browser:match("function Browser:_footerRows%(%)(.-)\nend\n")
-    assert(foot, "_footerRows moved")
-    local applied = foot:match("if TP%.appliedPack%(%) == pack then\n(.-)\n        end\n")
-    assert(applied, "no footer of its own for an applied theme")
-    assert(applied:find('_("Undo pack theme")', 1, true) and applied:find("close", 1, true),
-        "the applied footer is Undo and Apply")
-    assert(not applied:find("_packAction", 1, true), "Switch pack off is offered beside Undo")
 end)
 
 t.test("the pickers put KOReader's menu away while open and bring it back once", function()

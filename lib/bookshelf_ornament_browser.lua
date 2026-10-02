@@ -276,57 +276,14 @@ function Browser:_packAction()
     }
 end
 
--- _applyTheme(pack): Apply pack theme, confirmed. A pack of several planks
--- opens the plank picker on its tab to choose one (the rest is applied).
-function Browser:_applyTheme(pack)
-    local TP = require("lib/bookshelf_theme_pack")
-    local r = TP.applyPackTheme(pack)
-    self._full = true
-    self:_changed()
-    if r.pick_plank then
-        self._close()
-        require("lib/bookshelf_plank_browser").show({ chip = pack, on_change = self.on_change })
-    else
-        UIManager:show(InfoMessage:new{ text = T(_("%1 theme applied"), pack), timeout = 2 })
-    end
-end
-
--- _footerRows() -> the footer: on a pack's tab whose theme/ has anything
--- (a wallpaper, planks, colours), Apply pack theme in its own row, above the
--- pack button and Close. Apply asks first, naming what will change; on the
--- pack last applied the same button reads Undo pack theme and puts back
--- exactly what Apply replaced (bookshelf_theme_pack).
+-- _footerRows() -> the footer, one row: the pack button and Apply (Cancel
+-- when picking a replacement). A pack's theme is chosen in the Shelf theme
+-- menu, not here (bookshelf_theme_pack.chooseTheme).
 function Browser:_footerRows()
-    local rows = {}
     local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Apply"), on_tap = self._close }
     -- Choosing a replacement: nothing to switch here, only a way out.
     if self.opts.pick then return { { close } } end
-    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
-    if ok_t and TP and self:_isPack(self.chip) then
-        local th, pack = TP.theme(self.chip), self.chip
-        -- The theme applied: Undo alone, beside Apply. Undo puts the reader's
-        -- own look back and switches the pack off again if Apply switched it
-        -- on; a Switch pack off beside it would do half of that, and the two
-        -- read as the same thing (maintainer).
-        if TP.appliedPack() == pack then
-            return { { { key = "undo_theme", label = _("Undo pack theme"),
-                on_tap = function()
-                    TP.undoPackTheme()
-                    self._full = true
-                    self:_changed()
-                    UIManager:show(InfoMessage:new{ text = T(_("%1 theme undone"), pack), timeout = 2 })
-                end }, close } }
-        end
-        if th.wallpaper or th.colours or (th.planks and #th.planks > 0) then
-            rows[#rows + 1] = { { key = "apply_theme", label = _("Apply pack theme"),
-                on_tap = function()
-                    UIManager:show(ConfirmBox:new{ text = TP.applySummary(pack), ok_text = _("Apply"),
-                        ok_callback = function() self:_applyTheme(pack) end })
-                end } }
-        end
-    end
-    rows[#rows + 1] = { self:_packAction(), close }
-    return rows
+    return { { self:_packAction(), close } }
 end
 
 -- show(on_change, opts): on_change() runs once when the browser closes, if
@@ -342,18 +299,12 @@ function Browser.show(on_change, opts)
     local function close()
         if self.modal then UIManager:close(self.modal); self.modal = nil end
     end
-    -- However it closes (Close, the title's X, Back): write the switches,
-    -- rebuild the shelf once, and repaint the whole screen only after Apply
-    -- or Undo pack theme (self._full): a wallpaper or a colour theme is the
-    -- whole screen, and a plank design's lower band hangs below the last row,
-    -- into the strip a shelf refresh stops short of.
+    -- However it closes (Close, the title's X, Back): write the switches and
+    -- rebuild the shelf once.
     local function closed()
         O().endDeferred()
         if not self._dirty then return end
         if self.on_change then pcall(self.on_change) end
-        if self._full then
-            UIManager:setDirty("all", "full")
-        end
     end
     local config = {
         title = self.opts.pick and _("Swap for") or _("Ornament collection"),
@@ -361,10 +312,6 @@ function Browser.show(on_change, opts)
         grid_cols = cols,
         cells_per_page = function() return cols() * 3 end,
         rows_per_page = 6,
-        -- A pack with Apply pack theme has two footer rows and one without
-        -- has one: room for two either way, so switching packs does not
-        -- resize the browser (PW5: it shrank and left its title bar behind).
-        footer_min_rows = self.opts.pick and 1 or 2,
         chip_strip = function() return self:_chips() end,
         on_chip_tap = function(key)
             self.chip = key

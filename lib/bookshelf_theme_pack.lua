@@ -462,129 +462,163 @@ function M.plankOptions()
     return out
 end
 
--- ── Apply pack theme ──────────────────────────────────────────────────────
--- One tap on a pack's tab uses what its theme/ has: its wallpaper as the
--- default wallpaper (full screen follows through "Same as default" unless the
--- reader set their own), its colour theme, its plank (a pack of several opens
--- the plank picker instead of guessing). It asks first, naming what will
--- change, and saves what it replaces, so the same button then undoes it
--- exactly: "I applied a theme and want my plank back" (maintainer).
---
--- Undo puts back only what Apply set and the reader has not changed since:
--- a wallpaper or plank chosen in its picker afterwards is theirs, and stays.
--- The snapshot is per part (wallpaper, plank, colours), each part's values
--- from before Apply beside what Apply left there. A second pack applied over
--- the first keeps the ORIGINAL values of the parts the first still holds, so
--- Undo returns to the reader's own look, not the first pack's. Once nothing
--- Apply set is still there, or its pack is gone, the snapshot is spent.
+-- ── Choosing a theme pack ────────────────────────────────────────────────
+-- A theme pack (themePacks) is the whole look, chosen in the Shelf theme
+-- menu. Choosing one sets each part it has (GROUPS, the shelf's light or dark
+-- when its manifest says), switches its ornament pack on and every other
+-- pack off (loose ornaments are in no pack, so stay as they are), and gives
+-- back to the reader anything it does not set that an earlier theme still
+-- holds. The record (APPLIED_SETTING) keeps, per setting, the value from
+-- before the first theme beside what the theme left: a group still as the
+-- theme left it is "held"; one the reader has changed since is theirs, and is
+-- kept when the theme is turned off (No theme pack, clearTheme).
 M.APPLIED_SETTING = "theme_applied"
+M.SHELF_SETTING   = "shelf_theme"          -- CoverProgress.THEME_SETTING
 local GROUPS = {
     plank     = { M.PLANK_SETTING, M.WOOD_SETTING, M.DESIGNS_OFF_SETTING },
     wallpaper = { "wallpaper_default", "wallpaper_default_own" },
     colours   = { M.COLOURS_SETTING },
+    shelf     = { M.SHELF_SETTING },
 }
 -- A saved nil, which a settings table cannot hold as a value.
 local NIL_MARK = "\0nil"
 local function enc(v) if v == nil then return NIL_MARK end return v end
 local function dec(v) if v == NIL_MARK then return nil end return v end
 
-local function packExists(pack)
+local function packList()
     local _all, packs = orn().listAll()
-    for _i, p in ipairs(packs or {}) do if p == pack then return true end end
+    return packs or {}
+end
+
+local function packExists(pack)
+    for _i, p in ipairs(packList()) do if p == pack then return true end end
     return false
 end
 
--- held(s, keys) -> Apply set this part and it is still what Apply left.
+-- held(s, keys) -> the theme set this group and it is still what it left.
 local function held(s, keys)
     local a = s.applied[keys[1]]
     return a ~= nil and read(keys[1]) == dec(a)
 end
 
-local function liveSnapshot()
+-- offSet() -> { [pack] = true } for every pack switched off now.
+local function offSet()
+    local out = {}
+    for _i, p in ipairs(packList()) do
+        if orn().isPackOff(p) then out[p] = true end
+    end
+    return out
+end
+
+local function sameSet(a, b)
+    a, b = a or {}, b or {}
+    for k in pairs(a) do if not b[k] then return false end end
+    for k in pairs(b) do if not a[k] then return false end end
+    return true
+end
+
+-- packsHeld(s) -> the packs are switched as the theme left them. By value: a
+-- table read back from the settings is never the table that was saved.
+local function packsHeld(s)
+    return type(s.packs_applied) == "table" and sameSet(offSet(), s.packs_applied)
+end
+
+-- record() -> the chosen theme's record, or nil (none, or its pack is gone).
+local function record()
     local s = read(M.APPLIED_SETTING)
     if type(s) ~= "table" or type(s.before) ~= "table" or type(s.applied) ~= "table" then return nil end
     if not packExists(s.pack) then return nil end
-    for _g, keys in pairs(GROUPS) do
-        if held(s, keys) then return s end
-    end
-    return nil
+    return s
 end
 
-function M.appliedPack()
-    local s = liveSnapshot()
+-- currentTheme() -> the theme pack in use (its folder name), or nil. It stays
+-- named while the reader changes its parts: only No theme pack, another
+-- theme, or the pack going ends it.
+function M.currentTheme()
+    local s = record()
     return s and s.pack or nil
 end
 
--- undoPackTheme(): each part Apply set, and nobody changed since, back as it
--- was before (unset values unset).
-function M.undoPackTheme()
-    local s = liveSnapshot()
+-- restore(s, keys): a group back to what it was before the first theme.
+local function restore(s, keys)
+    for _i, k in ipairs(keys) do save(k, dec(s.before[k])); s.applied[k] = nil end
+end
+
+-- clearTheme(): No theme pack. Each group the theme still holds goes back to
+-- the reader's own (unset values unset); one they changed is left as it is;
+-- the packs, if still as the theme switched them, as they were before.
+function M.clearTheme()
+    local s = record()
     if s then
         for _g, keys in pairs(GROUPS) do
-            if held(s, keys) then
-                for _i, k in ipairs(keys) do save(k, dec(s.before[k])) end
-            end
+            if held(s, keys) then restore(s, keys) end
         end
-        for p in pairs(s.switched_on or {}) do orn().setPackOff(p, true) end
+        if packsHeld(s) and type(s.packs_before) == "table" then
+            for _i, p in ipairs(packList()) do orn().setPackOff(p, s.packs_before[p] == true) end
+        end
     end
     save(M.APPLIED_SETTING, nil)
     M._plank_memo = nil
 end
 
--- applySummary(pack) -> the confirmation's text: what applying will change.
-function M.applySummary(pack)
-    local th, parts = M.theme(pack), {}
-    if th.wallpaper then parts[#parts + 1] = _("wallpaper") end
+-- themePlank(pack) -> the plank a theme uses: its manifest's, by name (any
+-- case), else its first by name; nil when it has none.
+function M.themePlank(pack)
+    local th = M.theme(pack)
     local planks = th.planks or {}
-    if #planks == 1 then parts[#parts + 1] = T(_("%1 plank"), planks[1].name or pack)
-    elseif #planks > 1 then parts[#parts + 1] = _("a plank you choose") end
-    if th.colours then parts[#parts + 1] = _("colors") end
-    local list = parts[#parts] or ""
-    if #parts > 1 then
-        list = T(_("%1 and %2"), table.concat(parts, ", ", 1, #parts - 1), parts[#parts])
+    local want = th.manifest and th.manifest.plank
+    if want then
+        for _i, pl in ipairs(planks) do
+            if pl.name and pl.name:lower() == want:lower() then return pl end
+        end
     end
-    return T(_("Uses %1's %2. Undo pack theme on this tab puts yours back."), pack, list)
+    return planks[1]
 end
 
--- applyPackTheme(pack) -> { wallpaper, colours, plank, pick_plank }: what it
--- did (pick_plank: the pack has several planks, the caller opens the picker).
-function M.applyPackTheme(pack)
-    local s = liveSnapshot() or { before = {}, applied = {} }
+-- chooseTheme(pack) -> true, or false for a pack that is not a theme pack
+-- (then nothing changes).
+function M.chooseTheme(pack)
+    local th = M.theme(pack)
+    if not th.manifest then return false end
+    local s = record() or { before = {}, applied = {} }
     s.pack = pack
-    -- A part this Apply may change keeps its original values only while an
-    -- earlier Apply's still holds; otherwise what is there now is the
-    -- reader's own.
+    -- What is there now is the reader's own, unless a theme still holds it:
+    -- then the value from before the first theme stands.
     for _g, keys in pairs(GROUPS) do
         if not held(s, keys) then
             for _i, k in ipairs(keys) do s.before[k] = enc(read(k)); s.applied[k] = nil end
         end
     end
-    -- Apply switches the pack on; Undo switches it back off if Apply was
-    -- what switched it on, so its ornaments leave with its theme.
-    if orn().isPackOff(pack) then
-        s.switched_on = s.switched_on or {}
-        s.switched_on[pack] = true
+    if not packsHeld(s) then s.packs_before = offSet() end
+    -- Its ornaments on, every other pack's off. First: a pack that is off
+    -- lends nothing, so its plank would not be found.
+    for _i, p in ipairs(packList()) do orn().setPackOff(p, p ~= pack) end
+    local plank = M.themePlank(pack)
+    local shelf = th.manifest.shelf
+    local sets = { wallpaper = th.wallpaper ~= nil, colours = th.colours ~= nil,
+                   plank = plank ~= nil, shelf = shelf ~= nil }
+    -- What this theme does not set and an earlier one still holds: the
+    -- reader's own again, not the earlier theme's (Halloween over Ukiyo-e
+    -- kept Ukiyo-e's plank, PW5).
+    for g, keys in pairs(GROUPS) do
+        if not sets[g] and held(s, keys) then restore(s, keys) end
     end
-    orn().setPackOff(pack, false)
-    local th = M.theme(pack)
-    local r = { wallpaper = false, colours = false, plank = false, pick_plank = false }
-    if th.wallpaper then
-        for _i, e in ipairs(M.wallpaperEntries()) do
-            if e.pack == pack then M.chooseWallpaper("wallpaper_default", e.name); r.wallpaper = true end
+    if sets.wallpaper then
+        M.chooseWallpaper("wallpaper_default", M.NAME_PREFIX .. pack .. "\1" .. th.wallpaper.base)
+    end
+    if sets.colours then M.setColoursPack(pack) end
+    if sets.plank then M.choosePlank(plank.id) end
+    if sets.shelf then save(M.SHELF_SETTING, shelf) end
+    for g, keys in pairs(GROUPS) do
+        if sets[g] then
+            for _i, k in ipairs(keys) do s.applied[k] = enc(read(k)) end
         end
     end
-    if th.colours then M.setColoursPack(pack); r.colours = true end
-    local planks = th.planks or {}
-    if #planks == 1 then M.choosePlank(planks[1].id); r.plank = true
-    elseif #planks > 1 then r.pick_plank = true end
-    for g, did in pairs({ wallpaper = r.wallpaper, plank = r.plank, colours = r.colours }) do
-        if did then
-            for _i, k in ipairs(GROUPS[g]) do s.applied[k] = enc(read(k)) end
-        end
-    end
+    s.packs_applied = offSet()
+    s.switched_on = nil                         -- the old Apply's, now the packs group's job
     save(M.APPLIED_SETTING, s)
     M._plank_memo = nil
-    return r
+    return true
 end
 
 -- invertHex("#RRGGBB") -> its negative, same shape. What
