@@ -110,7 +110,7 @@ end
 
 -- paintRow: a tall book, a shorter one touching it, a gap of 2, a third
 do
-    SA._cache["d100"] = set()
+    SA._cache["dg100"] = set()
     local bb = fakeBB()
     local cols = { { x = 10, w = 5, h = 12 }, { x = 15, w = 5, h = 8 }, { x = 22, w = 5, h = 8 } }
     SA.paintRow(bb, 0, 0, cols, { stand_h = 20, width = 40, below = 2 })
@@ -135,7 +135,7 @@ end
 -- the LAST book still gets its right wedge (no neighbour must not mean
 -- "the book to the left")
 do
-    SA._cache["d100"] = set()
+    SA._cache["dg100"] = set()
     local bb = fakeBB()
     local cols = { { x = 10, w = 5, h = 8 }, { x = 15, w = 5, h = 8 } }
     SA.paintRow(bb, 0, 0, cols, { stand_h = 20, width = 40, below = 2 })
@@ -148,7 +148,7 @@ end
 
 -- a shelf end with less room than the wedge: squeezed to fit, not cut off
 do
-    SA._cache["d100"] = set()
+    SA._cache["dg100"] = set()
     local bb = fakeBB()
     SA.paintRow(bb, 0, 0, { { x = 10, w = 5, h = 8 } }, { stand_h = 20, width = 17, below = 2 })
     local squeezed, cut = false, false
@@ -163,7 +163,7 @@ end
 -- a face-out (foot = its push back) gets the same contact line at its own
 -- foot, over the strip up to where the spines stand; the spines keep theirs
 do
-    SA._cache["d100"] = set()
+    SA._cache["dg100"] = set()
     local bb = fakeBB()
     local cols = { { x = 10, w = 5, h = 8 }, { x = 15, w = 9, h = 6, foot = 2 }, { x = 24, w = 5, h = 8 } }
     SA.paintRow(bb, 0, 0, cols, { stand_h = 20, width = 40, below = 2 })

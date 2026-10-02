@@ -62,9 +62,35 @@ local function load(path, w, h)
     return bb
 end
 
--- rows(bb, y0, h) -> rows [y0, y0+h) of bb as their own BB8A (a C copy)
+-- typeOf(bb) -> bb's buffer type: a set's buffers are all grey + alpha, or
+-- all RGB32 (the colour set, see M._colourMask).
+local function typeOf(bb)
+    return (type(bb.getType) == "function" and bb:getType()) or Blitbuffer.TYPE_BB8A
+end
+
+-- M._colourMask(bb) -> a BB8A mask as an RGB32 one: the same shade (black,
+-- or a night frame's white) with the same alpha. KOReader's C alpha blit of
+-- a BB8A onto a colour buffer flattens what is under it to grey (beige under
+-- black at 25% came out (169,169,169)); an RGB32 source darkens it and keeps
+-- its hue (184,168,145), so a shadow over a colour wallpaper is the colour
+-- darker, not grey (maintainer). Per pixel in Lua, once per set: the three
+-- masks are a few thousand pixels. Frees bb.
+function M._colourMask(bb)
+    local w, h = bb:getWidth(), bb:getHeight()
+    local out = Blitbuffer.new(w, h, Blitbuffer.TYPE_BBRGB32)
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local c = bb:getPixel(x, y)
+            out:setPixel(x, y, Blitbuffer.ColorRGB32(c.a, c.a, c.a, c.alpha))
+        end
+    end
+    pcall(function() bb:free() end)
+    return out
+end
+
+-- rows(bb, y0, h) -> rows [y0, y0+h) of bb as their own buffer (a C copy)
 local function rows(bb, y0, h)
-    local out = Blitbuffer.new(bb:getWidth(), h, Blitbuffer.TYPE_BB8A)
+    local out = Blitbuffer.new(bb:getWidth(), h, typeOf(bb))
     out:blitFrom(bb, 0, 0, 0, y0, bb:getWidth(), h)
     return out
 end
@@ -72,7 +98,7 @@ end
 -- mirrored(bb) -> bb flipped left to right: one C copy per column
 local function mirrored(bb)
     local w, h = bb:getWidth(), bb:getHeight()
-    local out = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A)
+    local out = Blitbuffer.new(w, h, typeOf(bb))
     for x = 0, w - 1 do out:blitFrom(bb, w - 1 - x, 0, x, 0, 1, h) end
     return out
 end
@@ -105,7 +131,7 @@ local function wedge(a, up_b, low_h, dir, w)
     if t then return t end
     local side = (dir == "left") and "_l" or "_r"
     local ok, out = pcall(function()
-        local o = Blitbuffer.new(w, up_b + low_h, Blitbuffer.TYPE_BB8A)
+        local o = Blitbuffer.new(w, up_b + low_h, typeOf(a.up_r))
         if up_b > 0 then
             local u = scaled(a["up" .. side], w, up_b)
             o:blitFrom(u, 0, 0, 0, 0, w, up_b)
@@ -135,9 +161,10 @@ local function wedge(a, up_b, low_h, dir, w)
     return out
 end
 
--- get(night) -> the set for this screen, or nil (files missing)
-function M.get(night)
-    local key = (night and "n" or "d") .. Screen:scaleBySize(100)
+-- get(night, colour) -> the set for this screen, or nil (files missing).
+-- colour: the masks as RGB32, for a colour buffer (M._colourMask).
+function M.get(night, colour)
+    local key = (night and "n" or "d") .. (colour and "c" or "g") .. Screen:scaleBySize(100)
     local c = M._cache[key]
     if c ~= nil then return c or nil end
     local D = M.DP
@@ -157,6 +184,9 @@ function M.get(night)
         return nil
     end
     side, top, ft = lit(side, night), lit(top, night), lit(ft, night)
+    if colour then
+        side, top, ft = M._colourMask(side), M._colourMask(top), M._colourMask(ft)
+    end
     local up_r, low_r = rows(side, 0, up), rows(side, up, low)
     c = {
         up_r = up_r, up_l = mirrored(up_r), low_r = low_r, low_l = mirrored(low_r),
@@ -276,7 +306,8 @@ function M.paintRow(bb, ox, oy, cols, opts)
     -- paint measured in seconds (Wallpaper.shadeRect's rule). Done, not
     -- failed, so the banded painter does not try either.
     if type(bb.canUseCbb) == "function" and not bb:canUseCbb() then return true end
-    local a = M.get(opts.night)
+    local colour = type(bb.getType) == "function" and bb:getType() == Blitbuffer.TYPE_BBRGB32
+    local a = M.get(opts.night, colour)
     if not a then return false end
     local stand_h, width = opts.stand_h, opts.width
     local below = math.max(0, opts.below or 0)
