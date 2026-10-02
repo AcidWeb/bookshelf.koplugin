@@ -1492,6 +1492,10 @@ function Settings:_wallpaperMenu()
     -- so the row and the screen agree by construction.
     local function wallpaperLabel(setting, fallback)
         local name = BookshelfSettings.read(setting)
+        -- Full screen has three states: unset is Same as default (the
+        -- fallback), false is None. Reading false as unset showed None as
+        -- "Same as default", and the full screen shelves stayed bare.
+        if name == false and setting == Wallpaper.FULL_SETTING then return _("None") end
         if type(name) ~= "string" or name == "" then return fallback end
         -- A pack's wallpaper is named by its pack; with the pack off the shelf
         -- shows the reader's own from before it, so the row names that.
