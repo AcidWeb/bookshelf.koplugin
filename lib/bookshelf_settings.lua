@@ -4121,35 +4121,6 @@ function Settings:_librarySubItems()
                 end)
             end,
         },
-        -- Words a page for a stated word count (issue 455). Extract page
-        -- counts falls back on the count fan fiction states about itself when
-        -- it has no better one; nothing is counted, so it is a setting here,
-        -- not a source in that dialog (maintainer). 250 is a paperback's page.
-        (function()
-            local function wpp()
-                return tonumber(BookshelfSettings.read("words_per_page")) or 250
-            end
-            local rows = {}
-            for _i, n in ipairs({ 250, 300, 500 }) do
-                rows[#rows + 1] = {
-                    text = tostring(n),
-                    checked_func = function() return wpp() == n end,
-                    radio = true,
-                    keep_menu_open = true,
-                    callback = function()
-                        BookshelfSettings.save("words_per_page", n)
-                        BookshelfSettings.flush()
-                    end,
-                }
-            end
-            return {
-                text_func = function()
-                    return _("Words a page for fan fiction") .. ": " .. wpp()
-                end,
-                help_text = _("Fan fiction from FanFicFare or AO3 states its word count, and a Calibre words column works too. When Extract page counts has no better count for such a book (Your reading settings is off, or the book could not be laid out), it uses one page per this many words."),
-                sub_item_table = rows,
-            }
-        end)(),
     {
         text     = _("Manage collections\xE2\x80\xA6"),
         help_text = _("Create, rename, reorder and delete collections."

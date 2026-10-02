@@ -788,7 +788,6 @@ end
 --   skipped   number       -- already had a count (opened / prior scan)
 --   filename  {name,...}   -- counted from a p(N) filename marker
 --   calibre   {{name=,pages=},...} -- from a Calibre custom column
---   words     {{name=,pages=},...} -- from a stated word count (issue 455)
 --   publisher {{name=,pages=},...}
 --   hardcover {{name=,pages=},...}
 --   rendered  {{name=,pages=},...}
@@ -803,7 +802,6 @@ function Tokens.pageCountReportHtml(data)
     local function list(t) return type(t) == "table" and t or {} end
     local filename  = list(data.filename)
     local calibre   = list(data.calibre)
-    local words     = list(data.words)
     local publisher = list(data.publisher)
     local hardcover = list(data.hardcover)
     local rendered  = list(data.rendered)
@@ -833,9 +831,6 @@ function Tokens.pageCountReportHtml(data)
     summary[#summary + 1] = string.format("Paginated %d", #rendered)
     if #calibre > 0 then
         summary[#summary + 1] = string.format("Calibre %d", #calibre)
-    end
-    if #words > 0 then
-        summary[#summary + 1] = string.format("Word counts %d", #words)
     end
     if #failed > 0 then
         summary[#summary + 1] = string.format("Failed %d", #failed)
@@ -869,7 +864,6 @@ function Tokens.pageCountReportHtml(data)
     end
     section("Publisher page numbers", publisher, true)
     section("Hardcover editions", hardcover, true)
-    section("From word counts", words, true)
     section("Paginated at your reading settings", rendered, true)
     section("From your Calibre column", calibre, true)
     section("Counted from the filename", filename, false)

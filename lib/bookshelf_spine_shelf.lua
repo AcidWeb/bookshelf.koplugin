@@ -565,13 +565,10 @@ end
 -- A rendered count never overwrites a scanned one: the plan persists what
 -- readProgress answers for every book it shows, and that used to replace the
 -- scan's layout-free count with the font-dependent one on first sight.
---   "words"   the page-count scan's count from a book's stated word count
---             (fan fiction) or a Calibre words column, at the dialog's words
---             a page (issue 455)
 local SCAN_TAGS  = { print = true, user = true, calibre = true, filename = true,
-                     words = true, layout = true, scan = true }
+                     layout = true, scan = true }
 local SHOWN_TAGS = { print = true, user = true, calibre = true, filename = true,
-                     words = true, stable = true, render = true }
+                     stable = true, render = true }
 SpineShelf.SCAN_TAGS = SCAN_TAGS
 
 function SpineShelf.persistProgress(fp, pages, status, src)
