@@ -8,6 +8,9 @@
 --                                           a pack may hold several, e.g. a
 --                                           pack of wood shelves
 --   <pack>/theme/colours.json               {"day": {name: "#RRGGBB"}, "night": {...}}
+--   <pack>/theme/theme.json                 makes it a THEME PACK: {"name",
+--                                           "description", "shelf": "light" |
+--                                           "dark", "plank": a plank's name}
 --
 -- In a subfolder on purpose: the ornament scan is one level deep and png/svg
 -- only (bookshelf_ornaments.listAll), so 5.2.x installs a theme pack as a plain
@@ -46,6 +49,7 @@ M.PLANK_SETTING     = "theme_plank_pack"
 -- and with it off the shelf has its coloured plank.
 M.WOOD_SETTING      = "plank_wood"
 M.SCAN_TTL          = 15
+M.MANIFEST          = "theme.json"
 M._clock            = os.time
 
 M.WALL_EXTS = { png = true, jpg = true, jpeg = true, webp = true, bmp = true, gif = true }
@@ -143,6 +147,26 @@ local function parseColours(path, pack)
     return any and out or nil
 end
 
+-- parseManifest(path, pack) -> theme.json's fields (any of them nil). A file
+-- that cannot be read is logged and gives {}: the pack is still a theme pack,
+-- listed by its folder name, so a typo cannot hide a pack someone paid for.
+local function parseManifest(path, pack)
+    local f = io.open(path, "rb"); if not f then return {} end
+    local text = f:read("*a"); f:close()
+    local ok, doc = pcall(decode, text)
+    if not ok or type(doc) ~= "table" then
+        logger.warn("[bookshelf] theme.json could not be read:", pack)
+        return {}
+    end
+    local function str(k)
+        local v = doc[k]
+        return (type(v) == "string" and v ~= "") and v or nil
+    end
+    local shelf = str("shelf")
+    if shelf ~= "light" and shelf ~= "dark" then shelf = nil end
+    return { name = str("name"), description = str("description"), shelf = shelf, plank = str("plank") }
+end
+
 -- _plankPart(file) -> name, part for "plank[.<name>].<middle|left|right>.png"
 -- (name "" for the unnamed plank), or nil.
 function M._plankPart(file)
@@ -186,6 +210,7 @@ function M.theme(pack)
                 planks[name] = planks[name] or {}
                 planks[name][part] = tdir .. "/" .. n
             elseif n:lower() == "colours.json" then v.colours = parseColours(tdir .. "/" .. n, pack)
+            elseif n:lower() == M.MANIFEST then v.manifest = parseManifest(tdir .. "/" .. n, pack)
             end
         end
         if w.base then v.wallpaper = w end
@@ -211,6 +236,32 @@ function M.invalidate() M._cache = {}; M._plank_memo = nil end
 -- forgetChoice(): after a switch, work out which plank shows again, without
 -- re-listing every pack's theme folder the way invalidate() does.
 function M.forgetChoice() M._plank_memo = nil end
+
+-- themePacks() -> the installed theme packs (a theme/theme.json), for the
+-- Shelf theme menu: { pack, name, description, shelf, plank }, by name. A
+-- pack switched off is listed too: choosing it switches it on.
+function M.themePacks()
+    local _all, packs = orn().listAll()
+    local out = {}
+    for _i, p in ipairs(packs or {}) do
+        local m = M.theme(p).manifest
+        if m then
+            out[#out + 1] = { pack = p, name = m.name or p, description = m.description,
+                              shelf = m.shelf, plank = m.plank }
+        end
+    end
+    table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+    return out
+end
+
+-- rescan(): forget both scans (the ornaments folder's and each pack's theme/),
+-- so a pack copied in or deleted since the last look is seen now, not after
+-- the scan TTL. The Shelf theme menu calls it each time it opens.
+function M.rescan()
+    local O = orn()
+    if O.invalidate then O.invalidate() end
+    M.invalidate()
+end
 
 -- wallpaperFile(w, is_full, is_dark) -> file name, and whether it is a dark
 -- variant (shown as drawn: the reader's invert-at-night does not apply).

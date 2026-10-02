@@ -422,10 +422,77 @@ t.test("the shelf maps a pack wallpaper to its variant and falls back to the rea
     assert(wp:find("wallpaperPath(", 1, true), "pathFor does not resolve theme names")
 end)
 
--- ── Apply pack theme ──────────────────────────────────────────────────────
 local function mkwall(d, p) touch(d .. "/" .. p .. "/theme/wallpaper.png") end
 local function mkplank(d, p, n) touch(d .. "/" .. p .. "/theme/plank." .. n .. ".middle.png") end
 local function mkcolours(d, p) touch(d .. "/" .. p .. "/theme/colours.json", '{"day":{"text":"#112233"},"night":{}}') end
+
+-- ── Theme packs: the manifest ─────────────────────────────────────────────
+local function mkmanifest(d, p, body) touch(d .. "/" .. p .. "/theme/theme.json", body or "{}") end
+
+t.test("theme.json is read: name, description, shelf and plank", function()
+    local TP, d = setup()
+    mkmanifest(d, "Halloween", '{"name":"Halloween night","description":"Bats.","shelf":"dark","plank":"Ash"}')
+    TP.invalidate()
+    local m = TP.theme("Halloween").manifest
+    eq(m.name, "Halloween night"); eq(m.description, "Bats."); eq(m.shelf, "dark"); eq(m.plank, "Ash")
+end)
+
+t.test("a shelf that is not light or dark is ignored", function()
+    local TP, d = setup()
+    mkmanifest(d, "A", '{"shelf":"auto"}')
+    TP.invalidate()
+    eq(TP.theme("A").manifest.shelf, nil)
+end)
+
+t.test("non-string fields are ignored", function()
+    local TP, d = setup()
+    mkmanifest(d, "A", '{"name":3,"shelf":true,"plank":{}}')
+    TP.invalidate()
+    local m = TP.theme("A").manifest
+    eq(m.name, nil); eq(m.shelf, nil); eq(m.plank, nil)
+end)
+
+t.test("an unreadable theme.json still makes a theme pack, by its folder name", function()
+    local TP, d = setup()
+    mkmanifest(d, "Broken", '{"name": ')
+    TP.invalidate()
+    local m = TP.theme("Broken").manifest
+    assert(m, "a typo hid the pack")
+    eq(m.name, nil)
+    local list = TP.themePacks()
+    eq(#list, 1); eq(list[1].pack, "Broken"); eq(list[1].name, "Broken")
+end)
+
+t.test("a theme/ without theme.json is not a theme pack", function()
+    local TP, d = setup()
+    mkplank(d, "Planks", "Walnut"); touch(d .. "/Planks/theme/wallpaper.png")
+    TP.invalidate()
+    eq(TP.theme("Planks").manifest, nil)
+    eq(#TP.themePacks(), 0)
+end)
+
+t.test("themePacks lists theme packs by name, switched-off ones too", function()
+    local TP, d, _s, packs_off = setup()
+    mkmanifest(d, "zz", '{"name":"Autumn"}'); mkmanifest(d, "Ukiyo-e"); touch(d .. "/Plain/x.png")
+    packs_off["Ukiyo-e"] = true
+    TP.invalidate()
+    local list = TP.themePacks()
+    eq(#list, 2)
+    eq(list[1].pack, "zz"); eq(list[1].name, "Autumn")
+    eq(list[2].pack, "Ukiyo-e"); eq(list[2].name, "Ukiyo-e")
+end)
+
+t.test("rescan drops both scan caches", function()
+    local TP = setup()
+    local n = 0
+    TP._orn.invalidate = function() n = n + 1 end
+    TP._cache["X"] = { at = 0, v = {} }
+    TP.rescan()
+    eq(n, 1, "the ornaments list was not rescanned")
+    eq(next(TP._cache), nil, "the theme folders were not rescanned")
+end)
+
+-- ── Apply pack theme ──────────────────────────────────────────────────────
 
 t.test("Apply pack theme sets exactly what the pack has, and switches the pack on", function()
     local TP, d, settings, packs_off = setup()
