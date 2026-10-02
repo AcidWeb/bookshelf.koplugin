@@ -484,13 +484,18 @@ t.test("themePacks lists theme packs by name, switched-off ones too", function()
     eq(list[2].pack, "Ukiyo-e"); eq(list[2].name, "Ukiyo-e")
 end)
 
-t.test("rescan drops both scan caches", function()
+t.test("rescan drops the theme folders' cache, not the ornaments list's", function()
+    -- Review: Orn.invalidate made the next listAll re-read every ornament file
+    -- and gave Orn.list() a new identity, which threw away every page's saved
+    -- ornament layout; listAll already sees a pack folder come or go (its key
+    -- is the folders' mtimes and names), and a new theme.json is in the theme
+    -- cache this drops.
     local TP = setup()
     local n = 0
     TP._orn.invalidate = function() n = n + 1 end
     TP._cache["X"] = { at = 0, v = {} }
     TP.rescan()
-    eq(n, 1, "the ornaments list was not rescanned")
+    eq(n, 0, "the ornaments list was rescanned in full")
     eq(next(TP._cache), nil, "the theme folders were not rescanned")
 end)
 
@@ -651,7 +656,8 @@ t.test("a record from the old Apply is read as the theme, and packs are left alo
     local name = "theme-pack\1Ukiyo-e\1wallpaper.png"
     settings.wallpaper_default = name
     settings[TP.APPLIED_SETTING] = { pack = "Ukiyo-e", before = { wallpaper_default = "leaves.png" },
-                                     applied = { wallpaper_default = name }, switched_on = { ["Ukiyo-e"] = true } }
+                                     applied = { wallpaper_default = name, wallpaper_default_own = "\0nil" },
+                                     switched_on = { ["Ukiyo-e"] = true } }
     packs_off["Autumn"] = true
     eq(TP.currentTheme(), "Ukiyo-e")
     TP.clearTheme()
@@ -682,6 +688,88 @@ t.test("shownWallpaper: a pack default switched off shows the reader's own, in b
     eq(TP.shownWallpaper(false, false), "leaves.png"); eq(TP.shownWallpaper(true, false), "leaves.png")
     settings.wallpaper_full = false
     eq(TP.shownWallpaper(true, false), nil, "full screen None stays None")
+end)
+
+-- ── Review fixes (2026-10-02) ──────────────────────────────────────────────
+t.test("No theme pack restores every pack the reader did not touch, per pack", function()
+    -- Review probe B: one switch in the collection released the whole packs
+    -- group, and No theme pack left the theme's other offs behind.
+    local TP, d, _s, packs_off = setup()
+    halloween(d); touch(d .. "/Cacti/c.png"); TP.invalidate()
+    packs_off["Halloween"] = true                  -- off before the theme
+    TP.chooseTheme("Halloween")
+    packs_off["Autumn"] = nil                      -- the reader switches Autumn back on
+    TP.clearTheme()
+    eq(packs_off["Autumn"], nil, "the reader's switch was undone")
+    eq(packs_off["Cacti"], nil, "a pack the theme switched off stayed off")
+    eq(packs_off["Halloween"], true, "the theme's pack stayed on (it was off before)")
+end)
+
+t.test("a theme pack switched off and chosen again: No theme pack still gives back the reader's packs", function()
+    -- Review probe A: every pack ended up off.
+    local TP, d, _s, packs_off = setup()
+    halloween(d); touch(d .. "/Cacti/c.png"); TP.invalidate()
+    TP.chooseTheme("Halloween")
+    packs_off["Halloween"] = true
+    TP.chooseTheme("Halloween")
+    TP.clearTheme()
+    eq(packs_off["Autumn"], nil); eq(packs_off["Cacti"], nil)
+end)
+
+t.test("an unrelated pack deleted while a theme is on does not release the others", function()
+    local TP, d, _s, packs_off = setup()
+    halloween(d); touch(d .. "/Cacti/c.png"); TP.invalidate()
+    TP.chooseTheme("Halloween")
+    os.execute("rm -rf '" .. d .. "/Cacti'"); TP.invalidate()
+    TP.clearTheme()
+    eq(packs_off["Autumn"], nil, "Autumn stayed off")
+end)
+
+t.test("Plank designs switched off while a theme is on stay off after No theme pack", function()
+    -- Review probe C: held() looked at the group's first setting only.
+    local TP, d = setup()
+    TP._plugin_root = "."
+    halloween(d); TP.invalidate()
+    TP.chooseTheme("Halloween")
+    TP.setDesignsOn(false)
+    TP.clearTheme()
+    eq(TP.designsOn(), false, "the reader's switch was undone")
+end)
+
+t.test("reading the current theme does not list the ornaments folder", function()
+    -- Review: every menu row's mark asked currentTheme, and each answer was a
+    -- full listAll (every root, every pack folder).
+    local TP, d = setup()
+    halloween(d); TP.invalidate()
+    TP.chooseTheme("Halloween")
+    local real, n = TP._orn.listAll, 0
+    TP._orn.listAll = function(...) n = n + 1; return real(...) end
+    for _i = 1, 5 do TP.currentTheme() end
+    TP._orn.listAll = real
+    eq(n, 0, "currentTheme listed the folder")
+end)
+
+t.test("choosing and clearing a theme write the settings once each", function()
+    -- Review: each setPackOff and each part was its own full flush.
+    local TP, d = setup()
+    halloween(d); touch(d .. "/Cacti/c.png"); touch(d .. "/Woods/w.png"); TP.invalidate()
+    local O, flushes = TP._orn, 0
+    local store = TP._store
+    store.saveDeferred = store.save
+    store.flush = function() flushes = flushes + 1 end
+    O._defer = false
+    O.beginDeferred = function() O._defer = true end
+    O.endDeferred = function() O._defer = false; store.flush() end
+    TP.chooseTheme("Halloween")
+    eq(flushes, 1, "choosing flushed more than once")
+    eq(O._defer, false, "left deferred")
+    flushes = 0
+    TP.clearTheme()
+    eq(flushes, 1, "clearing flushed more than once")
+    -- Already deferred (the collection open): no flush of its own.
+    O._defer = true; flushes = 0
+    TP.chooseTheme("Halloween")
+    eq(flushes, 0); eq(O._defer, true, "it ended someone else's deferral")
 end)
 
 t.done()

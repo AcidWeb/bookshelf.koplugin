@@ -254,12 +254,14 @@ function M.themePacks()
     return out
 end
 
--- rescan(): forget both scans (the ornaments folder's and each pack's theme/),
--- so a pack copied in or deleted since the last look is seen now, not after
--- the scan TTL. The Shelf theme menu calls it each time it opens.
+-- rescan(): forget the theme folders' scan, so a pack copied in or deleted
+-- since the last look (or a theme.json added to one) is seen now, not after
+-- the scan TTL. The Shelf theme menu calls it each time it opens. Not the
+-- ornaments list's: listAll already sees a pack folder come or go (its key is
+-- the folders' mtimes and names), and dropping it re-read every ornament file
+-- and gave Orn.list() a new identity, which threw away every page's saved
+-- ornament layout (review).
 function M.rescan()
-    local O = orn()
-    if O.invalidate then O.invalidate() end
     M.invalidate()
 end
 
@@ -490,37 +492,44 @@ local function packList()
     return packs or {}
 end
 
+-- packExists(pack): from the theme scan, which the scan TTL caches and the
+-- Shelf theme menu's rescan refreshes. Not listAll: every menu row's mark asks
+-- currentTheme, and a listAll is every root and every pack folder (review).
 local function packExists(pack)
-    for _i, p in ipairs(packList()) do if p == pack then return true end end
-    return false
+    return pack ~= nil and M.theme(pack).exists == true
 end
 
--- held(s, keys) -> the theme set this group and it is still what it left.
+-- held(s, keys) -> the theme set this group and EVERY setting of it is still
+-- what it left: changing any one (Plank designs off in Performance tweaks)
+-- makes the group the reader's (review).
 local function held(s, keys)
-    local a = s.applied[keys[1]]
-    return a ~= nil and read(keys[1]) == dec(a)
-end
-
--- offSet() -> { [pack] = true } for every pack switched off now.
-local function offSet()
-    local out = {}
-    for _i, p in ipairs(packList()) do
-        if orn().isPackOff(p) then out[p] = true end
+    for _i, k in ipairs(keys) do
+        local a = s.applied[k]
+        if a == nil or read(k) ~= dec(a) then return false end
     end
-    return out
-end
-
-local function sameSet(a, b)
-    a, b = a or {}, b or {}
-    for k in pairs(a) do if not b[k] then return false end end
-    for k in pairs(b) do if not a[k] then return false end end
     return true
 end
 
--- packsHeld(s) -> the packs are switched as the theme left them. By value: a
--- table read back from the settings is never the table that was saved.
-local function packsHeld(s)
-    return type(s.packs_applied) == "table" and sameSet(offSet(), s.packs_applied)
+-- packHeld(s, p) -> pack p is switched as the theme left it. Per pack: one
+-- switch in the collection is the reader's, the others stay the theme's
+-- (review: one switch released them all, and No theme pack left the rest
+-- off). A record without packs_applied (the old Apply's) holds none.
+local function packHeld(s, p)
+    if type(s.packs_applied) ~= "table" then return false end
+    return (orn().isPackOff(p) == true) == (s.packs_applied[p] == true)
+end
+
+-- deferred(fn): fn's settings writes as one flush (each setPackOff and each
+-- part was a full write), unless a caller already defers them (the Ornament
+-- collection open), whose own end flushes.
+local function deferred(fn)
+    local O = orn()
+    local own = O.beginDeferred ~= nil and not O._defer
+    if own then O.beginDeferred() end
+    local ok, r = pcall(fn)
+    if own then O.endDeferred() end
+    if not ok then error(r, 0) end
+    return r
 end
 
 -- record() -> the chosen theme's record, or nil (none, or its pack is gone).
@@ -548,17 +557,20 @@ end
 -- the reader's own (unset values unset); one they changed is left as it is;
 -- the packs, if still as the theme switched them, as they were before.
 function M.clearTheme()
-    local s = record()
-    if s then
-        for _g, keys in pairs(GROUPS) do
-            if held(s, keys) then restore(s, keys) end
+    deferred(function()
+        local s = record()
+        if s then
+            for _g, keys in pairs(GROUPS) do
+                if held(s, keys) then restore(s, keys) end
+            end
+            local before = type(s.packs_before) == "table" and s.packs_before or {}
+            for _i, p in ipairs(packList()) do
+                if packHeld(s, p) then orn().setPackOff(p, before[p] == true) end
+            end
         end
-        if packsHeld(s) and type(s.packs_before) == "table" then
-            for _i, p in ipairs(packList()) do orn().setPackOff(p, s.packs_before[p] == true) end
-        end
-    end
-    save(M.APPLIED_SETTING, nil)
-    M._plank_memo = nil
+        save(M.APPLIED_SETTING, nil)
+        M._plank_memo = nil
+    end)
 end
 
 -- themePlank(pack) -> the plank a theme uses: its manifest's, by name (any
@@ -580,6 +592,7 @@ end
 function M.chooseTheme(pack)
     local th = M.theme(pack)
     if not th.manifest then return false end
+    return deferred(function()
     local s = record() or { before = {}, applied = {} }
     s.pack = pack
     -- What is there now is the reader's own, unless a theme still holds it:
@@ -589,7 +602,15 @@ function M.chooseTheme(pack)
             for _i, k in ipairs(keys) do s.before[k] = enc(read(k)); s.applied[k] = nil end
         end
     end
-    if not packsHeld(s) then s.packs_before = offSet() end
+    -- The same per pack: one the theme still has as it left it keeps its
+    -- state from before; one the reader switched (or a new one) is theirs now.
+    local old_before = type(s.packs_before) == "table" and s.packs_before or {}
+    local packs_before = {}
+    for _i, p in ipairs(packList()) do
+        if packHeld(s, p) then packs_before[p] = old_before[p] or nil
+        elseif orn().isPackOff(p) then packs_before[p] = true end
+    end
+    s.packs_before = packs_before
     -- Its ornaments on, every other pack's off. First: a pack that is off
     -- lends nothing, so its plank would not be found.
     for _i, p in ipairs(packList()) do orn().setPackOff(p, p ~= pack) end
@@ -614,11 +635,16 @@ function M.chooseTheme(pack)
             for _i, k in ipairs(keys) do s.applied[k] = enc(read(k)) end
         end
     end
-    s.packs_applied = offSet()
+    local applied_packs = {}
+    for _i, p in ipairs(packList()) do
+        if orn().isPackOff(p) then applied_packs[p] = true end
+    end
+    s.packs_applied = applied_packs
     s.switched_on = nil                         -- the old Apply's, now the packs group's job
     save(M.APPLIED_SETTING, s)
     M._plank_memo = nil
     return true
+    end)
 end
 
 -- invertHex("#RRGGBB") -> its negative, same shape. What
