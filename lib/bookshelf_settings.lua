@@ -1671,8 +1671,25 @@ function Settings:_shelfThemeLabel()
     return cur
 end
 
+-- _themePackLabel() -> the theme pack in use, by its name, or nil.
+function Settings:_themePackLabel()
+    local ok, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if not (ok and TP and TP.currentTheme) then return nil end
+    local pack = TP.currentTheme()
+    if not pack then return nil end
+    for _i, th in ipairs(TP.themePacks()) do
+        if th.pack == pack then return th.name end
+    end
+    return pack
+end
+
+-- The Shelf theme menu: Auto / Light / Dark, then (when any are installed) a
+-- second group, No theme pack and each theme pack (bookshelf_theme_pack).
+-- Built each time it opens, after a rescan, so a pack copied in since
+-- start-up shows without a restart.
 function Settings:_shelfThemeSubItems()
     local CP = require("lib/bookshelf_cover_progress")
+    local TP = require("lib/bookshelf_theme_pack")
     local rows = {}
     for _i, t in ipairs(Settings.SHELF_THEMES) do
         local value = t.value
@@ -1688,6 +1705,46 @@ function Settings:_shelfThemeSubItems()
                 -- so the shelf has to be built again rather than repainted.
                 self:_markDirty()
                 if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        }
+    end
+    TP.rescan()
+    local packs = TP.themePacks()
+    if #packs == 0 then return rows end
+    rows[#rows].separator = true
+    -- A theme is the whole look (wallpaper, plank, colours, light or dark):
+    -- the shelf is built again and the whole screen refreshed.
+    local function done(touchmenu_instance, text)
+        self:_markDirty()
+        UIManager:setDirty("all", "full")
+        if text then
+            local InfoMessage = require("ui/widget/infomessage")
+            UIManager:show(InfoMessage:new{ text = text, timeout = 2 })
+        end
+        if touchmenu_instance then touchmenu_instance:updateItems() end
+    end
+    rows[#rows + 1] = {
+        text = _("No theme pack"),
+        radio = true,
+        checked_func = function() return TP.currentTheme() == nil end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            if TP.currentTheme() == nil then return end
+            TP.clearTheme()
+            done(touchmenu_instance, _("Theme pack off"))
+        end,
+    }
+    for _i, th in ipairs(packs) do
+        local pack, name = th.pack, th.name
+        rows[#rows + 1] = {
+            text = name,
+            help_text = th.description,
+            radio = true,
+            checked_func = function() return TP.currentTheme() == pack end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                TP.chooseTheme(pack)
+                done(touchmenu_instance, T(_("%1 theme on"), name))
             end,
         }
     end
@@ -2158,13 +2215,18 @@ end
 function Settings:_shelfThemeRow()
     return {
         text_func = function()
+            local pack = self:_themePackLabel()
+            if pack then return T(_("Shelf theme: %1, %2"), self:_shelfThemeLabel(), pack) end
             return T(_("Shelf theme: %1"), self:_shelfThemeLabel())
         end,
         help_text = _("Light or dark colors for the shelf, independently "
             .. "of KOReader's night mode -- so you can keep the rest of "
             .. "KOReader light and still have a dark shelf.\n\nCovers, "
             .. "wallpaper and ornaments are pictures and are never "
-            .. "inverted; only the shelf's own colors change."),
+            .. "inverted; only the shelf's own colors change."
+            .. "\n\nTheme packs installed in the ornaments folder are "
+            .. "listed below: choosing one uses its wallpaper, plank, colors "
+            .. "and ornaments together. No theme pack puts your own back."),
         keep_menu_open = true,
         sub_item_table_func = function()
             return self:_shelfThemeSubItems()
