@@ -545,11 +545,11 @@ msgstr "Mới thêm gần đây"
 
 #: lib/bookshelf_chip_editor.lua:1562
 msgid "No collections yet"
-msgstr ""
+msgstr "Chưa có bộ sưu tập nào"
 
 #: lib/bookshelf_chip_editor.lua:1587 lib/bookshelf_chip_editor.lua:1866
 msgid "In a collection"
-msgstr ""
+msgstr "Trong một bộ sưu tập"
 
 #: lib/bookshelf_chip_editor.lua:1703
 msgid "Show as"
@@ -607,7 +607,7 @@ msgstr "Chưa đọc"
 
 #: lib/bookshelf_chip_editor.lua:1865
 msgid "Unread standalone"
-msgstr ""
+msgstr "Sách lẻ chưa đọc"
 
 #: lib/bookshelf_chip_editor.lua:1867 micromodules/random_unread.lua:232
 msgid "All books"
@@ -636,15 +636,15 @@ msgstr "Bao nhiêu: %1"
 
 #: lib/bookshelf_chip_editor.lua:1951
 msgid "Collection: %1 (not found)"
-msgstr ""
+msgstr "Bộ sưu tập: %1 (không tìm thấy)"
 
 #: lib/bookshelf_chip_editor.lua:1953
 msgid "Collection: %1"
-msgstr ""
+msgstr "Bộ sưu tập: %1"
 
 #: lib/bookshelf_chip_editor.lua:1955
 msgid "Choose collection"
-msgstr ""
+msgstr "Chọn bộ sưu tập"
 
 #: lib/bookshelf_chip_editor.lua:2071 lib/bookshelf_chip_editor.lua:2891
 #: lib/bookshelf_chip_editor.lua:3068 lib/bookshelf_chip_editor.lua:3126
@@ -991,7 +991,7 @@ msgstr "Sắp xếp sách trong bộ sưu tập"
 
 #: lib/bookshelf_color_palette.lua:390
 msgid "or"
-msgstr ""
+msgstr "hoặc"
 
 #: lib/bookshelf_color_palette.lua:411 lib/bookshelf_font_picker.lua:192
 #: lib/bookshelf_line_editor.lua:152 lib/bookshelf_line_editor.lua:539
@@ -1166,7 +1166,7 @@ msgstr "Chọn phông"
 
 #: lib/bookshelf_gestures.lua:24
 msgid "Swipe up for full screen shelves"
-msgstr ""
+msgstr "Vuốt lên để vào kệ toàn màn hình"
 
 #: lib/bookshelf_gestures.lua:26
 msgid "Swipe down leaves full screen shelves"
@@ -1178,87 +1178,87 @@ msgstr "Khi bật, vuốt xuống trong kệ toàn màn hình sẽ đưa bảng 
 
 #: lib/bookshelf_gestures.lua:34
 msgid "Swipe down on the shelf to refresh the library"
-msgstr ""
+msgstr "Vuốt xuống trên kệ để làm mới thư viện"
 
 #: lib/bookshelf_gestures.lua:35
 msgid "Pinch or spread to change the shelf's size"
-msgstr ""
+msgstr "Chụm hoặc xòe hai ngón tay để đổi kích thước kệ"
 
 #: lib/bookshelf_gestures.lua:36
 msgid "Swipe down or up on the top panel for fewer or more rows"
-msgstr ""
+msgstr "Vuốt xuống hoặc lên trên bảng trên để giảm hoặc tăng số hàng"
 
 #: lib/bookshelf_gestures.lua:37
 msgid "Swipe left or right on the top panel to preview the next book"
-msgstr ""
+msgstr "Vuốt trái hoặc phải trên bảng trên để xem trước cuốn sách tiếp theo"
 
 #: lib/bookshelf_gestures.lua:38
 msgid "Long-press the top panel for book details"
-msgstr ""
+msgstr "Nhấn giữ bảng trên để xem chi tiết sách"
 
 #: lib/bookshelf_gestures.lua:39
 msgid "Tap the stars to rate a book"
-msgstr ""
+msgstr "Chạm vào các ngôi sao để đánh giá sách"
 
 #: lib/bookshelf_gestures.lua:40
 msgid "Tap the description to read all of it"
-msgstr ""
+msgstr "Chạm vào phần mô tả để đọc toàn bộ"
 
 #: lib/bookshelf_gestures.lua:41
 msgid "Long-press a shelf button to edit the shelf"
-msgstr ""
+msgstr "Nhấn giữ một nút kệ để chỉnh sửa kệ đó"
 
 #: lib/bookshelf_gestures.lua:42
 msgid "Swipe the shelf buttons to see more of them"
-msgstr ""
+msgstr "Vuốt các nút kệ để xem thêm"
 
 #: lib/bookshelf_gestures.lua:43
 msgid "Long-press a book for its details"
-msgstr ""
+msgstr "Nhấn giữ một cuốn sách để xem chi tiết"
 
 #: lib/bookshelf_gestures.lua:44
 msgid "Long-press a series, author or folder for its menu"
-msgstr ""
+msgstr "Nhấn giữ một Series, tác giả hoặc thư mục để mở menu của nó"
 
 #: lib/bookshelf_gestures.lua:45
 msgid "Double-tap a book to open it"
-msgstr ""
+msgstr "Chạm đúp vào một cuốn sách để mở nó"
 
 #: lib/bookshelf_gestures.lua:46
 msgid "Long-press the page number to change the shelf style"
-msgstr ""
+msgstr "Nhấn giữ số trang để đổi kiểu kệ"
 
 #: lib/bookshelf_gestures.lua:47
 msgid "Tap the page number to go to a page"
-msgstr ""
+msgstr "Chạm vào số trang để đến một trang"
 
 #: lib/bookshelf_gestures.lua:48
 msgid "Long-press the arrows to skip ten pages"
-msgstr ""
+msgstr "Nhấn giữ các mũi tên để nhảy qua mười trang"
 
 #: lib/bookshelf_gestures.lua:49
 msgid "Long-press a micro-module to edit it"
-msgstr ""
+msgstr "Nhấn giữ một mô-đun nhỏ để chỉnh sửa"
 
 #: lib/bookshelf_gestures.lua:50
 msgid "Tap a micro-module to use it"
-msgstr ""
+msgstr "Chạm vào một mô-đun nhỏ để sử dụng"
 
 #: lib/bookshelf_gestures.lua:51
 msgid "Long-press a start menu entry to edit it"
-msgstr ""
+msgstr "Nhấn giữ một mục trong menu bắt đầu để chỉnh sửa"
 
 #: lib/bookshelf_gestures.lua:52
 msgid "Long-press an ornament to adjust it"
-msgstr ""
+msgstr "Nhấn giữ một vật trang trí để điều chỉnh"
 
 #: lib/bookshelf_gestures.lua:53
 msgid "Tap an ornament to run its action"
-msgstr ""
+msgstr "Chạm vào một vật trang trí để thực hiện hành động của nó"
 
 #: lib/bookshelf_gestures.lua:104
 msgid "All gestures"
-msgstr ""
+msgstr "Tất cả các thao tác"
 
 #: lib/bookshelf_hero_card.lua:413 lib/bookshelf_widget.lua:15871
 msgid "Stop"
@@ -2165,22 +2165,29 @@ msgid ""
 "Ready-made packs:\n"
 "%2"
 msgstr ""
+"Đặt tệp PNG hoặc SVG vào\n"
+"%1\n"
+"\n"
+"Một thư mục chứa chúng bên trong đó sẽ thành một gói, có tab riêng ở đây.\n"
+"\n"
+"Các gói có sẵn:\n"
+"%2"
 
 #: lib/bookshelf_ornament_browser.lua:273
 msgid "Select all"
-msgstr ""
+msgstr "Chọn tất cả"
 
 #: lib/bookshelf_ornament_browser.lua:273
 msgid "Select none"
-msgstr ""
+msgstr "Bỏ chọn tất cả"
 
 #: lib/bookshelf_ornament_browser.lua:328
 msgid "Ornament collection"
-msgstr ""
+msgstr "Bộ sưu tập vật trang trí"
 
 #: lib/bookshelf_ornament_browser.lua:328
 msgid "Swap for"
-msgstr ""
+msgstr "Đổi lấy"
 
 #: lib/bookshelf_ornament_browser.lua:351
 msgid ""
@@ -2198,47 +2205,47 @@ msgstr ""
 
 #: lib/bookshelf_ornament_menu.lua:186
 msgid "switched off"
-msgstr ""
+msgstr "đã tắt"
 
 #: lib/bookshelf_ornament_menu.lua:293
 msgid "Mirror: off"
-msgstr ""
+msgstr "Lật: tắt"
 
 #: lib/bookshelf_ornament_menu.lua:294
 msgid "Mirror: always"
-msgstr ""
+msgstr "Lật: luôn luôn"
 
 #: lib/bookshelf_ornament_menu.lua:295
 msgid "Mirror: alternate"
-msgstr ""
+msgstr "Lật: xen kẽ"
 
 #: lib/bookshelf_ornament_menu.lua:312
 msgid "Place: off"
-msgstr ""
+msgstr "Vị trí: tắt"
 
 #: lib/bookshelf_ornament_menu.lua:313
 msgid "Place: %1 of %2"
-msgstr ""
+msgstr "Vị trí: %1 của %2"
 
 #: lib/bookshelf_ornament_menu.lua:318
 msgid "Size: %1"
-msgstr ""
+msgstr "Kích thước: %1"
 
 #: lib/bookshelf_ornament_menu.lua:321
 msgid "Padding: %1"
-msgstr ""
+msgstr "Khoảng đệm: %1"
 
 #: lib/bookshelf_ornament_menu.lua:327
 msgid "Height: %1"
-msgstr ""
+msgstr "Chiều cao: %1"
 
 #: lib/bookshelf_ornament_menu.lua:338
 msgid "Anchor: bottom"
-msgstr ""
+msgstr "Neo: dưới"
 
 #: lib/bookshelf_ornament_menu.lua:338
 msgid "Anchor: top"
-msgstr ""
+msgstr "Neo: trên"
 
 #: lib/bookshelf_ornament_menu.lua:342 micromodules/quote_of_day.lua:205
 msgid "Tap: %1"
@@ -2246,35 +2253,35 @@ msgstr "Chạm: %1"
 
 #: lib/bookshelf_ornament_menu.lua:342 lib/bookshelf_ornament_menu.lua:435
 msgid "Zoom"
-msgstr ""
+msgstr "Phóng to"
 
 #: lib/bookshelf_ornament_menu.lua:342
 msgid "set"
-msgstr ""
+msgstr "đã đặt"
 
 #: lib/bookshelf_ornament_menu.lua:343
 msgid "Tap: none"
-msgstr ""
+msgstr "Chạm: không"
 
 #: lib/bookshelf_ornament_menu.lua:347
 msgid "Swap"
-msgstr ""
+msgstr "Đổi"
 
 #: lib/bookshelf_ornament_menu.lua:362
 msgid "Shuffle all"
-msgstr ""
+msgstr "Xáo trộn tất cả"
 
 #: lib/bookshelf_ornament_menu.lua:365
 msgid "Shuffle every ornament into a new order? Your swaps and moves are lost."
-msgstr ""
+msgstr "Xáo trộn mọi vật trang trí theo thứ tự mới? Các lượt đổi và di chuyển của bạn sẽ mất."
 
 #: lib/bookshelf_ornament_menu.lua:366
 msgid "Shuffle"
-msgstr ""
+msgstr "Xáo trộn"
 
 #: lib/bookshelf_ornament_menu.lua:428
 msgid "No action"
-msgstr ""
+msgstr "Không có hành động"
 
 #: lib/bookshelf_ornament_menu.lua:441 micromodules/quote_of_day.lua:207
 #: micromodules/reading_streak.lua:83
@@ -2283,23 +2290,23 @@ msgstr "Hành động nhấn"
 
 #: lib/bookshelf_pack_editor.lua:137
 msgid "Pack editor: %1"
-msgstr ""
+msgstr "Trình chỉnh sửa gói: %1"
 
 #: lib/bookshelf_pack_editor.lua:240
 msgid "%1 on, %2 off · page %3 of %4 · swipe for more · tap a piece to adjust it"
-msgstr ""
+msgstr "%1 bật, %2 tắt · trang %3 của %4 · vuốt để xem thêm · chạm vào một món để điều chỉnh"
 
 #: lib/bookshelf_pack_editor.lua:276
 msgid "Saved the settings of %1 pieces into the %2 pack."
-msgstr ""
+msgstr "Đã lưu cài đặt của %1 món vào gói %2."
 
 #: lib/bookshelf_pack_editor.lua:302
 msgid "There are no ornament packs to edit."
-msgstr ""
+msgstr "Không có gói vật trang trí nào để chỉnh sửa."
 
 #: lib/bookshelf_pack_editor.lua:312
 msgid "Pack editor"
-msgstr ""
+msgstr "Trình chỉnh sửa gói"
 
 #: lib/bookshelf_page_count_dialog.lua:67
 msgid "There are no scanned page counts to delete."
@@ -2389,7 +2396,7 @@ msgstr "Mọi sách, thay thế số trang trước đó"
 
 #: lib/bookshelf_page_count_dialog.lua:272
 msgid "Finds how long each book in %1 is (%2 books), for spine thickness, page count badges, sorting and the page count token."
-msgstr ""
+msgstr "Tìm độ dài của từng cuốn sách trong %1 (%2 cuốn), dùng cho độ dày gáy sách, huy hiệu số trang, sắp xếp và token số trang."
 
 #: lib/bookshelf_page_count_dialog.lua:274
 msgid "Finds how long each book is, for spine thickness, page count badges, sorting and the page count token."
@@ -2409,7 +2416,7 @@ msgstr "Trích xuất số trang"
 
 #: lib/bookshelf_page_count_dialog.lua:394
 msgid "No books to count here."
-msgstr ""
+msgstr "Không có sách nào để đếm ở đây."
 
 #: lib/bookshelf_pagination.lua:85 lib/bookshelf_widget.lua:6946
 msgid "Page %1 of %2+"
@@ -2432,27 +2439,27 @@ msgstr "các sách"
 
 #: lib/bookshelf_plank_browser.lua:114
 msgid "Plain color"
-msgstr ""
+msgstr "Màu trơn"
 
 #: lib/bookshelf_plank_browser.lua:115
 msgid "Oak"
-msgstr ""
+msgstr "Oak"
 
 #: lib/bookshelf_plank_browser.lua:125
 msgid "More planks come with packs: see Add ornaments in the Ornament collection."
-msgstr ""
+msgstr "Có thêm ván kệ trong các gói: xem Thêm vật trang trí trong Bộ sưu tập vật trang trí."
 
 #: lib/bookshelf_plank_browser.lua:147 lib/bookshelf_theme_pack.lua:443
 msgid "%1 (%2 pack)"
-msgstr ""
+msgstr "%1 (gói %2)"
 
 #: lib/bookshelf_plank_browser.lua:217
 msgid "Built-in"
-msgstr ""
+msgstr "Tích hợp sẵn"
 
 #: lib/bookshelf_plank_browser.lua:230
 msgid "Shelf plank"
-msgstr ""
+msgstr "Ván kệ"
 
 #: lib/bookshelf_reader_park.lua:437 lib/bookshelf_widget.lua:24144
 #: main.lua:1299
@@ -2781,7 +2788,7 @@ msgstr "Di chuyển xuống"
 
 #: lib/bookshelf_settings.lua:1501 lib/bookshelf_wallpaper_browser.lua:152
 msgid "%1 pack"
-msgstr ""
+msgstr "Gói %1"
 
 #: lib/bookshelf_settings.lua:1529
 msgid "Default wallpaper image: %1"
@@ -2869,7 +2876,7 @@ msgstr "Tối"
 
 #: lib/bookshelf_settings.lua:1716
 msgid "Add theme…"
-msgstr ""
+msgstr "Thêm giao diện…"
 
 #: lib/bookshelf_settings.lua:1725
 msgid ""
@@ -2880,18 +2887,24 @@ msgid ""
 "Ready-made theme packs:\n"
 "%2"
 msgstr ""
+"Một gói giao diện kết hợp ảnh nền, ván kệ, màu sắc và vật trang trí, và được chọn ở đây. Để thêm một gói, hãy sao chép thư mục của nó vào\n"
+"%1\n"
+"rồi mở lại menu này.\n"
+"\n"
+"Các gói giao diện có sẵn:\n"
+"%2"
 
 #: lib/bookshelf_settings.lua:1750
 msgid "No theme pack"
-msgstr ""
+msgstr "Không có gói giao diện"
 
 #: lib/bookshelf_settings.lua:1757
 msgid "Theme pack off"
-msgstr ""
+msgstr "Gói giao diện đang tắt"
 
 #: lib/bookshelf_settings.lua:1770
 msgid "%1 theme on"
-msgstr ""
+msgstr "Giao diện %1 đang bật"
 
 #: lib/bookshelf_settings.lua:1913 lib/bookshelf_settings.lua:1920
 #: lib/bookshelf_settings.lua:2280 lib/bookshelf_settings.lua:2285
@@ -2904,19 +2917,19 @@ msgstr "Màu ván kệ (% đen)"
 
 #: lib/bookshelf_settings.lua:1972
 msgid "Shelf plank: %1"
-msgstr ""
+msgstr "Ván kệ: %1"
 
 #: lib/bookshelf_settings.lua:1973
 msgid "color"
-msgstr ""
+msgstr "màu"
 
 #: lib/bookshelf_settings.lua:1975
 msgid "The plank the Spines style stands its books on: a plain color, the built-in oak, or a plank from an ornament pack."
-msgstr ""
+msgstr "Ván kệ mà kiểu Gáy sách đặt sách lên: một màu trơn, gỗ Oak tích hợp sẵn, hoặc một ván từ gói vật trang trí."
 
 #: lib/bookshelf_settings.lua:2144
 msgid "Ornament collection: %1/%2 enabled"
-msgstr ""
+msgstr "Bộ sưu tập vật trang trí: %1/%2 đang bật"
 
 #: lib/bookshelf_settings.lua:2149
 msgid ""
@@ -2930,27 +2943,27 @@ msgstr ""
 
 #: lib/bookshelf_settings.lua:2194
 msgid "New ornaments: %1"
-msgstr ""
+msgstr "Vật trang trí mới: %1"
 
 #: lib/bookshelf_settings.lua:2194
 msgid "first"
-msgstr ""
+msgstr "đầu tiên"
 
 #: lib/bookshelf_settings.lua:2194
 msgid "last"
-msgstr ""
+msgstr "cuối cùng"
 
 #: lib/bookshelf_settings.lua:2196
 msgid "Where ornaments you add join the order they are dealt onto the shelf in. First: you see them straight away, and the pieces already there move along to make room. Last: your shelf stays as it is, and the new ones come round in their turn."
-msgstr ""
+msgstr "Vị trí mà vật trang trí bạn thêm vào gia nhập thứ tự được dàn lên kệ. Đầu tiên: bạn thấy chúng ngay lập tức, và các món đã có sẽ dịch chuyển để nhường chỗ. Cuối cùng: kệ của bạn giữ nguyên như cũ, và các món mới sẽ đến lượt mình sau."
 
 #: lib/bookshelf_settings.lua:2198
 msgid "First, so you see them"
-msgstr ""
+msgstr "Đầu tiên, để bạn thấy chúng ngay"
 
 #: lib/bookshelf_settings.lua:2199
 msgid "Last, so your shelf stays put"
-msgstr ""
+msgstr "Cuối cùng, để kệ của bạn giữ nguyên"
 
 #: lib/bookshelf_settings.lua:2229
 msgid "Accent colors"
@@ -2958,7 +2971,7 @@ msgstr "Màu nhấn"
 
 #: lib/bookshelf_settings.lua:2241
 msgid "Shelf theme: %1, %2"
-msgstr ""
+msgstr "Giao diện kệ: %1, %2"
 
 #: lib/bookshelf_settings.lua:2242
 msgid "Shelf theme: %1"
@@ -2972,6 +2985,11 @@ msgid ""
 "\n"
 "Theme packs installed in the ornaments folder are listed below: choosing one uses its wallpaper, plank, colors and ornaments together. No theme pack puts your own back."
 msgstr ""
+"Màu sáng hoặc tối cho kệ, độc lập với chế độ đêm của KOReader -- để bạn có thể giữ phần còn lại của KOReader ở chế độ sáng mà vẫn có một kệ tối.\n"
+"\n"
+"Bìa sách, ảnh nền và vật trang trí đều là hình ảnh nên không bao giờ bị đảo màu; chỉ màu riêng của kệ thay đổi.\n"
+"\n"
+"Các gói giao diện đã cài trong thư mục vật trang trí được liệt kê bên dưới: chọn một gói sẽ dùng ảnh nền, ván kệ, màu sắc và vật trang trí của gói đó cùng nhau. Không có gói giao diện sẽ đưa màu của riêng bạn trở lại."
 
 #: lib/bookshelf_settings.lua:2334
 msgid "◐ Editing night-mode colors (tap to switch)"
@@ -3187,15 +3205,15 @@ msgstr "Khôi phục lại màu sắc mặc định"
 
 #: lib/bookshelf_settings.lua:2756
 msgid "Color theme: %1"
-msgstr ""
+msgstr "Giao diện màu: %1"
 
 #: lib/bookshelf_settings.lua:2756 lib/bookshelf_settings.lua:2761
 msgid "Your own"
-msgstr ""
+msgstr "Của riêng bạn"
 
 #: lib/bookshelf_settings.lua:2758
 msgid "Your own colors, or a pack's. While a pack's colors are in use the rows below show them; choosing Your own brings yours back exactly as they were."
-msgstr ""
+msgstr "Màu của riêng bạn, hoặc màu của một gói. Trong khi màu của một gói đang được dùng, các hàng bên dưới sẽ hiển thị chúng; chọn Của riêng bạn sẽ đưa màu của bạn trở lại y như trước."
 
 #: lib/bookshelf_settings.lua:2883
 msgid "Cover badge size"
@@ -3494,15 +3512,15 @@ msgstr "Kệ gáy sách vẽ một hốc lõm phía sau các cuốn sách và m�
 
 #: lib/bookshelf_settings.lua:3663
 msgid "Plank designs: none in use"
-msgstr ""
+msgstr "Hoa văn ván kệ: không dùng"
 
 #: lib/bookshelf_settings.lua:3664
 msgid "Plank designs: %1"
-msgstr ""
+msgstr "Hoa văn ván kệ: %1"
 
 #: lib/bookshelf_settings.lua:3666
 msgid "Draw the plank design you have chosen (Oak, or one from an ornament pack) on spine shelves. Drawing it is slow on some black and white e-readers; turn this off to use the plain plank color instead. Choosing a plank again, in the Shelf plank picker, turns this back on."
-msgstr ""
+msgstr "Vẽ hoa văn ván kệ bạn đã chọn (Oak, hoặc một ván từ gói vật trang trí) trên kệ gáy sách. Việc vẽ này chậm trên một số máy đọc sách đen trắng; tắt tùy chọn này để dùng màu ván trơn thay thế. Chọn lại một ván kệ, trong bộ chọn Ván kệ, sẽ bật lại tùy chọn này."
 
 #: lib/bookshelf_settings.lua:3684
 msgid "Instant book close (beta)"
@@ -3594,11 +3612,11 @@ msgstr "Việc chạm vào một cuốn sách trong kệ toàn màn hình sẽ l
 
 #: lib/bookshelf_settings.lua:3959
 msgid "Bookshelf gestures"
-msgstr ""
+msgstr "Thao tác Bookshelf"
 
 #: lib/bookshelf_settings.lua:3960
 msgid "Switch off any of Bookshelf's own gestures. A gesture switched off does nothing on the shelf. Tapping a book and swiping between pages always work."
-msgstr ""
+msgstr "Tắt bất kỳ thao tác riêng nào của Bookshelf. Một thao tác đã tắt sẽ không làm gì trên kệ. Chạm vào sách và vuốt giữa các trang luôn hoạt động."
 
 #: lib/bookshelf_settings.lua:3968
 msgid "Double tap to open books"
@@ -3822,7 +3840,7 @@ msgstr "BETA: Đọc calibre metadata.calibre"
 
 #: lib/bookshelf_settings.lua:4561
 msgid "For users with a Calibre-managed library. Reads the metadata.calibre file in your home folder, or the folder above it, to fill in title, authors, series, tags, language and description for every book at once, with no per-book extraction. Calibre's values take priority over the metadata KOReader extracted from the book file itself. Anything you have edited in Book information still wins over both. Covers and page counts always come from KOReader."
-msgstr ""
+msgstr "Dành cho người dùng có thư viện quản lý bằng Calibre. Đọc tệp metadata.calibre trong thư mục home của bạn, hoặc thư mục cha của nó, để điền tiêu đề, tác giả, series, thẻ, ngôn ngữ và mô tả cho mọi sách cùng lúc, không cần trích xuất từng cuốn. Giá trị của Calibre được ưu tiên hơn metadata mà KOReader trích xuất từ chính tệp sách. Bất cứ điều gì bạn đã chỉnh sửa trong Thông tin sách vẫn thắng cả hai. Bìa và số trang luôn lấy từ KOReader."
 
 #: lib/bookshelf_settings.lua:4596
 msgid "BETA: Kobo library shelf"
@@ -4047,7 +4065,7 @@ msgstr "Đã cài đặt: v"
 
 #: lib/bookshelf_settings.lua:5918
 msgid "Pack editor…"
-msgstr ""
+msgstr "Trình chỉnh sửa gói…"
 
 #: lib/bookshelf_settings.lua:5963
 msgid "Flexible shelf widths"
@@ -4824,19 +4842,19 @@ msgstr "Ảnh được nạp từ %1"
 
 #: lib/bookshelf_wallpaper_browser.lua:199
 msgid "Full screen shelves show the default wallpaper."
-msgstr ""
+msgstr "Kệ toàn màn hình hiển thị ảnh nền mặc định."
 
 #: lib/bookshelf_wallpaper_browser.lua:244
 msgid "Yours"
-msgstr ""
+msgstr "Của bạn"
 
 #: lib/bookshelf_wallpaper_browser.lua:253
 msgid "Default wallpaper image"
-msgstr ""
+msgstr "Ảnh nền mặc định"
 
 #: lib/bookshelf_wallpaper_browser.lua:253
 msgid "Full screen shelves image"
-msgstr ""
+msgstr "Ảnh kệ toàn màn hình"
 
 #: lib/bookshelf_widget.lua:1657
 msgid "Search results"
@@ -5735,7 +5753,7 @@ msgstr "Chỉnh sửa kệ…"
 
 #: main.lua:785
 msgid "Wallpaper, ornaments and colors"
-msgstr ""
+msgstr "Ảnh nền, vật trang trí và màu sắc"
 
 #: main.lua:798
 msgid "Hardcover enrichment"
@@ -5823,7 +5841,7 @@ msgstr "Sách: mở các mô-đun nhỏ"
 
 #: main.lua:1148
 msgid "Bookshelf: shuffle ornaments"
-msgstr ""
+msgstr "Bookshelf: xáo trộn vật trang trí"
 
 #: main.lua:1154
 msgid "Bookshelf: go to home screen"
@@ -6192,15 +6210,15 @@ msgstr "Chỉ dùng các màu được chọn."
 
 #: micromodules/quote_of_day.lua:176
 msgid "Looking for highlights: book %1 of %2"
-msgstr ""
+msgstr "Đang tìm đoạn tô sáng: sách %1 của %2"
 
 #: micromodules/quote_of_day.lua:184
 msgid "Stopped. So far: %1 highlights in %2 books."
-msgstr ""
+msgstr "Đã dừng. Cho đến nay: %1 đoạn tô sáng trong %2 sách."
 
 #: micromodules/quote_of_day.lua:185
 msgid "Found %1 highlights in %2 books."
-msgstr ""
+msgstr "Đã tìm thấy %1 đoạn tô sáng trong %2 sách."
 
 #: micromodules/quote_of_day.lua:194 micromodules/quote_of_day.lua:203
 msgid "Every menu open"
@@ -6236,7 +6254,7 @@ msgstr "Sách bị loại trừ: %1"
 
 #: micromodules/quote_of_day.lua:216
 msgid "Scan library for highlights"
-msgstr ""
+msgstr "Quét thư viện để tìm đoạn tô sáng"
 
 #: micromodules/quote_of_day.lua:221
 msgid "all"
@@ -6364,15 +6382,15 @@ msgstr "Tùy chỉnh..."
 
 #: micromodules/reading_goal.lua:441
 msgid "Books read outside KOReader this year: %1"
-msgstr ""
+msgstr "Sách đã đọc ngoài KOReader trong năm nay: %1"
 
 #: micromodules/reading_goal.lua:447
 msgid "Books read outside KOReader this year"
-msgstr ""
+msgstr "Sách đã đọc ngoài KOReader trong năm nay"
 
 #: micromodules/reading_goal.lua:448
 msgid "Paper books, audiobooks or another reader: added to the yearly goal."
-msgstr ""
+msgstr "Sách giấy, sách nói hoặc một trình đọc khác: được thêm vào mục tiêu hằng năm."
 
 #: micromodules/reading_goal.lua:480 micromodules/reading_goal.lua:599
 msgid "Reading goals"
@@ -6440,7 +6458,7 @@ msgstr "Thách thức hàng năm"
 
 #: micromodules/reading_goal.lua:530
 msgid "%1 min"
-msgstr ""
+msgstr "%1 phút"
 
 #: micromodules/reading_goal.lua:534
 msgid "%1 min left"

@@ -547,11 +547,11 @@ msgstr "Aggiunti di recente"
 
 #: lib/bookshelf_chip_editor.lua:1562
 msgid "No collections yet"
-msgstr ""
+msgstr "Nessuna raccolta ancora"
 
 #: lib/bookshelf_chip_editor.lua:1587 lib/bookshelf_chip_editor.lua:1866
 msgid "In a collection"
-msgstr ""
+msgstr "In una raccolta"
 
 #: lib/bookshelf_chip_editor.lua:1703
 msgid "Show as"
@@ -609,7 +609,7 @@ msgstr "Non letto"
 
 #: lib/bookshelf_chip_editor.lua:1865
 msgid "Unread standalone"
-msgstr ""
+msgstr "Singolo non letto"
 
 #: lib/bookshelf_chip_editor.lua:1867 micromodules/random_unread.lua:232
 msgid "All books"
@@ -638,15 +638,15 @@ msgstr "Quanti: %1"
 
 #: lib/bookshelf_chip_editor.lua:1951
 msgid "Collection: %1 (not found)"
-msgstr ""
+msgstr "Raccolta: %1 (non trovata)"
 
 #: lib/bookshelf_chip_editor.lua:1953
 msgid "Collection: %1"
-msgstr ""
+msgstr "Raccolta: %1"
 
 #: lib/bookshelf_chip_editor.lua:1955
 msgid "Choose collection"
-msgstr ""
+msgstr "Scegli raccolta"
 
 #: lib/bookshelf_chip_editor.lua:2071 lib/bookshelf_chip_editor.lua:2891
 #: lib/bookshelf_chip_editor.lua:3068 lib/bookshelf_chip_editor.lua:3126
@@ -993,7 +993,7 @@ msgstr "Disponi i libri nella raccolta"
 
 #: lib/bookshelf_color_palette.lua:390
 msgid "or"
-msgstr ""
+msgstr "o"
 
 #: lib/bookshelf_color_palette.lua:411 lib/bookshelf_font_picker.lua:192
 #: lib/bookshelf_line_editor.lua:152 lib/bookshelf_line_editor.lua:539
@@ -1168,7 +1168,7 @@ msgstr "Scegli font"
 
 #: lib/bookshelf_gestures.lua:24
 msgid "Swipe up for full screen shelves"
-msgstr ""
+msgstr "Scorrere in alto entra negli scaffali a schermo intero"
 
 #: lib/bookshelf_gestures.lua:26
 msgid "Swipe down leaves full screen shelves"
@@ -1180,87 +1180,87 @@ msgstr "Se attivato, scorrere verso il basso negli scaffali a schermo intero fa 
 
 #: lib/bookshelf_gestures.lua:34
 msgid "Swipe down on the shelf to refresh the library"
-msgstr ""
+msgstr "Scorrere in basso sullo scaffale aggiorna la libreria"
 
 #: lib/bookshelf_gestures.lua:35
 msgid "Pinch or spread to change the shelf's size"
-msgstr ""
+msgstr "Avvicinare o allontanare le dita cambia le dimensioni dello scaffale"
 
 #: lib/bookshelf_gestures.lua:36
 msgid "Swipe down or up on the top panel for fewer or more rows"
-msgstr ""
+msgstr "Scorrere in basso o in alto sul pannello superiore riduce o aumenta le righe"
 
 #: lib/bookshelf_gestures.lua:37
 msgid "Swipe left or right on the top panel to preview the next book"
-msgstr ""
+msgstr "Scorrere a sinistra o a destra sul pannello superiore mostra l'anteprima del libro successivo"
 
 #: lib/bookshelf_gestures.lua:38
 msgid "Long-press the top panel for book details"
-msgstr ""
+msgstr "Tenere premuto il pannello superiore mostra i dettagli del libro"
 
 #: lib/bookshelf_gestures.lua:39
 msgid "Tap the stars to rate a book"
-msgstr ""
+msgstr "Toccare le stelle valuta un libro"
 
 #: lib/bookshelf_gestures.lua:40
 msgid "Tap the description to read all of it"
-msgstr ""
+msgstr "Toccare la descrizione la mostra per intero"
 
 #: lib/bookshelf_gestures.lua:41
 msgid "Long-press a shelf button to edit the shelf"
-msgstr ""
+msgstr "Tenere premuto un pulsante scaffale apre la modifica dello scaffale"
 
 #: lib/bookshelf_gestures.lua:42
 msgid "Swipe the shelf buttons to see more of them"
-msgstr ""
+msgstr "Scorrere sui pulsanti scaffale ne mostra altri"
 
 #: lib/bookshelf_gestures.lua:43
 msgid "Long-press a book for its details"
-msgstr ""
+msgstr "Tenere premuto un libro mostra i suoi dettagli"
 
 #: lib/bookshelf_gestures.lua:44
 msgid "Long-press a series, author or folder for its menu"
-msgstr ""
+msgstr "Tenere premuto una serie, un autore o una cartella apre il relativo menu"
 
 #: lib/bookshelf_gestures.lua:45
 msgid "Double-tap a book to open it"
-msgstr ""
+msgstr "Il doppio tocco su un libro lo apre"
 
 #: lib/bookshelf_gestures.lua:46
 msgid "Long-press the page number to change the shelf style"
-msgstr ""
+msgstr "Tenere premuto il numero di pagina cambia lo stile dello scaffale"
 
 #: lib/bookshelf_gestures.lua:47
 msgid "Tap the page number to go to a page"
-msgstr ""
+msgstr "Toccare il numero di pagina apre il passaggio a una pagina"
 
 #: lib/bookshelf_gestures.lua:48
 msgid "Long-press the arrows to skip ten pages"
-msgstr ""
+msgstr "Tenere premute le frecce salta dieci pagine"
 
 #: lib/bookshelf_gestures.lua:49
 msgid "Long-press a micro-module to edit it"
-msgstr ""
+msgstr "Tenere premuto un micro-modulo ne apre la modifica"
 
 #: lib/bookshelf_gestures.lua:50
 msgid "Tap a micro-module to use it"
-msgstr ""
+msgstr "Toccare un micro-modulo lo attiva"
 
 #: lib/bookshelf_gestures.lua:51
 msgid "Long-press a start menu entry to edit it"
-msgstr ""
+msgstr "Tenere premuto una voce del menu start ne apre la modifica"
 
 #: lib/bookshelf_gestures.lua:52
 msgid "Long-press an ornament to adjust it"
-msgstr ""
+msgstr "Tenere premuto un ornamento apre le sue impostazioni"
 
 #: lib/bookshelf_gestures.lua:53
 msgid "Tap an ornament to run its action"
-msgstr ""
+msgstr "Toccare un ornamento esegue la sua azione"
 
 #: lib/bookshelf_gestures.lua:104
 msgid "All gestures"
-msgstr ""
+msgstr "Tutti i gesti"
 
 #: lib/bookshelf_hero_card.lua:413 lib/bookshelf_widget.lua:15871
 msgid "Stop"
@@ -2167,22 +2167,29 @@ msgid ""
 "Ready-made packs:\n"
 "%2"
 msgstr ""
+"Copia file PNG o SVG in\n"
+"%1\n"
+"\n"
+"Una cartella che li contiene diventa un pacchetto, con una scheda propria qui.\n"
+"\n"
+"Pacchetti già pronti:\n"
+"%2"
 
 #: lib/bookshelf_ornament_browser.lua:273
 msgid "Select all"
-msgstr ""
+msgstr "Seleziona tutto"
 
 #: lib/bookshelf_ornament_browser.lua:273
 msgid "Select none"
-msgstr ""
+msgstr "Deseleziona tutto"
 
 #: lib/bookshelf_ornament_browser.lua:328
 msgid "Ornament collection"
-msgstr ""
+msgstr "Collezione di ornamenti"
 
 #: lib/bookshelf_ornament_browser.lua:328
 msgid "Swap for"
-msgstr ""
+msgstr "Scambia con"
 
 #: lib/bookshelf_ornament_browser.lua:351
 msgid ""
@@ -2200,47 +2207,47 @@ msgstr ""
 
 #: lib/bookshelf_ornament_menu.lua:186
 msgid "switched off"
-msgstr ""
+msgstr "disattivato"
 
 #: lib/bookshelf_ornament_menu.lua:293
 msgid "Mirror: off"
-msgstr ""
+msgstr "Specchio: off"
 
 #: lib/bookshelf_ornament_menu.lua:294
 msgid "Mirror: always"
-msgstr ""
+msgstr "Specchio: sempre"
 
 #: lib/bookshelf_ornament_menu.lua:295
 msgid "Mirror: alternate"
-msgstr ""
+msgstr "Specchio: alternato"
 
 #: lib/bookshelf_ornament_menu.lua:312
 msgid "Place: off"
-msgstr ""
+msgstr "Posizione: off"
 
 #: lib/bookshelf_ornament_menu.lua:313
 msgid "Place: %1 of %2"
-msgstr ""
+msgstr "Posizione: %1 di %2"
 
 #: lib/bookshelf_ornament_menu.lua:318
 msgid "Size: %1"
-msgstr ""
+msgstr "Dimensione: %1"
 
 #: lib/bookshelf_ornament_menu.lua:321
 msgid "Padding: %1"
-msgstr ""
+msgstr "Spaziatura: %1"
 
 #: lib/bookshelf_ornament_menu.lua:327
 msgid "Height: %1"
-msgstr ""
+msgstr "Altezza: %1"
 
 #: lib/bookshelf_ornament_menu.lua:338
 msgid "Anchor: bottom"
-msgstr ""
+msgstr "Ancora: basso"
 
 #: lib/bookshelf_ornament_menu.lua:338
 msgid "Anchor: top"
-msgstr ""
+msgstr "Ancora: alto"
 
 #: lib/bookshelf_ornament_menu.lua:342 micromodules/quote_of_day.lua:205
 msgid "Tap: %1"
@@ -2248,35 +2255,35 @@ msgstr "Tocco: %1"
 
 #: lib/bookshelf_ornament_menu.lua:342 lib/bookshelf_ornament_menu.lua:435
 msgid "Zoom"
-msgstr ""
+msgstr "Zoom"
 
 #: lib/bookshelf_ornament_menu.lua:342
 msgid "set"
-msgstr ""
+msgstr "impostato"
 
 #: lib/bookshelf_ornament_menu.lua:343
 msgid "Tap: none"
-msgstr ""
+msgstr "Tocco: nessuno"
 
 #: lib/bookshelf_ornament_menu.lua:347
 msgid "Swap"
-msgstr ""
+msgstr "Scambia"
 
 #: lib/bookshelf_ornament_menu.lua:362
 msgid "Shuffle all"
-msgstr ""
+msgstr "Rimescola tutto"
 
 #: lib/bookshelf_ornament_menu.lua:365
 msgid "Shuffle every ornament into a new order? Your swaps and moves are lost."
-msgstr ""
+msgstr "Rimescolare tutti gli ornamenti in un nuovo ordine? Gli scambi e gli spostamenti effettuati andranno persi."
 
 #: lib/bookshelf_ornament_menu.lua:366
 msgid "Shuffle"
-msgstr ""
+msgstr "Rimescola"
 
 #: lib/bookshelf_ornament_menu.lua:428
 msgid "No action"
-msgstr ""
+msgstr "Nessuna azione"
 
 #: lib/bookshelf_ornament_menu.lua:441 micromodules/quote_of_day.lua:207
 #: micromodules/reading_streak.lua:83
@@ -2285,23 +2292,23 @@ msgstr "Azione al tocco"
 
 #: lib/bookshelf_pack_editor.lua:137
 msgid "Pack editor: %1"
-msgstr ""
+msgstr "Editor pacchetti: %1"
 
 #: lib/bookshelf_pack_editor.lua:240
 msgid "%1 on, %2 off · page %3 of %4 · swipe for more · tap a piece to adjust it"
-msgstr ""
+msgstr "%1 attivi, %2 disattivi · pagina %3 di %4 · scorri per vedere altro · tocca un elemento per regolarlo"
 
 #: lib/bookshelf_pack_editor.lua:276
 msgid "Saved the settings of %1 pieces into the %2 pack."
-msgstr ""
+msgstr "Impostazioni di %1 elementi salvate nel pacchetto %2."
 
 #: lib/bookshelf_pack_editor.lua:302
 msgid "There are no ornament packs to edit."
-msgstr ""
+msgstr "Non ci sono pacchetti di ornamenti da modificare."
 
 #: lib/bookshelf_pack_editor.lua:312
 msgid "Pack editor"
-msgstr ""
+msgstr "Editor pacchetti"
 
 #: lib/bookshelf_page_count_dialog.lua:67
 msgid "There are no scanned page counts to delete."
@@ -2391,7 +2398,7 @@ msgstr "Tutti i libri, sostituendo i numeri precedenti"
 
 #: lib/bookshelf_page_count_dialog.lua:272
 msgid "Finds how long each book in %1 is (%2 books), for spine thickness, page count badges, sorting and the page count token."
-msgstr ""
+msgstr "Trova la lunghezza di ogni libro in %1 (%2 libri), per lo spessore dei dorsi, i distintivi del numero di pagine, l'ordinamento e il token del numero di pagine."
 
 #: lib/bookshelf_page_count_dialog.lua:274
 msgid "Finds how long each book is, for spine thickness, page count badges, sorting and the page count token."
@@ -2411,7 +2418,7 @@ msgstr "Estrai il numero di pagine"
 
 #: lib/bookshelf_page_count_dialog.lua:394
 msgid "No books to count here."
-msgstr ""
+msgstr "Nessun libro da contare qui."
 
 #: lib/bookshelf_pagination.lua:85 lib/bookshelf_widget.lua:6946
 msgid "Page %1 of %2+"
@@ -2434,27 +2441,27 @@ msgstr "libri"
 
 #: lib/bookshelf_plank_browser.lua:114
 msgid "Plain color"
-msgstr ""
+msgstr "Tinta unita"
 
 #: lib/bookshelf_plank_browser.lua:115
 msgid "Oak"
-msgstr ""
+msgstr "Rovere"
 
 #: lib/bookshelf_plank_browser.lua:125
 msgid "More planks come with packs: see Add ornaments in the Ornament collection."
-msgstr ""
+msgstr "Altri ripiani arrivano con i pacchetti: vedi Aggiungi ornamenti nella Collezione di ornamenti."
 
 #: lib/bookshelf_plank_browser.lua:147 lib/bookshelf_theme_pack.lua:443
 msgid "%1 (%2 pack)"
-msgstr ""
+msgstr "%1 (pacchetto %2)"
 
 #: lib/bookshelf_plank_browser.lua:217
 msgid "Built-in"
-msgstr ""
+msgstr "Integrato"
 
 #: lib/bookshelf_plank_browser.lua:230
 msgid "Shelf plank"
-msgstr ""
+msgstr "Ripiano scaffale"
 
 #: lib/bookshelf_reader_park.lua:437 lib/bookshelf_widget.lua:24144
 #: main.lua:1299
@@ -2783,7 +2790,7 @@ msgstr "Sposta giù"
 
 #: lib/bookshelf_settings.lua:1501 lib/bookshelf_wallpaper_browser.lua:152
 msgid "%1 pack"
-msgstr ""
+msgstr "Pacchetto %1"
 
 #: lib/bookshelf_settings.lua:1529
 msgid "Default wallpaper image: %1"
@@ -2871,7 +2878,7 @@ msgstr "Scuro"
 
 #: lib/bookshelf_settings.lua:1716
 msgid "Add theme…"
-msgstr ""
+msgstr "Aggiungi tema…"
 
 #: lib/bookshelf_settings.lua:1725
 msgid ""
@@ -2882,18 +2889,24 @@ msgid ""
 "Ready-made theme packs:\n"
 "%2"
 msgstr ""
+"Un pacchetto tema riunisce uno sfondo, un ripiano, i colori e gli ornamenti, e si sceglie qui. Per aggiungerne uno, copia la sua cartella in\n"
+"%1\n"
+"poi riapri questo menu.\n"
+"\n"
+"Pacchetti tema già pronti:\n"
+"%2"
 
 #: lib/bookshelf_settings.lua:1750
 msgid "No theme pack"
-msgstr ""
+msgstr "Nessun pacchetto tema"
 
 #: lib/bookshelf_settings.lua:1757
 msgid "Theme pack off"
-msgstr ""
+msgstr "Pacchetto tema disattivato"
 
 #: lib/bookshelf_settings.lua:1770
 msgid "%1 theme on"
-msgstr ""
+msgstr "Tema %1 attivato"
 
 #: lib/bookshelf_settings.lua:1913 lib/bookshelf_settings.lua:1920
 #: lib/bookshelf_settings.lua:2280 lib/bookshelf_settings.lua:2285
@@ -2906,19 +2919,19 @@ msgstr "Colore del ripiano dello scaffale (% di nero)"
 
 #: lib/bookshelf_settings.lua:1972
 msgid "Shelf plank: %1"
-msgstr ""
+msgstr "Ripiano scaffale: %1"
 
 #: lib/bookshelf_settings.lua:1973
 msgid "color"
-msgstr ""
+msgstr "colore"
 
 #: lib/bookshelf_settings.lua:1975
 msgid "The plank the Spines style stands its books on: a plain color, the built-in oak, or a plank from an ornament pack."
-msgstr ""
+msgstr "Il ripiano su cui lo stile Dorsi appoggia i libri: una tinta unita, il rovere integrato, o un ripiano da un pacchetto di ornamenti."
 
 #: lib/bookshelf_settings.lua:2144
 msgid "Ornament collection: %1/%2 enabled"
-msgstr ""
+msgstr "Collezione di ornamenti: %1/%2 attivi"
 
 #: lib/bookshelf_settings.lua:2149
 msgid ""
@@ -2932,27 +2945,27 @@ msgstr ""
 
 #: lib/bookshelf_settings.lua:2194
 msgid "New ornaments: %1"
-msgstr ""
+msgstr "Nuovi ornamenti: %1"
 
 #: lib/bookshelf_settings.lua:2194
 msgid "first"
-msgstr ""
+msgstr "primi"
 
 #: lib/bookshelf_settings.lua:2194
 msgid "last"
-msgstr ""
+msgstr "ultimi"
 
 #: lib/bookshelf_settings.lua:2196
 msgid "Where ornaments you add join the order they are dealt onto the shelf in. First: you see them straight away, and the pieces already there move along to make room. Last: your shelf stays as it is, and the new ones come round in their turn."
-msgstr ""
+msgstr "Dove si inseriscono nell'ordine i nuovi ornamenti che aggiungi, man mano che vengono distribuiti sullo scaffale. Primi: li vedi subito, e gli elementi già presenti si spostano per fare spazio. Ultimi: il tuo scaffale resta com'è, e i nuovi arrivano al loro turno."
 
 #: lib/bookshelf_settings.lua:2198
 msgid "First, so you see them"
-msgstr ""
+msgstr "Primi, così li vedi subito"
 
 #: lib/bookshelf_settings.lua:2199
 msgid "Last, so your shelf stays put"
-msgstr ""
+msgstr "Ultimi, così il tuo scaffale resta com'è"
 
 #: lib/bookshelf_settings.lua:2229
 msgid "Accent colors"
@@ -2960,7 +2973,7 @@ msgstr "Colori d'accento"
 
 #: lib/bookshelf_settings.lua:2241
 msgid "Shelf theme: %1, %2"
-msgstr ""
+msgstr "Tema scaffale: %1, %2"
 
 #: lib/bookshelf_settings.lua:2242
 msgid "Shelf theme: %1"
@@ -2974,6 +2987,11 @@ msgid ""
 "\n"
 "Theme packs installed in the ornaments folder are listed below: choosing one uses its wallpaper, plank, colors and ornaments together. No theme pack puts your own back."
 msgstr ""
+"Colori chiari o scuri per lo scaffale, indipendentemente dalla modalità notturna di KOReader -- così puoi tenere chiaro il resto di KOReader e avere comunque uno scaffale scuro.\n"
+"\n"
+"Copertine, sfondo e ornamenti sono immagini e non vengono mai invertiti; cambiano solo i colori propri dello scaffale.\n"
+"\n"
+"I pacchetti tema installati nella cartella degli ornamenti sono elencati qui sotto: sceglierne uno usa insieme il suo sfondo, il ripiano, i colori e gli ornamenti. Nessun pacchetto tema ripristina i tuoi."
 
 #: lib/bookshelf_settings.lua:2334
 msgid "◐ Editing night-mode colors (tap to switch)"
@@ -3189,15 +3207,15 @@ msgstr "Ripristina colori predefiniti"
 
 #: lib/bookshelf_settings.lua:2756
 msgid "Color theme: %1"
-msgstr ""
+msgstr "Tema colore: %1"
 
 #: lib/bookshelf_settings.lua:2756 lib/bookshelf_settings.lua:2761
 msgid "Your own"
-msgstr ""
+msgstr "Tuoi"
 
 #: lib/bookshelf_settings.lua:2758
 msgid "Your own colors, or a pack's. While a pack's colors are in use the rows below show them; choosing Your own brings yours back exactly as they were."
-msgstr ""
+msgstr "I tuoi colori, o quelli di un pacchetto. Mentre sono in uso i colori di un pacchetto, le righe sottostanti li mostrano; scegliendo Tuoi tornano esattamente come erano."
 
 #: lib/bookshelf_settings.lua:2883
 msgid "Cover badge size"
@@ -3496,15 +3514,15 @@ msgstr "Gli scaffali a dorsi disegnano un incavo dietro i libri e un'ombra ai la
 
 #: lib/bookshelf_settings.lua:3663
 msgid "Plank designs: none in use"
-msgstr ""
+msgstr "Motivo del ripiano: nessuno in uso"
 
 #: lib/bookshelf_settings.lua:3664
 msgid "Plank designs: %1"
-msgstr ""
+msgstr "Motivo del ripiano: %1"
 
 #: lib/bookshelf_settings.lua:3666
 msgid "Draw the plank design you have chosen (Oak, or one from an ornament pack) on spine shelves. Drawing it is slow on some black and white e-readers; turn this off to use the plain plank color instead. Choosing a plank again, in the Shelf plank picker, turns this back on."
-msgstr ""
+msgstr "Disegna il motivo del ripiano scelto (Rovere, o uno da un pacchetto di ornamenti) sugli scaffali a dorsi. Disegnarlo è lento su alcuni e-reader in bianco e nero; disattiva questa opzione per usare invece la tinta unita del ripiano. Scegliere di nuovo un ripiano, nel selettore Ripiano scaffale, riattiva questa funzione."
 
 #: lib/bookshelf_settings.lua:3684
 msgid "Instant book close (beta)"
@@ -3596,11 +3614,11 @@ msgstr "Cosa fa il tocco su un libro negli scaffali a schermo intero: mostrare i
 
 #: lib/bookshelf_settings.lua:3959
 msgid "Bookshelf gestures"
-msgstr ""
+msgstr "Gesti di Bookshelf"
 
 #: lib/bookshelf_settings.lua:3960
 msgid "Switch off any of Bookshelf's own gestures. A gesture switched off does nothing on the shelf. Tapping a book and swiping between pages always work."
-msgstr ""
+msgstr "Disattiva singolarmente i gesti propri di Bookshelf. Un gesto disattivato non fa nulla sullo scaffale. Toccare un libro e scorrere tra le pagine funzionano sempre."
 
 #: lib/bookshelf_settings.lua:3968
 msgid "Double tap to open books"
@@ -3824,7 +3842,7 @@ msgstr "BETA: Leggi metadata.calibre di Calibre"
 
 #: lib/bookshelf_settings.lua:4561
 msgid "For users with a Calibre-managed library. Reads the metadata.calibre file in your home folder, or the folder above it, to fill in title, authors, series, tags, language and description for every book at once, with no per-book extraction. Calibre's values take priority over the metadata KOReader extracted from the book file itself. Anything you have edited in Book information still wins over both. Covers and page counts always come from KOReader."
-msgstr ""
+msgstr "Per chi ha una libreria gestita con Calibre. Legge il file metadata.calibre nella cartella home, o nella cartella superiore, per compilare titolo, autori, serie, tag, lingua e descrizione di ogni libro in una sola volta, senza estrazione per singolo libro. I valori di Calibre hanno la priorità sui metadati estratti da KOReader dal file del libro stesso. Quanto modificato in Informazioni sul libro prevale comunque su entrambi. Copertine e numero di pagine provengono sempre da KOReader."
 
 #: lib/bookshelf_settings.lua:4596
 msgid "BETA: Kobo library shelf"
@@ -4049,7 +4067,7 @@ msgstr "Installato: v"
 
 #: lib/bookshelf_settings.lua:5918
 msgid "Pack editor…"
-msgstr ""
+msgstr "Editor pacchetti…"
 
 #: lib/bookshelf_settings.lua:5963
 msgid "Flexible shelf widths"
@@ -4826,19 +4844,19 @@ msgstr "Le immagini vengono caricate da %1"
 
 #: lib/bookshelf_wallpaper_browser.lua:199
 msgid "Full screen shelves show the default wallpaper."
-msgstr ""
+msgstr "Gli scaffali a schermo intero mostrano lo sfondo predefinito."
 
 #: lib/bookshelf_wallpaper_browser.lua:244
 msgid "Yours"
-msgstr ""
+msgstr "Tuoi"
 
 #: lib/bookshelf_wallpaper_browser.lua:253
 msgid "Default wallpaper image"
-msgstr ""
+msgstr "Immagine di sfondo predefinita"
 
 #: lib/bookshelf_wallpaper_browser.lua:253
 msgid "Full screen shelves image"
-msgstr ""
+msgstr "Immagine per gli scaffali a schermo intero"
 
 #: lib/bookshelf_widget.lua:1657
 msgid "Search results"
@@ -5737,7 +5755,7 @@ msgstr "Modifica scaffali…"
 
 #: main.lua:785
 msgid "Wallpaper, ornaments and colors"
-msgstr ""
+msgstr "Sfondo, ornamenti e colori"
 
 #: main.lua:798
 msgid "Hardcover enrichment"
@@ -5825,7 +5843,7 @@ msgstr "Bookshelf: apri micro-moduli"
 
 #: main.lua:1148
 msgid "Bookshelf: shuffle ornaments"
-msgstr ""
+msgstr "Bookshelf: rimescola ornamenti"
 
 #: main.lua:1154
 msgid "Bookshelf: go to home screen"
@@ -6194,15 +6212,15 @@ msgstr "Vengono usati solo i colori spuntati."
 
 #: micromodules/quote_of_day.lua:176
 msgid "Looking for highlights: book %1 of %2"
-msgstr ""
+msgstr "Ricerca delle evidenziazioni: libro %1 di %2"
 
 #: micromodules/quote_of_day.lua:184
 msgid "Stopped. So far: %1 highlights in %2 books."
-msgstr ""
+msgstr "Interrotto. Finora: %1 evidenziazioni in %2 libri."
 
 #: micromodules/quote_of_day.lua:185
 msgid "Found %1 highlights in %2 books."
-msgstr ""
+msgstr "Trovate %1 evidenziazioni in %2 libri."
 
 #: micromodules/quote_of_day.lua:194 micromodules/quote_of_day.lua:203
 msgid "Every menu open"
@@ -6238,7 +6256,7 @@ msgstr "Libri esclusi: %1"
 
 #: micromodules/quote_of_day.lua:216
 msgid "Scan library for highlights"
-msgstr ""
+msgstr "Scansiona la libreria per le evidenziazioni"
 
 #: micromodules/quote_of_day.lua:221
 msgid "all"
@@ -6366,15 +6384,15 @@ msgstr "Personalizzato..."
 
 #: micromodules/reading_goal.lua:441
 msgid "Books read outside KOReader this year: %1"
-msgstr ""
+msgstr "Libri letti fuori da KOReader quest'anno: %1"
 
 #: micromodules/reading_goal.lua:447
 msgid "Books read outside KOReader this year"
-msgstr ""
+msgstr "Libri letti fuori da KOReader quest'anno"
 
 #: micromodules/reading_goal.lua:448
 msgid "Paper books, audiobooks or another reader: added to the yearly goal."
-msgstr ""
+msgstr "Libri cartacei, audiolibri o un altro lettore: si aggiungono all'obiettivo annuale."
 
 #: micromodules/reading_goal.lua:480 micromodules/reading_goal.lua:599
 msgid "Reading goals"
@@ -6442,7 +6460,7 @@ msgstr "Sfida annuale"
 
 #: micromodules/reading_goal.lua:530
 msgid "%1 min"
-msgstr ""
+msgstr "%1 min"
 
 #: micromodules/reading_goal.lua:534
 msgid "%1 min left"

@@ -551,11 +551,11 @@ msgstr "Последно добавени"
 
 #: lib/bookshelf_chip_editor.lua:1562
 msgid "No collections yet"
-msgstr ""
+msgstr "Все още няма колекции"
 
 #: lib/bookshelf_chip_editor.lua:1587 lib/bookshelf_chip_editor.lua:1866
 msgid "In a collection"
-msgstr ""
+msgstr "В колекция"
 
 #: lib/bookshelf_chip_editor.lua:1703
 msgid "Show as"
@@ -613,7 +613,7 @@ msgstr "Непрочетени"
 
 #: lib/bookshelf_chip_editor.lua:1865
 msgid "Unread standalone"
-msgstr ""
+msgstr "Непрочетени самостоятелни"
 
 #: lib/bookshelf_chip_editor.lua:1867 micromodules/random_unread.lua:232
 msgid "All books"
@@ -642,15 +642,15 @@ msgstr "Колко: %1"
 
 #: lib/bookshelf_chip_editor.lua:1951
 msgid "Collection: %1 (not found)"
-msgstr ""
+msgstr "Колекция: %1 (не е намерена)"
 
 #: lib/bookshelf_chip_editor.lua:1953
 msgid "Collection: %1"
-msgstr ""
+msgstr "Колекция: %1"
 
 #: lib/bookshelf_chip_editor.lua:1955
 msgid "Choose collection"
-msgstr ""
+msgstr "Избор на колекция"
 
 #: lib/bookshelf_chip_editor.lua:2071 lib/bookshelf_chip_editor.lua:2891
 #: lib/bookshelf_chip_editor.lua:3068 lib/bookshelf_chip_editor.lua:3126
@@ -997,7 +997,7 @@ msgstr "Подреждане на книгите в колекцията"
 
 #: lib/bookshelf_color_palette.lua:390
 msgid "or"
-msgstr ""
+msgstr "или"
 
 #: lib/bookshelf_color_palette.lua:411 lib/bookshelf_font_picker.lua:192
 #: lib/bookshelf_line_editor.lua:152 lib/bookshelf_line_editor.lua:539
@@ -1172,7 +1172,7 @@ msgstr "Избор на шрифт"
 
 #: lib/bookshelf_gestures.lua:24
 msgid "Swipe up for full screen shelves"
-msgstr ""
+msgstr "Плъзнете нагоре за рафтовете на цял екран"
 
 #: lib/bookshelf_gestures.lua:26
 msgid "Swipe down leaves full screen shelves"
@@ -1184,87 +1184,87 @@ msgstr "Когато е включено, плъзгането надолу в �
 
 #: lib/bookshelf_gestures.lua:34
 msgid "Swipe down on the shelf to refresh the library"
-msgstr ""
+msgstr "Плъзнете надолу върху рафта, за да опресните библиотеката"
 
 #: lib/bookshelf_gestures.lua:35
 msgid "Pinch or spread to change the shelf's size"
-msgstr ""
+msgstr "Свийте или разтворете пръсти, за да промените размера на рафта"
 
 #: lib/bookshelf_gestures.lua:36
 msgid "Swipe down or up on the top panel for fewer or more rows"
-msgstr ""
+msgstr "Плъзнете надолу или нагоре върху горния панел за по-малко или повече редове"
 
 #: lib/bookshelf_gestures.lua:37
 msgid "Swipe left or right on the top panel to preview the next book"
-msgstr ""
+msgstr "Плъзнете наляво или надясно върху горния панел, за да прегледате следващата книга"
 
 #: lib/bookshelf_gestures.lua:38
 msgid "Long-press the top panel for book details"
-msgstr ""
+msgstr "Задръжте върху горния панел за детайли за книгата"
 
 #: lib/bookshelf_gestures.lua:39
 msgid "Tap the stars to rate a book"
-msgstr ""
+msgstr "Докоснете звездите, за да оцените книга"
 
 #: lib/bookshelf_gestures.lua:40
 msgid "Tap the description to read all of it"
-msgstr ""
+msgstr "Докоснете описанието, за да го прочетете цялото"
 
 #: lib/bookshelf_gestures.lua:41
 msgid "Long-press a shelf button to edit the shelf"
-msgstr ""
+msgstr "Задръжте върху бутон на рафт, за да го редактирате"
 
 #: lib/bookshelf_gestures.lua:42
 msgid "Swipe the shelf buttons to see more of them"
-msgstr ""
+msgstr "Плъзнете бутоните на рафтовете, за да видите още от тях"
 
 #: lib/bookshelf_gestures.lua:43
 msgid "Long-press a book for its details"
-msgstr ""
+msgstr "Задръжте върху книга за нейните детайли"
 
 #: lib/bookshelf_gestures.lua:44
 msgid "Long-press a series, author or folder for its menu"
-msgstr ""
+msgstr "Задръжте върху поредица, автор или папка за съответното меню"
 
 #: lib/bookshelf_gestures.lua:45
 msgid "Double-tap a book to open it"
-msgstr ""
+msgstr "Докоснете двукратно книга, за да я отворите"
 
 #: lib/bookshelf_gestures.lua:46
 msgid "Long-press the page number to change the shelf style"
-msgstr ""
+msgstr "Задръжте върху номера на страницата, за да промените стила на рафта"
 
 #: lib/bookshelf_gestures.lua:47
 msgid "Tap the page number to go to a page"
-msgstr ""
+msgstr "Докоснете номера на страницата, за да отидете на страница"
 
 #: lib/bookshelf_gestures.lua:48
 msgid "Long-press the arrows to skip ten pages"
-msgstr ""
+msgstr "Задръжте върху стрелките, за да прескочите десет страници"
 
 #: lib/bookshelf_gestures.lua:49
 msgid "Long-press a micro-module to edit it"
-msgstr ""
+msgstr "Задръжте върху микромодул, за да го редактирате"
 
 #: lib/bookshelf_gestures.lua:50
 msgid "Tap a micro-module to use it"
-msgstr ""
+msgstr "Докоснете микромодул, за да го използвате"
 
 #: lib/bookshelf_gestures.lua:51
 msgid "Long-press a start menu entry to edit it"
-msgstr ""
+msgstr "Задръжте върху елемент от стартовото меню, за да го редактирате"
 
 #: lib/bookshelf_gestures.lua:52
 msgid "Long-press an ornament to adjust it"
-msgstr ""
+msgstr "Задръжте върху орнамент, за да го нагласите"
 
 #: lib/bookshelf_gestures.lua:53
 msgid "Tap an ornament to run its action"
-msgstr ""
+msgstr "Докоснете орнамент, за да изпълните действието му"
 
 #: lib/bookshelf_gestures.lua:104
 msgid "All gestures"
-msgstr ""
+msgstr "Всички жестове"
 
 #: lib/bookshelf_hero_card.lua:413 lib/bookshelf_widget.lua:15871
 msgid "Stop"
@@ -2171,22 +2171,29 @@ msgid ""
 "Ready-made packs:\n"
 "%2"
 msgstr ""
+"Поставете PNG или SVG файлове в\n"
+"%1\n"
+"\n"
+"Папка с тях вътре в нея става пакет, със собствен раздел тук.\n"
+"\n"
+"Готови пакети:\n"
+"%2"
 
 #: lib/bookshelf_ornament_browser.lua:273
 msgid "Select all"
-msgstr ""
+msgstr "Избиране на всички"
 
 #: lib/bookshelf_ornament_browser.lua:273
 msgid "Select none"
-msgstr ""
+msgstr "Премахване на всички"
 
 #: lib/bookshelf_ornament_browser.lua:328
 msgid "Ornament collection"
-msgstr ""
+msgstr "Колекция от орнаменти"
 
 #: lib/bookshelf_ornament_browser.lua:328
 msgid "Swap for"
-msgstr ""
+msgstr "Размяна с"
 
 #: lib/bookshelf_ornament_browser.lua:351
 msgid ""
@@ -2204,47 +2211,47 @@ msgstr ""
 
 #: lib/bookshelf_ornament_menu.lua:186
 msgid "switched off"
-msgstr ""
+msgstr "изключен"
 
 #: lib/bookshelf_ornament_menu.lua:293
 msgid "Mirror: off"
-msgstr ""
+msgstr "Огледално: изкл."
 
 #: lib/bookshelf_ornament_menu.lua:294
 msgid "Mirror: always"
-msgstr ""
+msgstr "Огледално: винаги"
 
 #: lib/bookshelf_ornament_menu.lua:295
 msgid "Mirror: alternate"
-msgstr ""
+msgstr "Огледално: редуващо се"
 
 #: lib/bookshelf_ornament_menu.lua:312
 msgid "Place: off"
-msgstr ""
+msgstr "Място: изкл."
 
 #: lib/bookshelf_ornament_menu.lua:313
 msgid "Place: %1 of %2"
-msgstr ""
+msgstr "Място: %1 от %2"
 
 #: lib/bookshelf_ornament_menu.lua:318
 msgid "Size: %1"
-msgstr ""
+msgstr "Размер: %1"
 
 #: lib/bookshelf_ornament_menu.lua:321
 msgid "Padding: %1"
-msgstr ""
+msgstr "Отстъп: %1"
 
 #: lib/bookshelf_ornament_menu.lua:327
 msgid "Height: %1"
-msgstr ""
+msgstr "Височина: %1"
 
 #: lib/bookshelf_ornament_menu.lua:338
 msgid "Anchor: bottom"
-msgstr ""
+msgstr "Закрепване: долу"
 
 #: lib/bookshelf_ornament_menu.lua:338
 msgid "Anchor: top"
-msgstr ""
+msgstr "Закрепване: горе"
 
 #: lib/bookshelf_ornament_menu.lua:342 micromodules/quote_of_day.lua:205
 msgid "Tap: %1"
@@ -2252,35 +2259,35 @@ msgstr "Докосване: %1"
 
 #: lib/bookshelf_ornament_menu.lua:342 lib/bookshelf_ornament_menu.lua:435
 msgid "Zoom"
-msgstr ""
+msgstr "Мащаб"
 
 #: lib/bookshelf_ornament_menu.lua:342
 msgid "set"
-msgstr ""
+msgstr "зададено"
 
 #: lib/bookshelf_ornament_menu.lua:343
 msgid "Tap: none"
-msgstr ""
+msgstr "Докосване: без"
 
 #: lib/bookshelf_ornament_menu.lua:347
 msgid "Swap"
-msgstr ""
+msgstr "Размяна"
 
 #: lib/bookshelf_ornament_menu.lua:362
 msgid "Shuffle all"
-msgstr ""
+msgstr "Разбъркване на всички"
 
 #: lib/bookshelf_ornament_menu.lua:365
 msgid "Shuffle every ornament into a new order? Your swaps and moves are lost."
-msgstr ""
+msgstr "Да се разбъркат ли всички орнаменти в нов ред? Вашите размени и премествания ще бъдат загубени."
 
 #: lib/bookshelf_ornament_menu.lua:366
 msgid "Shuffle"
-msgstr ""
+msgstr "Разбъркване"
 
 #: lib/bookshelf_ornament_menu.lua:428
 msgid "No action"
-msgstr ""
+msgstr "Без действие"
 
 #: lib/bookshelf_ornament_menu.lua:441 micromodules/quote_of_day.lua:207
 #: micromodules/reading_streak.lua:83
@@ -2289,23 +2296,23 @@ msgstr "Действие при докосване"
 
 #: lib/bookshelf_pack_editor.lua:137
 msgid "Pack editor: %1"
-msgstr ""
+msgstr "Редактор на пакети: %1"
 
 #: lib/bookshelf_pack_editor.lua:240
 msgid "%1 on, %2 off · page %3 of %4 · swipe for more · tap a piece to adjust it"
-msgstr ""
+msgstr "%1 вкл., %2 изкл. · страница %3 от %4 · плъзнете за още · докоснете предмет, за да го нагласите"
 
 #: lib/bookshelf_pack_editor.lua:276
 msgid "Saved the settings of %1 pieces into the %2 pack."
-msgstr ""
+msgstr "Запазени са настройките на %1 предмета в пакета %2."
 
 #: lib/bookshelf_pack_editor.lua:302
 msgid "There are no ornament packs to edit."
-msgstr ""
+msgstr "Няма пакети с орнаменти за редактиране."
 
 #: lib/bookshelf_pack_editor.lua:312
 msgid "Pack editor"
-msgstr ""
+msgstr "Редактор на пакети"
 
 #: lib/bookshelf_page_count_dialog.lua:67
 msgid "There are no scanned page counts to delete."
@@ -2395,7 +2402,7 @@ msgstr "Всяка книга, като се заменят предишните
 
 #: lib/bookshelf_page_count_dialog.lua:272
 msgid "Finds how long each book in %1 is (%2 books), for spine thickness, page count badges, sorting and the page count token."
-msgstr ""
+msgstr "Установява колко дълга е всяка книга в %1 (%2 книги), за дебелината на гръбчето, значките за брой страници, сортирането и токена за брой страници."
 
 #: lib/bookshelf_page_count_dialog.lua:274
 msgid "Finds how long each book is, for spine thickness, page count badges, sorting and the page count token."
@@ -2415,7 +2422,7 @@ msgstr "Извличане на броя страници"
 
 #: lib/bookshelf_page_count_dialog.lua:394
 msgid "No books to count here."
-msgstr ""
+msgstr "Няма книги за преброяване тук."
 
 #: lib/bookshelf_pagination.lua:85 lib/bookshelf_widget.lua:6946
 msgid "Page %1 of %2+"
@@ -2438,27 +2445,27 @@ msgstr "книги"
 
 #: lib/bookshelf_plank_browser.lua:114
 msgid "Plain color"
-msgstr ""
+msgstr "Обикновен цвят"
 
 #: lib/bookshelf_plank_browser.lua:115
 msgid "Oak"
-msgstr ""
+msgstr "Дъб"
 
 #: lib/bookshelf_plank_browser.lua:125
 msgid "More planks come with packs: see Add ornaments in the Ornament collection."
-msgstr ""
+msgstr "Повече дъски идват с пакети: вижте Добавяне на орнаменти в Колекция от орнаменти."
 
 #: lib/bookshelf_plank_browser.lua:147 lib/bookshelf_theme_pack.lua:443
 msgid "%1 (%2 pack)"
-msgstr ""
+msgstr "%1 (пакет %2)"
 
 #: lib/bookshelf_plank_browser.lua:217
 msgid "Built-in"
-msgstr ""
+msgstr "Вградени"
 
 #: lib/bookshelf_plank_browser.lua:230
 msgid "Shelf plank"
-msgstr ""
+msgstr "Дъска на рафта"
 
 #: lib/bookshelf_reader_park.lua:437 lib/bookshelf_widget.lua:24144
 #: main.lua:1299
@@ -2787,7 +2794,7 @@ msgstr "Преместване надолу"
 
 #: lib/bookshelf_settings.lua:1501 lib/bookshelf_wallpaper_browser.lua:152
 msgid "%1 pack"
-msgstr ""
+msgstr "Пакет %1"
 
 #: lib/bookshelf_settings.lua:1529
 msgid "Default wallpaper image: %1"
@@ -2875,7 +2882,7 @@ msgstr "Тъмно"
 
 #: lib/bookshelf_settings.lua:1716
 msgid "Add theme…"
-msgstr ""
+msgstr "Добавяне на тема…"
 
 #: lib/bookshelf_settings.lua:1725
 msgid ""
@@ -2886,18 +2893,24 @@ msgid ""
 "Ready-made theme packs:\n"
 "%2"
 msgstr ""
+"Тематичен пакет обединява тапет, дъска, цветове и орнаменти, и се избира тук. За да добавите такъв, копирайте папката му в\n"
+"%1\n"
+"после отворете това меню отново.\n"
+"\n"
+"Готови тематични пакети:\n"
+"%2"
 
 #: lib/bookshelf_settings.lua:1750
 msgid "No theme pack"
-msgstr ""
+msgstr "Без тематичен пакет"
 
 #: lib/bookshelf_settings.lua:1757
 msgid "Theme pack off"
-msgstr ""
+msgstr "Тематичният пакет е изкл."
 
 #: lib/bookshelf_settings.lua:1770
 msgid "%1 theme on"
-msgstr ""
+msgstr "Темата %1 е включена"
 
 #: lib/bookshelf_settings.lua:1913 lib/bookshelf_settings.lua:1920
 #: lib/bookshelf_settings.lua:2280 lib/bookshelf_settings.lua:2285
@@ -2910,19 +2923,19 @@ msgstr "Цвят на дъската на рафта (% черно)"
 
 #: lib/bookshelf_settings.lua:1972
 msgid "Shelf plank: %1"
-msgstr ""
+msgstr "Дъска на рафта: %1"
 
 #: lib/bookshelf_settings.lua:1973
 msgid "color"
-msgstr ""
+msgstr "цвят"
 
 #: lib/bookshelf_settings.lua:1975
 msgid "The plank the Spines style stands its books on: a plain color, the built-in oak, or a plank from an ornament pack."
-msgstr ""
+msgstr "Дъската, върху която стилът „Гръбчета“ изправя книгите си: обикновен цвят, вградения дъб или дъска от пакет с орнаменти."
 
 #: lib/bookshelf_settings.lua:2144
 msgid "Ornament collection: %1/%2 enabled"
-msgstr ""
+msgstr "Колекция от орнаменти: %1/%2 включени"
 
 #: lib/bookshelf_settings.lua:2149
 msgid ""
@@ -2936,27 +2949,27 @@ msgstr ""
 
 #: lib/bookshelf_settings.lua:2194
 msgid "New ornaments: %1"
-msgstr ""
+msgstr "Нови орнаменти: %1"
 
 #: lib/bookshelf_settings.lua:2194
 msgid "first"
-msgstr ""
+msgstr "най-напред"
 
 #: lib/bookshelf_settings.lua:2194
 msgid "last"
-msgstr ""
+msgstr "накрая"
 
 #: lib/bookshelf_settings.lua:2196
 msgid "Where ornaments you add join the order they are dealt onto the shelf in. First: you see them straight away, and the pieces already there move along to make room. Last: your shelf stays as it is, and the new ones come round in their turn."
-msgstr ""
+msgstr "Къде се включват добавените от вас орнаменти в реда, в който се подреждат на рафта. Най-напред: виждате ги веднага, а вече поставените предмети се преместват, за да им направят място. Накрая: рафтът ви остава какъвто е, а новите идват на своя ред."
 
 #: lib/bookshelf_settings.lua:2198
 msgid "First, so you see them"
-msgstr ""
+msgstr "Най-напред, за да ги виждате"
 
 #: lib/bookshelf_settings.lua:2199
 msgid "Last, so your shelf stays put"
-msgstr ""
+msgstr "Накрая, за да рафтът ви остане непроменен"
 
 #: lib/bookshelf_settings.lua:2229
 msgid "Accent colors"
@@ -2964,7 +2977,7 @@ msgstr "Акцентни цветове"
 
 #: lib/bookshelf_settings.lua:2241
 msgid "Shelf theme: %1, %2"
-msgstr ""
+msgstr "Тема на рафта: %1, %2"
 
 #: lib/bookshelf_settings.lua:2242
 msgid "Shelf theme: %1"
@@ -2978,6 +2991,11 @@ msgid ""
 "\n"
 "Theme packs installed in the ornaments folder are listed below: choosing one uses its wallpaper, plank, colors and ornaments together. No theme pack puts your own back."
 msgstr ""
+"Светли или тъмни цветове за рафта, независимо от нощния режим на KOReader -- така че останалата част от KOReader може да остане светла, а рафтът да бъде тъмен.\n"
+"\n"
+"Кориците, тапетът и орнаментите са изображения и никога не се обръщат; само собствените цветове на рафта се променят.\n"
+"\n"
+"Тематичните пакети, инсталирани в папката с орнаменти, са изброени по-долу: избирането на един използва заедно неговия тапет, дъска, цветове и орнаменти. Без тематичен пакет връща вашите собствени."
 
 #: lib/bookshelf_settings.lua:2334
 msgid "◐ Editing night-mode colors (tap to switch)"
@@ -3193,15 +3211,15 @@ msgstr "Връщане към цветовете по подразбиране"
 
 #: lib/bookshelf_settings.lua:2756
 msgid "Color theme: %1"
-msgstr ""
+msgstr "Цветова тема: %1"
 
 #: lib/bookshelf_settings.lua:2756 lib/bookshelf_settings.lua:2761
 msgid "Your own"
-msgstr ""
+msgstr "Вашите собствени"
 
 #: lib/bookshelf_settings.lua:2758
 msgid "Your own colors, or a pack's. While a pack's colors are in use the rows below show them; choosing Your own brings yours back exactly as they were."
-msgstr ""
+msgstr "Вашите собствени цветове или тези на пакет. Докато се използват цветовете на пакет, редовете по-долу ги показват; избирането на Вашите собствени връща точно вашите цветове, както са били."
 
 #: lib/bookshelf_settings.lua:2883
 msgid "Cover badge size"
@@ -3500,15 +3518,15 @@ msgstr "Рафтовете с гръбчета изчертават вдлъбн
 
 #: lib/bookshelf_settings.lua:3663
 msgid "Plank designs: none in use"
-msgstr ""
+msgstr "Дизайни на дъски: не се използват"
 
 #: lib/bookshelf_settings.lua:3664
 msgid "Plank designs: %1"
-msgstr ""
+msgstr "Дизайни на дъски: %1"
 
 #: lib/bookshelf_settings.lua:3666
 msgid "Draw the plank design you have chosen (Oak, or one from an ornament pack) on spine shelves. Drawing it is slow on some black and white e-readers; turn this off to use the plain plank color instead. Choosing a plank again, in the Shelf plank picker, turns this back on."
-msgstr ""
+msgstr "Изчертава избрания от вас дизайн на дъска (Дъб или такъв от пакет с орнаменти) на рафтовете с гръбчета. Изчертаването му е бавно на някои черно-бели четци; изключете това, за да използвате вместо това обикновения цвят на дъската. Повторният избор на дъска, в избора на Дъска на рафта, включва това отново."
 
 #: lib/bookshelf_settings.lua:3684
 msgid "Instant book close (beta)"
@@ -3600,11 +3618,11 @@ msgstr "Какво прави докосването на книга в рафт
 
 #: lib/bookshelf_settings.lua:3959
 msgid "Bookshelf gestures"
-msgstr ""
+msgstr "Жестове на Bookshelf"
 
 #: lib/bookshelf_settings.lua:3960
 msgid "Switch off any of Bookshelf's own gestures. A gesture switched off does nothing on the shelf. Tapping a book and swiping between pages always work."
-msgstr ""
+msgstr "Изключете кой да е от собствените жестове на Bookshelf. Изключен жест не прави нищо на рафта. Докосването на книга и плъзгането между страниците винаги работят."
 
 #: lib/bookshelf_settings.lua:3968
 msgid "Double tap to open books"
@@ -3828,7 +3846,7 @@ msgstr "БЕТА: Четене на metadata.calibre на Calibre"
 
 #: lib/bookshelf_settings.lua:4561
 msgid "For users with a Calibre-managed library. Reads the metadata.calibre file in your home folder, or the folder above it, to fill in title, authors, series, tags, language and description for every book at once, with no per-book extraction. Calibre's values take priority over the metadata KOReader extracted from the book file itself. Anything you have edited in Book information still wins over both. Covers and page counts always come from KOReader."
-msgstr ""
+msgstr "За потребители с библиотека, управлявана от Calibre. Чете файла metadata.calibre във вашата начална папка или папката над нея, за да попълни наведнъж заглавие, автори, поредица, етикети, език и описание за всяка книга, без извличане за всяка книга поотделно. Стойностите от Calibre имат предимство пред метаданните, които KOReader е извлякъл от самия файл на книгата. Всичко, което сте редактирали в информацията за книгата, има предимство пред двете. Кориците и броят страници винаги идват от KOReader."
 
 #: lib/bookshelf_settings.lua:4596
 msgid "BETA: Kobo library shelf"
@@ -4053,7 +4071,7 @@ msgstr "Инсталиран: v"
 
 #: lib/bookshelf_settings.lua:5918
 msgid "Pack editor…"
-msgstr ""
+msgstr "Редактор на пакети…"
 
 #: lib/bookshelf_settings.lua:5963
 msgid "Flexible shelf widths"
@@ -4830,19 +4848,19 @@ msgstr "Изображенията се зареждат от %1"
 
 #: lib/bookshelf_wallpaper_browser.lua:199
 msgid "Full screen shelves show the default wallpaper."
-msgstr ""
+msgstr "Рафтовете на цял екран показват тапета по подразбиране."
 
 #: lib/bookshelf_wallpaper_browser.lua:244
 msgid "Yours"
-msgstr ""
+msgstr "Вашите"
 
 #: lib/bookshelf_wallpaper_browser.lua:253
 msgid "Default wallpaper image"
-msgstr ""
+msgstr "Изображение за тапет по подразбиране"
 
 #: lib/bookshelf_wallpaper_browser.lua:253
 msgid "Full screen shelves image"
-msgstr ""
+msgstr "Изображение за рафтовете на цял екран"
 
 #: lib/bookshelf_widget.lua:1657
 msgid "Search results"
@@ -5741,7 +5759,7 @@ msgstr "Редактиране на рафтовете…"
 
 #: main.lua:785
 msgid "Wallpaper, ornaments and colors"
-msgstr ""
+msgstr "Тапет, орнаменти и цветове"
 
 #: main.lua:798
 msgid "Hardcover enrichment"
@@ -5829,7 +5847,7 @@ msgstr "Bookshelf: отваряне на микромодулите"
 
 #: main.lua:1148
 msgid "Bookshelf: shuffle ornaments"
-msgstr ""
+msgstr "Bookshelf: разбъркване на орнаментите"
 
 #: main.lua:1154
 msgid "Bookshelf: go to home screen"
@@ -6198,15 +6216,15 @@ msgstr "Използват се само отметнатите цветове."
 
 #: micromodules/quote_of_day.lua:176
 msgid "Looking for highlights: book %1 of %2"
-msgstr ""
+msgstr "Търсене на подчертани елементи: книга %1 от %2"
 
 #: micromodules/quote_of_day.lua:184
 msgid "Stopped. So far: %1 highlights in %2 books."
-msgstr ""
+msgstr "Спряно. Засега: %1 подчертани елемента в %2 книги."
 
 #: micromodules/quote_of_day.lua:185
 msgid "Found %1 highlights in %2 books."
-msgstr ""
+msgstr "Намерени %1 подчертани елемента в %2 книги."
 
 #: micromodules/quote_of_day.lua:194 micromodules/quote_of_day.lua:203
 msgid "Every menu open"
@@ -6242,7 +6260,7 @@ msgstr "Изключени книги: %1"
 
 #: micromodules/quote_of_day.lua:216
 msgid "Scan library for highlights"
-msgstr ""
+msgstr "Сканиране на библиотеката за подчертани елементи"
 
 #: micromodules/quote_of_day.lua:221
 msgid "all"
@@ -6370,15 +6388,15 @@ msgstr "По избор..."
 
 #: micromodules/reading_goal.lua:441
 msgid "Books read outside KOReader this year: %1"
-msgstr ""
+msgstr "Книги, прочетени извън KOReader тази година: %1"
 
 #: micromodules/reading_goal.lua:447
 msgid "Books read outside KOReader this year"
-msgstr ""
+msgstr "Книги, прочетени извън KOReader тази година"
 
 #: micromodules/reading_goal.lua:448
 msgid "Paper books, audiobooks or another reader: added to the yearly goal."
-msgstr ""
+msgstr "Хартиени книги, аудиокниги или друго устройство за четене: добавят се към годишната цел."
 
 #: micromodules/reading_goal.lua:480 micromodules/reading_goal.lua:599
 msgid "Reading goals"
@@ -6446,7 +6464,7 @@ msgstr "Годишно предизвикателство"
 
 #: micromodules/reading_goal.lua:530
 msgid "%1 min"
-msgstr ""
+msgstr "%1 мин"
 
 #: micromodules/reading_goal.lua:534
 msgid "%1 min left"
