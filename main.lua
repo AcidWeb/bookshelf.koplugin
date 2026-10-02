@@ -29,6 +29,12 @@
 --     which is required so the close-document hook fires inside the Reader.
 
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+-- First of all: a KOReader older than Bookshelf needs gets a stub plugin that
+-- says so, instead of a crash somewhere in what follows.
+do
+    local Gate = require("lib/bookshelf_version_gate")
+    if Gate.tooOld() then return Gate.stub(WidgetContainer) end
+end
 -- Before ANY store opens its file: bring bookshelf's files over from the old
 -- flat layout into settings/bookshelf/ and cache/bookshelf/ (5.3).
 require("lib/bookshelf_storage_move").run()

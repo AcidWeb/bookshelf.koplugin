@@ -19,7 +19,7 @@ A friendly home screen for KOReader. Browse your library by series, author, genr
 
 ## Install
 
-> **Bookshelf needs KOReader v2026.03 or newer.** Older versions are missing drawing features Bookshelf relies on, and on colour screens it can crash. To check yours, open KOReader's menu and go to **Help > Version**. If it's older, update KOReader first.
+> **Bookshelf needs KOReader v2025.08 or newer.** On an older version it shows a single menu line asking you to update, instead of running. On colour screens, rounded cover corners need v2026.03 or newer; older versions draw them square. To check yours, open KOReader's menu and go to **Help > Version**.
 
 1. Download the latest **bookshelf.koplugin.zip** from [Releases](https://github.com/AndyHazz/bookshelf.koplugin/releases).
 2. Unzip it onto your device's KOReader plugins folder:
