@@ -19,8 +19,8 @@ local function extract(src, name)
 end
 
 t.test("a hanging piece moves to the row above, first, one row pitch down", function()
-    local hang = load("return function(self, rows, pitch)\n"
-        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch)") .. "\nend",
+    local hang = load("return function(self, rows, pitch, top_gap)\n"
+        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch, top_gap)") .. "\nend",
         "hang", "t", { ipairs = ipairs, table = table })()
     local plank1, plank2 = { name = "plank1" }, { name = "plank2" }
     local bat = { name = "bat", overlap_offset = { 900, -40 } }
@@ -37,6 +37,9 @@ t.test("both ways a page is built hand them over", function()
     local n = select(2, widget:gsub("self:_hangUnder%(rows, ", ""))
     eq(n, 2, "the rebuild and the swap in place must both move hanging pieces")
     assert(widget:find("row_pitch            = shelf_h + grid_between", 1, true), "the swap has no pitch to use")
+    assert(widget:find("self:_hangUnder(rows, shelf_h + grid_between, hang_top_gap)", 1, true), "the rebuild does not say where row 1 hangs from")
+    assert(widget:find("self:_hangUnder(rows, d.row_pitch, d.hang_top_gap)", 1, true), "the swap does not say where row 1 hangs from")
+    assert(widget:find("hang_top_gap         = hang_top_gap", 1, true), "the swap has no top gap to use")
 end)
 
 t.test("the row keeps hanging pieces out of its own children, in all three slots", function()
@@ -154,8 +157,8 @@ t.test("a height is corrected to the real gap between rows before anything is ha
     -- slack GridMargins spreads between rows, which is only known after the
     -- rows are built. Each row notes its pieces off 0% with the gap they
     -- were built against; _hangUnder moves them by height x the difference.
-    local hang = load("return function(self, rows, pitch)\n"
-        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch)") .. "\nend",
+    local hang = load("return function(self, rows, pitch, top_gap)\n"
+        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch, top_gap)") .. "\nend",
         "hang", "t", { ipairs = ipairs, table = table, math = math })()
     local up = { name = "up", overlap_offset = { 10, 50 } }
     local half = { name = "half", overlap_offset = { 20, 100 } }
@@ -181,8 +184,8 @@ t.test("a piece dangling into the row below is painted in front of that row's bo
     -- no part is painted twice).
     local made = {}
     local Orn = { Ornament = { new = function(_s, t) made[#made + 1] = t; return t end } }
-    local hang = load("return function(self, rows, pitch)\n"
-        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch)") .. "\nend",
+    local hang = load("return function(self, rows, pitch, top_gap)\n"
+        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch, top_gap)") .. "\nend",
         "hang", "t", { ipairs = ipairs, table = table, math = math, setmetatable = setmetatable,
                        require = function(m) if m == "lib/bookshelf_ornaments" then return Orn end return require(m) end })()
     local pl = { w = 300, h = 120, entry = {} }
@@ -202,6 +205,59 @@ t.test("a piece dangling into the row below is painted in front of that row's bo
     local rows2 = { { within, _orn_list = { { w = within, t = -0.1, gap = 40, rh = 340 } } }, { { name = "p" } } }
     hang({}, rows2, 380)
     eq(#rows2[2], 1, "a piece that stays in its row was copied into the row below")
+end)
+
+t.test("a page's first row hangs its pieces from the bottom of the top panel", function()
+    -- Maintainer: a top shelf takes hanging pieces, anchored to the bottom
+    -- of the top panel instead of a shelf above. Built against the nominal
+    -- row gap (40), the piece moves up to the visible gap under the panel
+    -- (70): its drawing's top meets the panel's bottom.
+    local made = {}
+    local Orn = { Ornament = { new = function(_s, o) made[#made + 1] = o; return o end } }
+    local hang = load("return function(self, rows, pitch, top_gap)\n"
+        .. extract(widget, "BookshelfWidget:_hangUnder(rows, pitch, top_gap)") .. "\nend",
+        "hang", "t", { ipairs = ipairs, table = table, math = math, setmetatable = setmetatable,
+                       require = function(m) if m == "lib/bookshelf_ornaments" then return Orn end return require(m) end })()
+    local pl = { w = 100, h = 200 }
+    local frame = { name = "frame", placement = pl, overlap_offset = { 10, -40 } }
+    local cup = { name = "cup", placement = { w = 10, h = 10 }, overlap_offset = { 0, 100 } }
+    local rows = { { { name = "plank1" }, frame, cup,
+                     _orn_list = { { w = frame, t = 1, gap = 40, rh = 280 },
+                                   { w = cup, t = 0, dangle = true, gap = 40, rh = 280 } } },
+                   { { name = "plank2" } } }
+    hang({}, rows, 340, 70)
+    eq(frame.overlap_offset[2], -70, "row 1's hanging piece does not meet the panel's bottom")
+    eq(cup.overlap_offset[2], 100, "a piece anchored to its own plank moved")
+    eq(frame.placement, pl, "a piece that reaches no higher than the panel's bottom was cropped")
+    -- Raised past the panel's bottom (a positive height nudge): the part
+    -- above it is cut off, so the piece never paints over the panel.
+    local pl2 = { w = 100, h = 200 }
+    local tall = { name = "tall", placement = pl2, overlap_offset = { 10, -60 } }
+    local rows2 = { { { name = "plank1" }, tall, _orn_list = { { w = tall, t = 1, gap = 40, rh = 280 } } } }
+    hang({}, rows2, 340, 70)
+    eq(tall.overlap_offset[2], -70, "the cropped piece does not start at the panel's bottom")
+    eq(tall.placement.crop.y, 20, "the part above the panel's bottom was not cut off")
+    eq(tall.placement.crop.h, 180)
+    assert(pl2.crop == nil, "the shared placement was changed")
+    -- No top gap known (an older caller): row 1 is left as it was built.
+    local still = { name = "still", placement = { w = 1, h = 1 }, overlap_offset = { 0, -40 } }
+    hang({}, { { still, _orn_list = { { w = still, t = 1, gap = 40, rh = 280 } } } }, 340, nil)
+    eq(still.overlap_offset[2], -40)
+end)
+
+t.test("the page turn repaints down from the panel's bottom", function()
+    -- A row-1 piece reaches up to the panel's bottom, which the expanded
+    -- view's spread slack can put above the PAD band the refresh reclaimed:
+    -- the old page's piece would stay on screen there.
+    local top = load("return function(shelf_top, d)\n"
+        .. extract(widget, "BookshelfWidget._rowsRegionTop(shelf_top, d)") .. "\nend",
+        "rt", "t", { math = math })()
+    eq(top(500, { PAD = 20 }), 480, "the PAD band above row 1 is no longer swept")
+    eq(top(500, { PAD = 20, hang_top_gap = 64 }), 436, "the region stops short of the panel's bottom")
+    eq(top(500, { PAD = 20, hang_top_gap = 8 }), 480, "a narrow gap gave up the PAD band")
+    eq(top(10, { PAD = 20 }), 0)
+    local n = select(2, widget:gsub("BookshelfWidget%._rowsRegionTop%(shelf_top, d%)", ""))
+    eq(n, 3, "the wipe and the scoped refresh do not both use it")
 end)
 
 t.done()

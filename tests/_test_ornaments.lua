@@ -1064,8 +1064,10 @@ t.test("hang is the top anchor: no directive, no hang field", function()
     local e = { name = "bat.png", path = "/o/bat.png", aspect = 1, overhang = 0, lift = 0, anchor = "top" }
     local pl = O.place(e, 1000, 400, {}, 1)
     eq(pl.anchor, "top"); eq(pl.offset, 0); eq(pl.below, 0)
+    -- Every shelf hangs a top-anchored piece now (a page's first row from
+    -- the top panel), so nothing tells one to stand instead.
     local st = O.place(e, 1000, 400, { stand = true }, 1)
-    eq(st.anchor, "bottom", "a piece told to stand does not stand"); eq(st.offset, 0)
+    eq(st.anchor, "top", "a top-anchored piece was stood on the plank")
     eq(pl.hang, nil, "placements still carry hang")
 end)
 

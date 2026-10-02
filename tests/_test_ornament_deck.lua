@@ -159,30 +159,33 @@ t.test("peek does not deal; take does", function()
     eq(d:take(false).name, "a"); eq(d:peek(false).name, "b")
 end)
 
-t.test("a hanging card on a top shelf swaps with the next card", function()
+t.test("a top shelf takes a hanging card in its turn", function()
+    -- A page's first row hangs its pieces from the bottom of the top panel
+    -- (maintainer), so no card is passed over there any more.
     local D = fresh()
     local d = D.dealer(D.newState(), cards("Hbat,vase,cup"))
-    eq(d:peek(true).name, "vase", "peek must agree with take")
-    eq(d:take(true).name, "vase", "the top shelf took the bat")
-    eq(d:take(false).name, "bat", "the bat did not go to the next slot with a shelf above")
-    eq(d:take(false).name, "cup", "the order after the swap is broken")
+    eq(d:peek(true).name, "bat", "peek must agree with take")
+    eq(d:take(true).name, "bat", "the top shelf passed the bat over")
+    eq(d:take(false).name, "vase")
+    eq(d:take(true).name, "cup")
 end)
 
-t.test("an owed hanging card waits past further top shelves", function()
+t.test("one standing card among hanging ones is not dealt to every top shelf", function()
+    -- PW5: a loose test piece and a pack whose pieces all hang. Every page's
+    -- top shelf skipped round the whole deck to the one standing piece, and
+    -- the skipped cards piled up (about 25 more a page).
     local D = fresh()
-    local d = D.dealer(D.newState(), cards("Hbat,vase,cup,jar"))
-    eq(d:take(true).name, "vase")
-    eq(d:take(true).name, "cup", "a second top shelf must not take the owed bat")
-    eq(d:take(false).name, "bat")
-    eq(d:take(false).name, "jar")
-end)
-
-t.test("every card hangs: a top shelf stands the next one on the plank", function()
-    local D = fresh()
-    local d = D.dealer(D.newState(), cards("Ha,Hb"))
-    local e, _no, stand = d:take(true)
-    eq(e.name, "a"); eq(stand, true)
-    eq(d:take(false).name, "b")
+    local spec = { "toulouse" }
+    for i = 1, 26 do spec[#spec + 1] = "Hprint" .. i end
+    local d = D.dealer(D.newState(), cards(table.concat(spec, ",")))
+    local seen = 0
+    for _page = 1, 6 do
+        for _i, top in ipairs({ true, false }) do
+            if d:take(top).name == "toulouse" then seen = seen + 1 end
+        end
+    end
+    eq(seen, 1, "the standing piece came round more than once in 12 deals")
+    eq(d.st.owed, nil, "the dealer still keeps a queue of passed-over cards")
 end)
 
 t.test("no cards: nothing is dealt and nothing loops", function()
@@ -195,12 +198,12 @@ t.test("a copied state deals the same pieces", function()
     local D = fresh()
     local c = cards("Ha,b,c,d")
     local d1 = D.dealer(D.newState(), c)
-    d1:take(true)                                   -- b, a owed
+    d1:take(true)
     local snap = D.copyState(d1.st)
     local x = { d1:take(false).name, d1:take(false).name }
     local d2 = D.dealer(D.copyState(snap), c)
     eq(table.concat({ d2:take(false).name, d2:take(false).name }, ","), table.concat(x, ","))
-    assert(snap.owed ~= d1.st.owed, "copyState shares the owed list")
+    assert(snap ~= d1.st, "copyState shares the state")
 end)
 
 -- A synthetic shelf: n books of width w, a group boundary before every
@@ -229,7 +232,7 @@ local function env(D, st, level, es, paginating, per_page, n_rows, pool)
     return {
         dealer = D.dealer(st, pool), level = level, entries = es,
         paginating = paginating, per_page = per_page, n_rows = n_rows, content_w = 300,
-        size = function(kind, e, no, stand) return { entry = e, w = 40, kind = kind, no = no, stand = stand } end,
+        size = function(kind, e, no) return { entry = e, w = 40, kind = kind, no = no } end,
         space = function(kind, pl) return pl.w + 8 end,
         pageKey = function(i) return tostring(es[i].item_idx) end,
     }
@@ -282,7 +285,6 @@ t.test("agreement: every page the render plans matches the pagination pass", fun
             local mine = rh.dealer and rh.dealer.st or rh.state()
             eq(mine.n, nxt.n, level .. ": page " .. p .. " end state n")
             eq(mine.shelf, nxt.shelf); eq(mine.bnd, nxt.bnd)
-            eq(table.concat(mine.owed, ","), table.concat(nxt.owed, ","))
         end
     end
 end)
@@ -341,28 +343,26 @@ t.test("the render deals nothing past its own rows", function()
     eq(st.shelf, 2, "the render counted shelves past its page")
 end)
 
-t.test("no hanging piece is dealt to a page's top shelf", function()
+t.test("hanging pieces reach a page's top shelf in their turn", function()
     local D = fresh()
     local pool = cards("Ha,b,Hc,d")
     for _k, level in ipairs({ "often", "always" }) do
         local all = shelf(80, 45, 2)
         local prow, ph = run(D, env(D, D.newState(), level, all, true, 2, math.huge, pool))
-        local hung_on_top, hung = 0, 0
+        local hung_on_top = 0
         for r = 1, #prow do
             local top = ((r - 1) % 2) == 0
             local function check(pl)
-                if pl and pl.entry.reaches_above and not pl.stand then
-                    hung = hung + 1
-                    if top then hung_on_top = hung_on_top + 1 end
-                end
+                if pl and pl.entry.reaches_above and top then hung_on_top = hung_on_top + 1 end
             end
             check(ph.row_orn[r])
             for i = prow[r].first, prow[r].last do
                 check(all[i].ornament); check(all[i].lead_ornament)
             end
         end
-        assert(hung > 0, level .. ": test premise, no hanging piece was dealt at all")
-        eq(hung_on_top, 0, level .. ": a hanging piece was dealt to a top shelf")
+        if level == "always" then
+            assert(hung_on_top > 0, level .. ": no hanging piece was dealt to a top shelf")
+        end
     end
 end)
 
@@ -392,7 +392,7 @@ t.test("a one-row page squeezes its end piece so the page's book fits", function
     -- shrinks instead -- only as far as the book needs.
     local D = fresh()
     local function wide(e)
-        e.size = function(kind, en, no, stand, cap)
+        e.size = function(kind, en, no, cap)
             local w = (kind == "rowend") and 250 or 40
             if cap then w = math.min(w, cap) end
             return { entry = en, w = w, kind = kind, no = no }
@@ -420,7 +420,7 @@ end)
 t.test("a book that leaves no room for any piece: the piece is left off that row", function()
     local D = fresh()
     local e = env(D, D.newState(), "always", shelf(3, 295, nil), false, 1, 1, cards("a"))
-    e.size = function(kind, en, no, stand, cap)
+    e.size = function(kind, en, no, cap)
         local w = (kind == "rowend") and 250 or 40
         if cap then if cap < 10 then return nil end; w = math.min(w, cap) end
         return { entry = en, w = w, kind = kind, no = no }
@@ -434,7 +434,7 @@ t.test("a piece squeezed below a quarter of its width is left off instead", func
     -- sizeFor never refuses, so a tight squeeze would stand a speck.
     local D = fresh()
     local e = env(D, D.newState(), "always", shelf(3, 250, nil), false, 1, 1, cards("a"))
-    e.size = function(kind, en, no, stand, cap)
+    e.size = function(kind, en, no, cap)
         local w = (kind == "rowend") and 200 or 40
         if cap then w = math.max(1, math.min(w, cap)) end
         return { entry = en, w = w, kind = kind, no = no }

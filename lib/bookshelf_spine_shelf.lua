@@ -4047,8 +4047,8 @@ function SpineShelf.plan(items, opts)
     local cards = (Deck and orn and orn_level ~= "off") and Deck.order(orn.mod.list()) or {}
     -- cap: the most width the piece may take (the deck's squeeze, for a row
     -- that must also seat a book); caps a reader's scale nudge as well.
-    local function size(kind, e, deal_no, stand, cap)
-        local o = { max_below = orn.max_below, stand = stand }
+    local function size(kind, e, deal_no, cap)
+        local o = { max_below = orn.max_below }
         if kind == "rowend" or kind == "bare" then
             o.max_room = orn.row_end - 2 * orn.pad
         else

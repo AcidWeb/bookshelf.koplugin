@@ -231,14 +231,15 @@ end
 
 -- ── The dealer ──────────────────────────────────────────────────────────
 -- State: n = cards dealt from the order so far on this chip; shelf = shelves
--- counted; bnd = group boundaries counted; owed = cards that reach the shelf above (card
--- numbers) passed over on a top shelf, waiting for a slot with a shelf above.
-function M.newState() return { n = 0, shelf = 0, bnd = 0, owed = {} } end
+-- counted; bnd = group boundaries counted. Every slot takes the next card:
+-- a hanging piece on a page's top shelf hangs from the bottom of the top
+-- panel (BookshelfWidget:_hangUnder), so no card is ever passed over. (It
+-- was, once: a pack whose pieces all hang then gave a lone standing piece
+-- every top shelf, PW5.)
+function M.newState() return { n = 0, shelf = 0, bnd = 0 } end
 function M.copyState(st)
     st = st or M.newState()
-    local o = {}
-    for i, c in ipairs(st.owed or {}) do o[i] = c end
-    return { n = st.n or 0, shelf = st.shelf or 0, bnd = st.bnd or 0, owed = o }
+    return { n = st.n or 0, shelf = st.shelf or 0, bnd = st.bnd or 0 }
 end
 
 local Dealer = {}
@@ -250,41 +251,19 @@ end
 
 function Dealer:_card(c) return self.cards[(c % #self.cards) + 1] end
 
--- _choose(top) -> card number, from_owed, skipped (hanging cards passed
--- over), stand. Pure: peek and take share it, so they cannot disagree.
-function Dealer:_choose(top)
+-- peek() / take() -> the next card and its deal number (how many times this
+-- card has been dealt on the chip, counting this one), or nil with no cards.
+function Dealer:peek()
     local count = #self.cards
     if count == 0 then return nil end
-    local st = self.st
-    if not top and #st.owed > 0 then return st.owed[1], true, nil, false end
-    if not top then return st.n, false, nil, false end
-    local c, skipped = st.n, {}
-    for _i = 1, count do
-        if not self:_card(c).reaches_above then return c, false, skipped, false end
-        skipped[#skipped + 1] = c
-        c = c + 1
-    end
-    -- Every card hangs: the first stands on the plank this once.
-    return st.n, false, nil, true
+    local c = self.st.n
+    return self:_card(c), math.floor(c / count) + 1
 end
 
-function Dealer:peek(top)
-    local c, _o, _s, stand = self:_choose(top)
-    if not c then return nil end
-    return self:_card(c), math.floor(c / #self.cards) + 1, stand
-end
-
-function Dealer:take(top)
-    local c, from_owed, skipped, stand = self:_choose(top)
-    if not c then return nil end
-    local st = self.st
-    if from_owed then
-        table.remove(st.owed, 1)
-    else
-        for _i, s in ipairs(skipped or {}) do st.owed[#st.owed + 1] = s end
-        st.n = c + 1
-    end
-    return self:_card(c), math.floor(c / #self.cards) + 1, stand
+function Dealer:take()
+    local e, no = self:peek()
+    if e then self.st.n = self.st.n + 1 end
+    return e, no
 end
 
 -- ── Fill hooks ──────────────────────────────────────────────────────────
@@ -319,12 +298,12 @@ function M.fillHooks(env)
         if not allowed(r) then return end
         d.st.shelf = d.st.shelf + 1
         if M.shelfSlot(level, d.st.shelf) then
-            local e, no, stand = d:take(within == 1)
+            local e, no = d:take()
             if e then
-                local pl = env.size("rowend", e, no, stand)
+                local pl = env.size("rowend", e, no)
                 if pl then
                     pl.side = M.side(level, d.st.shelf); h.row_orn[r] = pl
-                    h.row_deal[r] = { e, no, stand }
+                    h.row_deal[r] = { e, no }
                 end
             end
         end
@@ -351,7 +330,7 @@ function M.fillHooks(env)
         local pads = env.space("rowend", pl) - pl.w
         if pl.w + pads <= room then return nil end
         local cap = room - pads
-        local small = cap > 0 and env.size("rowend", deal[1], deal[2], deal[3], cap) or nil
+        local small = cap > 0 and env.size("rowend", deal[1], deal[2], cap) or nil
         -- Not a scrap: under a quarter of its own width it is not the piece
         -- any more (sizeFor never refuses a size), so it comes off the row.
         if small and small.w * 4 >= pl.w and env.space("rowend", small) <= room then
@@ -372,9 +351,8 @@ function M.fillHooks(env)
     local function peekPiece(kind, r)
         if not allowed(r) then return nil end
         if not M.gapSlot(level, d.st.bnd + 1) then return nil end
-        local _p, within = pageOf(r)
-        local e, no, stand = d:peek(within == 1)
-        return e and env.size(kind, e, no, stand) or nil
+        local e, no = d:peek()
+        return e and env.size(kind, e, no) or nil
     end
     h.gaps = setmetatable({}, { __index = function(_t, i)
         local e = es[i]
@@ -398,14 +376,13 @@ function M.fillHooks(env)
         if not counts then return end
         d.st.bnd = d.st.bnd + 1
         if not M.gapSlot(level, d.st.bnd) then return end
-        local _p, within = pageOf(r)
-        local e, no, stand = d:take(within == 1)
+        local e, no = d:take()
         if not e then return end
         local ent = es[i]
         if starts_row then
-            ent.lead_ornament = env.size("lead", e, no, stand)
+            ent.lead_ornament = env.size("lead", e, no)
         else
-            local pl = env.size("gap", e, no, stand)
+            local pl = env.size("gap", e, no)
             ent.ornament = pl
             if pl then ent.gap_before = (ent.gap_base or 0) + env.space("gap", pl) end
         end
@@ -443,9 +420,9 @@ function M.fillHooks(env)
         for r = from, to do
             d.st.shelf = d.st.shelf + 1
             if M.shelfSlot(level, d.st.shelf) then
-                local e, no, stand = d:take(r == 1)
+                local e, no = d:take()
                 if e then
-                    local pl = env.size("bare", e, no, stand)
+                    local pl = env.size("bare", e, no)
                     if pl then pl.side = M.side(level, d.st.shelf); out[r] = pl end
                 end
             end

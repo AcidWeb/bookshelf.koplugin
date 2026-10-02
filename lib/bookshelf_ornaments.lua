@@ -787,9 +787,6 @@ local function applyLayers(e, layers)
     e.mirror = get("mirror") or "off"
     e.tap    = get("tap")
     e.info   = get("info")
-    -- A piece hanging from the shelf above wants one: the deck keeps it off
-    -- a page's top shelf (Deck.dealer).
-    e.reaches_above = (e.anchor == "top") or nil
 end
 
 M._applyLayers = applyLayers
@@ -1304,9 +1301,8 @@ end
 -- place(entry, cap_px, stand_h, o, deal_no) -> where a dealt piece stands.
 -- o.max_room : the widest a scaled-up piece may go (the whole row);
 -- o.max_below : how far below the feet an overhang may reach (the plank's
--- surface strip + front face); o.stand : a hanging piece stands this once
--- (a page's top shelf, when every piece hangs). deal_no counts this piece's
--- deals on the chip, for "mirror every other time".
+-- surface strip + front face). deal_no counts this piece's deals on the
+-- chip, for "mirror every other time".
 function M.place(entry, cap_px, stand_h, o, deal_no)
     o = o or {}
     if not entry then return nil end
@@ -1317,8 +1313,8 @@ function M.place(entry, cap_px, stand_h, o, deal_no)
     -- (SpineShelf.ornamentY).
     local below = math.floor(height * (entry.overhang or 0))
     if o.max_below and below > o.max_below then below = o.max_below end
-    local anchor = (not o.stand and entry.anchor == "top") and "top" or "bottom"
-    local offset = o.stand and 0 or (entry.lift or 0)
+    local anchor = (entry.anchor == "top") and "top" or "bottom"
+    local offset = entry.lift or 0
     -- Where the drawing's top is inside the picture: the top anchor meets the
     -- shelf above with the DRAWING, not the file's transparent top room.
     local content_top = 0

@@ -84,7 +84,7 @@ t.test("defaults when there is no file", function()
     local e = byName(O)["cat.svg"]
     eq(e.scale, 1); eq(e.lift, 0); eq(e.pad, 0); eq(e.mirror, "off")
     eq(e.anchor, "bottom", "a piece does not stand by default")
-    eq(e.reaches_above, nil); eq(e.tap, nil)
+    eq(e.tap, nil)
 end)
 
 t.test("a pack's file places its pieces", function()
@@ -94,9 +94,8 @@ t.test("a pack's file places its pieces", function()
     svg(new .. "/Autumn/fox.svg")
     local e = byName(O)["Autumn/owl.svg"]
     eq(e.scale, 1.5); eq(e.anchor, "top"); eq(e.mirror, "alternate")
-    eq(e.reaches_above, true, "a piece anchored to the top does not reach the shelf above")
     local fox = byName(O)["Autumn/fox.svg"]
-    eq(fox.anchor, "bottom"); eq(fox.reaches_above, nil, "a raised piece is not one hanging from the shelf above")
+    eq(fox.anchor, "bottom", "a raised piece is not one hanging from the shelf above")
 end)
 
 t.test("the reader's own file adjusts the pack's, field by field, keyed Pack/file", function()

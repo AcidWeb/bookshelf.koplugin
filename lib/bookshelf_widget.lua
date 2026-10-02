@@ -2505,6 +2505,12 @@ function BookshelfWidget:_rebuild()
         }
         grid_top_extra, grid_between, grid_last = s.top - top_base, s.between, s.last
     end
+    -- Where a page's first row hangs its top-anchored pieces from: the bottom
+    -- of the top panel, the visible gap above row 1 (maintainer). The panel's
+    -- bleed covers part of the span; with no panel the chip strip's frame
+    -- paints 2 x border below what it declares.
+    local hang_top_gap = (hide_chip_bar and hero_chip_pad or PAD) + grid_top_extra
+        - math.max(top_panel_bleed or 0, (not hide_chip_bar) and 2 * Size.border.thin or 0)
     inner_vgroup[#inner_vgroup + 1] = VerticalSpan:new{
         width = hero_chip_pad + (hide_chip_bar and (list_top_extra + grid_top_extra) or 0) }
     if not hide_chip_bar then
@@ -2559,7 +2565,7 @@ function BookshelfWidget:_rebuild()
 
     local shelf_first_idx = #inner_vgroup + 1
     local list_rows = self:_isListMode()
-    self:_hangUnder(rows, shelf_h + grid_between)
+    self:_hangUnder(rows, shelf_h + grid_between, hang_top_gap)
     local ListRow   = list_rows and require("lib/bookshelf_list_row") or nil
     for r = 1, n_shelves do
         inner_vgroup[#inner_vgroup + 1] = rows[r]
@@ -2692,6 +2698,9 @@ function BookshelfWidget:_rebuild()
         -- Row top to row top, for pieces that hang from the shelf above
         -- (_hangUnder), which a swap in place has to place again.
         row_pitch            = shelf_h + grid_between,
+        -- ...and the gap above row 1 its pieces hang from (the top panel's
+        -- bottom), which the page-turn refresh has to reach.
+        hang_top_gap         = hang_top_gap,
         shelf_bottom_idx     = shelf_first_idx + 2 * (n_shelves - 1),
         footer_overlap_idx   = footer_idx,
         -- Screen-y where the shelf rows begin (pre_rows_h includes the
@@ -6112,12 +6121,39 @@ function BookshelfWidget:_spinePlanBase(content_w, shelf_h, all_items)
     }
 end
 
--- _hangUnder(rows, pitch): a piece that hangs from the shelf above is painted
+-- _rowsRegionTop(shelf_top, d) -> where a page turn's repaint starts: the
+-- PAD band above row 1 (cover badges overhang into it), or higher, up to
+-- the top panel's bottom, where row 1's hanging pieces reach.
+function BookshelfWidget._rowsRegionTop(shelf_top, d)
+    return math.max(0, shelf_top - math.max(d and d.PAD or 0, d and d.hang_top_gap or 0))
+end
+
+-- _hangUnder(rows, pitch, top_gap): a piece that hangs from the shelf above is painted
 -- by the ROW ABOVE, before its plank, so that plank and its shadow are in
 -- front of it (maintainer). Its offset was worked out against its own row, so
 -- it moves down by one row pitch (row top to row top). Spine rows carry the
 -- list (SpineShelf.rowWidget's _hanging); other views' rows have none.
-function BookshelfWidget:_hangUnder(rows, pitch)
+function BookshelfWidget:_hangUnder(rows, pitch, top_gap)
+    -- A page's first row has no shelf above: its top-anchored pieces hang
+    -- from the bottom of the top panel, top_gap above the row (maintainer).
+    -- Raised past it (a height nudge up), the part above is cut off, so a
+    -- piece never paints over the panel.
+    if top_gap and rows[1] then
+        for _i, n in ipairs(rows[1]._orn_list or {}) do
+            if n.t ~= 0 then
+                local off = n.w.overlap_offset or { 0, 0 }
+                local y = off[2] - math.floor(n.t * (top_gap - (n.gap or 0)) + 0.5)
+                local pl = n.w.placement
+                if y < -top_gap and pl and pl.h then
+                    local cut = -top_gap - y
+                    n.w.placement = setmetatable({ crop = { x = 0, y = cut, w = pl.w, h = math.max(1, pl.h - cut) } },
+                                                 { __index = pl })
+                    y = -top_gap
+                end
+                n.w.overlap_offset = { off[1], y }
+            end
+        end
+    end
     -- A piece anchored to the top was placed against the layout's nominal
     -- row gap (SpineShelf.ornamentY); the real one, with the screen's slack
     -- spread into it (GridMargins), is only known now. Each row noted those
@@ -8156,7 +8192,7 @@ function BookshelfWidget:_swapShelvesInPlace()
     local ListRow      = list_rows and require("lib/bookshelf_list_row") or nil
     local VerticalSpan = list_rows and require("ui/widget/verticalspan") or nil
     local old_rows = {}
-    if d.row_pitch then self:_hangUnder(rows, d.row_pitch) end
+    if d.row_pitch then self:_hangUnder(rows, d.row_pitch, d.hang_top_gap) end
     for r = 1, n_shelves do
         local idx = d.shelf_top_idx + 2 * (r - 1)
         old_rows[r] = self._inner_vgroup[idx]
@@ -8291,7 +8327,7 @@ function BookshelfWidget:_swapShelvesInPlace()
     if _wipe_dir then self._full_refresh_pending = nil end
     local wiped = false
     if anim_steps then
-        local ry = math.max(0, shelf_top - (d and d.PAD or 0))
+        local ry = BookshelfWidget._rowsRegionTop(shelf_top, d)
         -- Rows only when the footer's band is known: the footer is handled
         -- separately below so its icons don't wipe on every turn.
         local rh = self.height - ry
@@ -8340,7 +8376,7 @@ function BookshelfWidget:_swapShelvesInPlace()
             -- glyphs' above-cover pixels on the panel -- the ghost borders /
             -- hearts reported on reader return. Starting the region a PAD
             -- higher sweeps them.
-            local ry = math.max(0, shelf_top - (d and d.PAD or 0))
+            local ry = BookshelfWidget._rowsRegionTop(shelf_top, d)
             if footer_rect and footer_band and footer_band.y > ry then
                 -- Rows band + only the changed part of the footer. The
                 -- widget repaint covers both; the flash covers just these.
