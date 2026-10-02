@@ -19,7 +19,7 @@ A friendly home screen for KOReader. Browse your library by series, author, genr
 
 ## Install
 
-> **Bookshelf needs KOReader v2025.08 or newer.** On an older version it shows a single menu line asking you to update, instead of running. On colour screens, rounded cover corners need v2026.03 or newer; older versions draw them square. To check yours, open KOReader's menu and go to **Help > Version**.
+> **Bookshelf needs KOReader v2025.08 or newer, and works best on v2026.03 or newer.** On a version older than v2025.08 it shows a single menu line asking you to update, instead of running. On v2025.08 to v2026.02 it works, with a few small differences: corners on covers and folder cards come out square, staged bulk-edit buttons show no highlight, and opening a book from the quote of the day doesn't jump to the quote. To check your version, open KOReader's menu and go to **Help > Version**.
 
 1. Download the latest **bookshelf.koplugin.zip** from [Releases](https://github.com/AndyHazz/bookshelf.koplugin/releases).
 2. Unzip it onto your device's KOReader plugins folder:

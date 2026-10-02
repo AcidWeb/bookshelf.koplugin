@@ -1,8 +1,13 @@
 -- lib/bookshelf_version_gate.lua
 -- Bookshelf crashes on a KOReader older than v2025.08, which reached readers as
--- a crash with nothing to say why. From v2025.08 it runs; only v2026.03 and
--- newer draw rounded cover corners on colour screens (older ones draw them
--- square), which is no reason to turn a reader away (maintainer).
+-- a crash with nothing to say why: the RGB32 rounded-rect and border painters
+-- (koreader-base, v2025.08) are called on every colour cover's first paint and
+-- on every folder and series card, and ButtonDialog:addWidget (KOReader PR
+-- 13893) on several menus. This gate is for CRASHES only (maintainer): from
+-- v2025.08 Bookshelf runs, and what v2026.03 adds is cosmetic (rounded corners,
+-- ButtonTable backgrounds, the quote of the day's jump to its page), which is
+-- no reason to turn a reader away. Keep it that way: raise M.MIN only for a
+-- version that would crash.
 --
 -- main.lua asks this first, before any other bookshelf module loads, and on an
 -- older version the plugin is a stub: one menu line saying what to do, and
