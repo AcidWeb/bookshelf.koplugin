@@ -5,7 +5,7 @@
 --
 -- A pack is a subfolder of the ornaments folder (lib/bookshelf_ornaments);
 -- the chips across the top are All (every ornament) and one per pack.
--- With a pack's chip selected the footer switches the whole pack off or on.
+-- The footer's Select all / Select none switch every ornament on the tab.
 --
 --   tap        switch that ornament off / on
 --   long-press switch it, or delete it
@@ -240,50 +240,68 @@ function Browser:_longTap(item)
     UIManager:show(d)
 end
 
--- _packAction() -> the footer's pack button: on a pack's chip it switches the
--- whole pack; anywhere else it says how to add ornaments and make packs.
-function Browser:_packAction()
+-- _addButton() -> Add ornaments...: where to put them, how a folder becomes a
+-- pack, and where to get ready-made packs. On the All tab.
+function Browser:_addButton()
     return {
-        -- On a pack's chip: switch the whole pack. Anywhere else it
-        -- says how to add ornaments and make packs. It was a greyed
-        -- "Pack" there, which said nothing about what it was for, and
-        -- with no packs yet could never be used (maintainer).
-        key = "pack",
-        label_func = function()
-            if not self:_isPack(self.chip) then return _("Add ornaments\xe2\x80\xa6") end
-            return O().isPackOff(self.chip) and _("Switch pack on") or _("Switch pack off")
-        end,
+        key = "add",
+        label = _("Add ornaments\xe2\x80\xa6"),
         on_tap = function()
-            if not self:_isPack(self.chip) then
-                UIManager:show(InfoMessage:new{
-                    -- The shop URL is a parameter, not part of the
-                    -- msgid, so a translation cannot break it.
-                    text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack: it gets its own tab here, and can be switched on or off as a whole.\n\nReady-made packs:\n%2"),
-                        (function()
-                            -- A findable path: the settings dir can be relative.
-                            local d = O().dir() or "?"
-                            local ok, util = pcall(require, "ffi/util")
-                            local real = ok and util.realpath and util.realpath(d)
-                            return real or d
-                        end)(),
-                        "ko-fi.com/andyhazz/shop"),
-                })
-                return
-            end
-            O().setPackOff(self.chip, not O().isPackOff(self.chip))
-            self:_changed()
+            UIManager:show(InfoMessage:new{
+                -- The shop URL is a parameter, not part of the
+                -- msgid, so a translation cannot break it.
+                text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack, with its own tab here.\n\nReady-made packs:\n%2"),
+                    (function()
+                        -- A findable path: the settings dir can be relative.
+                        local d = O().dir() or "?"
+                        local ok, util = pcall(require, "ffi/util")
+                        local real = ok and util.realpath and util.realpath(d)
+                        return real or d
+                    end)(),
+                    "ko-fi.com/andyhazz/shop"),
+            })
         end,
     }
 end
 
--- _footerRows() -> the footer, one row: the pack button and Apply (Cancel
--- when picking a replacement). A pack's theme is chosen in the Shelf theme
--- menu, not here (bookshelf_theme_pack.chooseTheme).
+-- _selectButton(on) -> Select all (on) or Select none: every ornament on the
+-- tab on or off (maintainer: plainer than Switch pack on/off, which is the
+-- theme packs' job now).
+function Browser:_selectButton(on)
+    return {
+        key = on and "all" or "none",
+        label = on and _("Select all") or _("Select none"),
+        on_tap = function() self:_setAll(on) end,
+    }
+end
+
+-- _setAll(on): every ornament on this tab on or off, one by one. Select all
+-- also switches on a pack a theme had switched off, or its ornaments would be
+-- on and still not show.
+function Browser:_setAll(on)
+    local Orn = O()
+    for _i, item in ipairs(self.items or {}) do
+        local e = item.entry
+        if e then
+            Orn.setOff(e.name, not on)
+            if on and e.pack and Orn.isPackOff(e.pack) then Orn.setPackOff(e.pack, false) end
+        end
+    end
+    self:_changed()
+end
+
+-- _footerRows() -> the footer, one row: Select all, Select none and Apply
+-- (Add ornaments first on the All tab; Cancel alone when picking a
+-- replacement). A pack's theme is chosen in the Shelf theme menu, not here
+-- (bookshelf_theme_pack.chooseTheme).
 function Browser:_footerRows()
     local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Apply"), on_tap = self._close }
     -- Choosing a replacement: nothing to switch here, only a way out.
     if self.opts.pick then return { { close } } end
-    return { { self:_packAction(), close } }
+    if self:_isPack(self.chip) then
+        return { { self:_selectButton(true), self:_selectButton(false), close } }
+    end
+    return { { self:_addButton(), self:_selectButton(true), self:_selectButton(false), close } }
 end
 
 -- show(on_change, opts): on_change() runs once when the browser closes, if

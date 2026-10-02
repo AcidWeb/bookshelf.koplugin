@@ -58,7 +58,7 @@ t.test("the collection shows ornaments only, with no theme buttons", function()
         assert(not browser:find(gone, 1, true), gone .. " is still in the collection")
     end
     assert(not browser:find("function Browser:_applyTheme", 1, true), "_applyTheme is still there")
-    assert(foot:find("return { { self:_packAction(), close } }", 1, true), "the footer is not one row")
+    assert(not browser:find("_packAction", 1, true), "the whole-pack switch is still in the footer")
 end)
 
 t.test("Accent colors starts with a Color theme row; no override rows remain", function()
@@ -109,6 +109,40 @@ t.test("choosing a plain plank colour comes back to the plank picker, not the me
     assert(pc and pc:find("wood.on_done", 1, true), "the colour dialogs have no way to say they closed")
     local pp = settings:match("function Settings:_pickPlank%(.-\nend\n")
     assert(pp and pp:find("on_done = on_done", 1, true), "the plank colour dialog does not pass it on")
+end)
+
+t.test("the collection's footer: Select all and Select none, Add ornaments on All", function()
+    -- Maintainer, 2026-10-02: Select all / Select none read more simply than
+    -- Switch pack on/off; the whole-pack switch is the theme packs' now.
+    local foot = browser:match("function Browser:_footerRows%(%)(.-)\nend\n")
+    assert(foot:find("if self.opts.pick then return { { close } } end", 1, true), "picking lost its Cancel-only footer")
+    assert(foot:find("self:_selectButton(true), self:_selectButton(false)", 1, true), "no Select all / Select none")
+    assert(foot:find("self:_addButton()", 1, true), "Add ornaments is gone")
+    assert(browser:find('_("Select all")', 1, true) and browser:find('_("Select none")', 1, true))
+end)
+
+t.test("Select all and Select none switch every ornament on the tab", function()
+    local body = browser:match("\nfunction Browser:_setAll%(on%)\n(.-)\nend\n")
+    assert(body, "no Browser:_setAll(on)")
+    local off, packs_off, changed = { ["Autumn/a.png"] = true }, { Autumn = true }, 0
+    local Orn = {
+        setOff = function(n, v) off[n] = v and true or nil end,
+        isPackOff = function(p) return packs_off[p] == true end,
+        setPackOff = function(p, v) packs_off[p] = v and true or nil end,
+    }
+    local f = load("return function(self, on)\n" .. body .. "\nend", "setAll", "t",
+        { O = function() return Orn end, ipairs = ipairs })()
+    local self = { items = { { entry = { name = "Autumn/a.png", pack = "Autumn" } },
+                             { entry = { name = "Autumn/b.png", pack = "Autumn" } },
+                             { entry = { name = "loose.png" } } },
+                   _changed = function() changed = changed + 1 end }
+    f(self, false)
+    assert(off["Autumn/a.png"] and off["Autumn/b.png"] and off["loose.png"], "Select none left one on")
+    eq(packs_off.Autumn, true, "Select none switched the pack")
+    f(self, true)
+    eq(next(off), nil, "Select all left one off")
+    eq(packs_off.Autumn, nil, "Select all did not switch on a pack a theme had off")
+    eq(changed, 2, "the browser was not redrawn")
 end)
 
 t.done()
