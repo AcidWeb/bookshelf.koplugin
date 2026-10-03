@@ -127,12 +127,15 @@ Each cover on the grid is either a book or a stack of books (for series, authors
 - **Tap** the top panel card cover to actually open the book.
 - **Long-press** a book to open the book menu (see below).
 - **Long-press** a stack to pin it to the shelf menu as its own shelf.
-- **Swipe up** to collapse the top panel and show more books at once.
-- **Swipe down** on the top panel to restore it; **swipe down** on the shelf area to refresh the library after adding new books over USB or Calibre.
+- **Swipe up** to go full screen: the top panel collapses and more books show at once. **Swipe down** brings it back.
+- **Swipe down** on the top panel for a bigger panel and one shelf row fewer; **swipe up** on it gives the row back.
+- **Swipe down** on the shelf area to refresh the library after adding new books over USB or Calibre.
 
 Every shelf shows a line of text under each cover -- the title by default. One setting drives it everywhere: **menu -> Settings -> Cover display -> Show text below covers** picks Title, Author, Series, or None (covers then use the full row). Its text size is **Cover labels** under **Settings -> Text size**. Books without covers already show their title and author on the placeholder itself, so those skip the extra label.
 
 The full gesture reference is in [Gestures cheatsheet](#gestures-cheatsheet) below; physical-key devices have their own reference in [Keyboard and D-pad](#keyboard-and-d-pad).
+
+Any of Bookshelf's own gestures can be switched off, one by one or all together, under **menu -> Settings -> Behavior -> Bookshelf gestures**. A gesture switched off does nothing on the shelf, so an action you have given it in KOReader's gesture manager can run instead. Tapping a book and swiping between pages always work.
 
 ### List view
 
@@ -251,7 +254,7 @@ Micro-modules are small live panels. Add them to the start menu through **Add ne
 
 - **Clock** -- digital (12- or 24-hour) or analogue.
 - **Battery** -- the battery level with KOReader's own battery icon and a level bar, plus the cover battery on devices that have one. Tap it for KOReader's battery statistics.
-- **Quote of the day** -- a highlight drawn from your own books, refreshed daily or on every open. Tapping it can roll a new quote, open that book's bookmark list, or open the book at the highlight. Its settings choose where quotes come from (your highlights, quote files in SimpleUI's format from `settings/bookshelf/quotes` or SimpleUI's own folder, or both), and can leave out particular books or highlight colours. For an example quote file, see [civ6_quotes.lua](assets/quotes/civ6_quotes.lua): 233 quotes from Civilization V and VI, shared by [@Mattson42](https://github.com/Mattson42) in [#464](https://github.com/AndyHazz/bookshelf.koplugin/issues/464).
+- **Quote of the day** -- a highlight drawn from your own books, refreshed daily or on every open. Tapping it can roll a new quote, open that book's bookmark list, or open the book at the highlight. Its settings choose where quotes come from (your highlights, quote files in SimpleUI's format from `settings/bookshelf/quotes` or SimpleUI's own folder, or both), and can leave out particular books or highlight colours. For an example quote file, see [civ6_quotes.lua](assets/quotes/civ6_quotes.lua): 233 quotes from Civilization V and VI, shared by [@Mattson42](https://github.com/Mattson42) in [#464](https://github.com/AndyHazz/bookshelf.koplugin/issues/464). **Scan library for highlights**, also in its settings, finds the highlights in every book at once.
 - **Reading goal** -- progress towards daily, weekly, monthly and yearly targets; tap to cycle. A book counts in the month and year you marked it finished. Its settings can add books you read outside KOReader to the year's count (moving from SimpleUI, your "physical books" number comes across).
 - **Reading stats** -- time and pages read today and this week (needs the `statistics` plugin).
 - **Reading streak** -- your current and best reading streak, in days and weeks (needs the `statistics` plugin).
@@ -694,8 +697,10 @@ Everything beyond this point is the full feature reference. Expand any section y
 | **Swipe west** (<-) | Anywhere else | Next page; on the last page, drills out or switches shelf |
 | **Swipe east** (->) | Top panel | Cycle preview to the previous book |
 | **Swipe east** (->) | Anywhere else | Previous page / drill back out / previous shelf |
-| **Swipe north** (up) | Anywhere | Collapse the top panel to a thin status strip; expand the grid |
-| **Swipe south** (down) | Top panel | Restore the full top panel from full screen (turn off **Settings -> Behavior -> Swipe down leaves full screen shelves** to stay in full screen; the currently reading button still brings the panel back) |
+| **Swipe north** (up) | Top panel, after a swipe south there | Give one shelf row back; the panel shrinks |
+| **Swipe north** (up) | Anywhere else | Full screen: collapse the top panel to a thin status strip; expand the grid |
+| **Swipe south** (down) | Top panel | Bigger top panel, one shelf row fewer |
+| **Swipe south** (down) | Anywhere, in full screen | Restore the top panel (turn off **Settings -> Behavior -> Bookshelf gestures -> Swipe down leaves full screen shelves** to stay in full screen; the currently reading button still brings the panel back) |
 | **Swipe south** (down) | Shelf area | Refresh the library walk |
 | **Back** (physical key) | Drilled into a stack | Pop one drill level back out to the parent shelf |
 
