@@ -4954,6 +4954,14 @@ function Settings:_openLayoutEditor(touchmenu_instance)
         tap_close_callback = cancel,
     }
     if dialog.movable then dialog.movable.ges_events = {} end
+    -- dismissable = false leaves Back unbound (ButtonDialog binds it only for
+    -- dismissable dialogs), so on a keys-only device it did nothing (GitHub
+    -- issue 361). Back is Cancel here: revert and close.
+    local Device = require("device")
+    if Device:hasKeys() then
+        dialog.key_events.BSSizeBack = { { Device.input.group.Back } }
+        dialog.onBSSizeBack = function() cancel() return true end
+    end
     UIManager:show(dialog)
 end
 
