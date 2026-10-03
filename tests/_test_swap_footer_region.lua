@@ -3,9 +3,11 @@
 --
 -- A whole-widget setDirty(self, "ui") repainted the hero above on every
 -- d-pad focus move and (previously) every D-pad page turn -- the same flash
--- class as issue #124. The method captures the OUTGOING footer row's dimen
--- before the swap and scopes the refresh to it; only when geometry is
--- missing does it fall back to a full refresh.
+-- class as issue #124. The band is placed from the screen's bottom edge and
+-- the outgoing row's height: the row's own dimen never holds a screen
+-- position (the BottomContainer painting it does not write one back), and
+-- copying it refreshed the top of the screen instead (GitHub issue 361).
+-- Only when the row cannot be measured does it fall back to a full refresh.
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local t   = dofile("tests/_helpers.lua").runner()
@@ -32,11 +34,11 @@ local function harness(opts)
     opts = opts or {}
     local dirty = {}
     local freed = {}
+    -- As the real row is: sized, but its dimen never placed (0,0).
     local old_row = opts.has_old_dimen ~= false and {
-        dimen = { x = 0, y = 700, w = 600, h = 80, copy = function(self)
-            return { x = self.x, y = self.y, w = self.w, h = self.h }
-        end },
-    } or nil
+        dimen = { x = 0, y = 0, w = 600, h = 80 },
+        getSize = function() return { w = 600, h = 80 } end,
+    } or {}
     local old_anchor = old_row and { [1] = old_row, free = function()
         freed[#freed + 1] = true
     end } or nil
@@ -61,7 +63,8 @@ local function harness(opts)
 
     local env = {
         ipairs = ipairs, pairs = pairs, type = type, tostring = tostring,
-        pcall = pcall,
+        pcall = pcall, math = math,
+        Screen = { scaleBySize = function(_, v) return v end },
         require = function(name)
             if name == "ui/widget/container/bottomcontainer" then
                 return { new = function(_, t) return t end }
@@ -86,11 +89,12 @@ t.test("scopes the refresh to the outgoing footer band", function()
     local dirty = harness()
     assert(#dirty == 1, "expected exactly one setDirty, got " .. #dirty)
     eq(dirty[1].mode, "ui", "refresh mode")
-    eq(dirty[1].region, { x = 0, y = 700, w = 600, h = 80 },
+    -- Screen bottom 800 - margin 10 = 790; row 80 tall plus 12 for the ring.
+    eq(dirty[1].region, { x = 0, y = 790 - 80 - 12, w = 600, h = 80 + 12 },
         "region must be the footer band, not a full-widget refresh")
 end)
 
-t.test("falls back to a full refresh when the old footer has no dimen", function()
+t.test("falls back to a full refresh when the old footer cannot be measured", function()
     local dirty = harness({ has_old_dimen = false })
     assert(#dirty == 1, "expected exactly one setDirty, got " .. #dirty)
     eq(dirty[1].mode, "ui", "refresh mode")
