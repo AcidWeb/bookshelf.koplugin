@@ -249,11 +249,12 @@ function TabBar:init()
         -- white gap between the baseline and the body's heading bar.
         h = self.top_pad + self._n_rows * self._row_h,
     }
-    if Device:isTouchDevice() then
-        self.ges_events = {
-            TapTab = { GestureRange:new{ ges = "tap", range = self.dimen } },
-        }
-    end
+    -- On every device, not only touch ones: on a keys-only device Press on a
+    -- focused tab arrives as FocusManager's synthetic tap, and this is what
+    -- turns it into the switch (GitHub issue 361).
+    self.ges_events = {
+        TapTab = { GestureRange:new{ ges = "tap", range = self.dimen } },
+    }
 
     -- Per-tab focus cells for the modal's dpad FocusManager. Each is a virtual
     -- focus target (never painted itself): on Focus it sets _focused_idx so
