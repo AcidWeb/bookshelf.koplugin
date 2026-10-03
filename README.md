@@ -39,7 +39,7 @@ A friendly home screen for KOReader. Browse your library by series, author, genr
 
 Once it's running, the top menu has a **Bookshelf** section with everything else: shelf size, shelves, Hardcover, updates, and settings.
 
-> **"menu" below always means Bookshelf's own menu**: the **Bookshelf** tab in KOReader's top menu, marked with an open-book icon and usually second from the left. Not to be confused with the [start menu](#the-start-menu), the hamburger in the bottom-left corner of the shelf, which is a launcher you build yourself (though it does carry a **Bookshelf menu** shortcut to the same place by default). Anywhere these instructions mean a different menu, they say so.
+> **"menu" below always means Bookshelf's own menu**: the **Bookshelf** tab in KOReader's top menu, marked with an open-book icon and usually second from the left. Not to be confused with the [start menu](#the-start-menu), the hamburger in the bottom-left corner of the shelf, which is a launcher you build yourself (you can add a **Bookshelf menu** shortcut to it: long-press any item -> **add new menu item** -> **Bookshelf action…** -> **Bookshelf menu**). Anywhere these instructions mean a different menu, they say so.
 
 ---
 
@@ -92,7 +92,7 @@ The top panel card has eight sections you can show, hide, or restyle:
 - **Tags (interactive)** -- a strip of tappable pills for the book's author, series, genres, collections, and parent folder. Tap a pill to jump straight to that shelf. Off by default.
 - **Progress** -- bottom-anchored line with an inline progress bar.
 
-To edit them, open **menu -> Settings -> Edit book detail view** (see [Customising the top panel](#customising-the-top-panel) below).
+To edit them, open **menu -> Settings -> Edit top panel content** (see [Customising the top panel](#customising-the-top-panel) below).
 
 ### Micro-modules on the home screen
 
@@ -564,7 +564,7 @@ Whichever you choose, variant spellings of the same author are merged into one e
 
 ## Customising the top panel
 
-Open **menu -> Settings -> Edit book detail view** to toggle each of the book's sections on or off; tap a section's row to open its **line editor**. The status line (the strip of device and reading info at the very top) is configured the same way from its own **Status line** entry just above, and the top panel card's overall text size lives under **Settings -> Text size -> Top panel**.
+Open **menu -> Settings -> Edit top panel content** to toggle each of the book's sections on or off; tap a section's row to open its **line editor**. The status line (the strip of device and reading info at the very top) is configured the same way from its own **Status line** entry just above, and the top panel card's overall text size lives under **Settings -> Text size -> Top panel**.
 
 **Show status line.** Bookshelf can put this same line across the top of the reader, so it does not change as you move between the shelf and a book. The switch lives under **menu -> Settings -> Advanced -> While reading**, alongside the other things Bookshelf can draw into the reader; the line itself is still edited here, and the reader follows. It is drawn by the same code that draws it on the shelf, so the two are identical by construction. This works on its own; if you also use [Bookends](https://github.com/AndyHazz/bookends.koplugin), its top row and any top-anchored progress bar move down to make space.
 
@@ -795,7 +795,7 @@ Defaults adjust to the source (e.g. Recent defaults to *Last opened*; Latest add
 
 The book detail card has **eight editable sections**: Status, Rating, Title, Author, Metadata, Description, Tags (interactive), and Progress. The Tags section shows tappable pills rather than a text template, so it has no line editor; toggle it on or off like the others.
 
-Open **menu -> Edit book detail view** to toggle each section on or off. Tap a section's row (when its toggle is on) to open the **line editor**.
+Open **menu -> Settings -> Edit top panel content** to toggle each section on or off. Tap a section's row (when its toggle is on) to open the **line editor**.
 
 Edits live-update the top panel behind the editor on every keystroke; only the right column of the card is rebuilt, so the cover stays untouched.
 
