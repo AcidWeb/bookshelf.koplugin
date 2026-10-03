@@ -43,6 +43,7 @@ local function shelf(opts)
         _selection       = { isActive = function() return opts.selecting == true end },
         _nShelves        = function() return opts.rows or 2 end,
         _nCols           = function() return opts.cols or 4 end,
+        _spineItemRows   = function() return nil end,  -- a cover shelf
         _startMenuPosition = function() return opts.start_menu or "left" end,
         _swapShelvesInPlace = function(s) s._shelves_swapped = true end,
         _swapFooterInPlace  = function(s) s._footer_swapped = true end,

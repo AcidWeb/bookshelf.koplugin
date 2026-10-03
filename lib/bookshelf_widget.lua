@@ -11056,11 +11056,67 @@ function BookshelfWidget:_chipKeyNeighbour(key, direction)
     return keys[((idx - 1 + direction) % n) + 1]
 end
 
+-- _spineItemRows() -> rows, n | nil
+-- On a spine shelf, which row each book on THIS page sits on (rows[i] for
+-- _page_items[i]) and how many books the page shows. The D-pad's grid arms
+-- otherwise work in cover-grid terms, _nShelves() * _nCols() slots with rows
+-- _nCols() apart, and a spine page holds far more books than that in rows of
+-- varying length: Right from the 8th spine turned the page and Down jumped 4
+-- books, so most of each shelf could not be reached (Reddit report). A spine
+-- page's items run on to the end of the chip; the render notes which of them
+-- it laid out (_noteSpineRows), and only rows noted for this very page and
+-- shelf are trusted. nil off spine mode, or before this page has rendered.
+function BookshelfWidget:_spineItemRows()
+    if not self:_isSpineMode() then return nil end
+    local sr = self._spine_rows
+    if not (sr and sr.row_of and sr.chip == self.chip and sr.c == self._cursor
+            and sr.s == self:_spineSkip()) then
+        return nil
+    end
+    local rows, n = {}, 0
+    for i, it in ipairs(self._page_items or {}) do
+        local r = it.filepath and sr.row_of[it.filepath]
+        if not r and type(it.books) == "table" then
+            -- A flattened group spans spines: it sits where it starts.
+            for _j, b in ipairs(it.books) do
+                r = b.filepath and sr.row_of[b.filepath]
+                if r then break end
+            end
+        end
+        if not r then break end
+        rows[i] = r
+        n = i
+    end
+    if n == 0 then return nil end
+    return rows, n
+end
+
+-- _spineRowStep(rows, n, cur, dir) -> the book on the row above (dir -1) or
+-- below (+1) at the same place along it, clamped to that row's length; nil
+-- when there is no such row on the page.
+function BookshelfWidget._spineRowStep(rows, n, cur, dir)
+    local r = rows[cur]
+    if not r then return nil end
+    local start = cur
+    while start > 1 and rows[start - 1] == r do start = start - 1 end
+    local first, last
+    for i = 1, n do
+        if rows[i] == r + dir then
+            first = first or i
+            last = i
+        end
+    end
+    if not first then return nil end
+    return math.min(first + (cur - start), last)
+end
+
 function BookshelfWidget:_moveCursor(delta)
     local items = self._page_items
     if not items or #items == 0 then return true end
     local n_cols    = self:_nCols()
-    local view_size = self:_nShelves() * n_cols
+    -- A spine page's own book count, not the cover grid's slot count.
+    local _rows, spine_n = self:_spineItemRows()
+    local view_size = spine_n or (self:_nShelves() * n_cols)
     local cur       = self._cursor_idx or 1
     local new_idx   = cur + delta
 
@@ -11069,8 +11125,17 @@ function BookshelfWidget:_moveCursor(delta)
             self:_markOpdsNav()
             self:_advanceCursor(-1)
             self:_syncPageFromCursor()
-            self._cursor_idx = view_size
+            -- A spine page's length is known only once it is laid out: land on
+            -- its first book, then move to its last now that the rows exist.
+            self._cursor_idx = spine_n and 1 or view_size
             self:_swapShelvesInPlace()
+            if spine_n then
+                local _r, prev_n = self:_spineItemRows()
+                if prev_n and prev_n > 1 then
+                    self._cursor_idx = prev_n
+                    self:_swapShelvesInPlace()
+                end
+            end
         end
         return true
     end
@@ -11160,7 +11225,16 @@ function BookshelfWidget:onBSFocusUp()
 
     if self._focus_zone == "grid" then
         local n_cols = self:_nCols()
-        if self._cursor_idx and self._cursor_idx <= n_cols then
+        -- On a spine shelf the top row is the noted first row, however many
+        -- books it holds (see _spineItemRows).
+        local spine_rows, spine_n = self:_spineItemRows()
+        local on_top
+        if spine_rows then
+            on_top = (spine_rows[self._cursor_idx or 1] or 1) <= 1
+        else
+            on_top = self._cursor_idx and self._cursor_idx <= n_cols
+        end
+        if self._cursor_idx and on_top then
             if not self._chip_bar_hidden then
                 self._focus_zone = "chips"
                 if #self._drilldown_path > 0 then
@@ -11189,6 +11263,14 @@ function BookshelfWidget:onBSFocusUp()
                 self._cursor_idx = nil
                 self:_swapShelvesInPlace()   -- clear cursor border from grid
                 self:_swapHeroInPlace()
+            end
+            return true
+        end
+        if spine_rows then
+            local target = self._spineRowStep(spine_rows, spine_n, self._cursor_idx, -1)
+            if target then
+                self._cursor_idx = target
+                self:_swapShelvesInPlace()
             end
             return true
         end
@@ -11323,7 +11405,11 @@ function BookshelfWidget:onBSFocusDown()
         -- the bottom row `below` is past view_size, so target stays nil.
         local target
         local below = cur + n_cols
-        if below <= view_size then
+        -- A spine shelf steps by its noted rows (see _spineItemRows).
+        local spine_rows, spine_n = self:_spineItemRows()
+        if spine_rows then
+            target = self._spineRowStep(spine_rows, spine_n, cur, 1)
+        elseif below <= view_size then
             if items[below] then
                 target = below
             else
