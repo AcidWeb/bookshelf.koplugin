@@ -691,6 +691,7 @@ function Editor:editTab(tab_id, opts)
 
     local dialog
     local frame
+    local current_bt   -- the ButtonTable on screen; rebuilt on every edit
 
     -- rebuild() -- swap frame[1] in-place so the button labels and enabled
     -- states refresh without touching the MovableContainer. The anchor-based
@@ -1236,6 +1237,13 @@ function Editor:editTab(tab_id, opts)
             buttons = non_empty_buttons,
             zero_sep = true,
         }
+        -- FocusManager repaints `show_parent or self` on a D-pad move, and the
+        -- table is not on the window stack, so without this the highlight never
+        -- moved on screen (GitHub issue 361). Set after new{} so the Buttons
+        -- keep their touch flash path exactly as before. The first build runs
+        -- before the dialog exists: its creation below catches that one up.
+        button_table.show_parent = dialog
+        current_bt = button_table
 
         -- Dynamic title: shows the tab's current label so the user can see
         -- which tab they're editing at a glance, even while the Label
@@ -1298,6 +1306,7 @@ function Editor:editTab(tab_id, opts)
     -- and stays there because rebuild() only swaps frame[1] (the content),
     -- never the MovableContainer.
     dialog = InputContainer:new{}
+    if current_bt then current_bt.show_parent = dialog end
 
     if Device:isTouchDevice() then
         dialog.ges_events = dialog.ges_events or {}
