@@ -21295,7 +21295,10 @@ function BookshelfWidget:_buildBookCoverTab(book, show_parent, avail_w, avail_h,
     col[#col + 1] = toolbar_row
     col[#col + 1] = VerticalSpan:new{ width = tb_gap }
 
-    local focus_tables = {}
+    -- D-pad rows, top to bottom: the two buttons, then each grid row. focusRow
+    -- takes a list of ROWS: a flat list made every cover cell a row of its own,
+    -- so focus sat on an unpainted child and Press crashed (GitHub issue 361).
+    local focus_tables = { focusRow({ { device_btn, online_btn } }) }
     if total == 0 then
         col[#col + 1] = CenterContainer:new{
             dimen = Geom:new{ w = content_w, h = math.max(cell_h, Screen:scaleBySize(80)) },
@@ -21342,7 +21345,7 @@ function BookshelfWidget:_buildBookCoverTab(book, show_parent, avail_w, avail_h,
                 grid[#grid + 1] = VerticalSpan:new{ width = gap }; grid_h = grid_h + gap
             end
             grid[#grid + 1] = row_group; grid_h = grid_h + cell_h
-            if #row_layout > 0 then focus_tables[#focus_tables + 1] = focusRow(row_layout) end
+            if #row_layout > 0 then focus_tables[#focus_tables + 1] = focusRow({ row_layout }) end
         end
         local grid_block_h = rows * cell_h + (rows - 1) * gap
         if grid_h < grid_block_h then
