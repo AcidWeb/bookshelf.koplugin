@@ -11105,9 +11105,27 @@ function BookshelfWidget:_swapFooterInPlace()
     -- refresh must cover the footer band only. A whole-widget "ui" here
     -- repainted the hero above on every d-pad focus move / page turn --
     -- the same flash class as issue #124.
+    --
+    -- Placed on the screen here, not copied from the row's dimen: the
+    -- BottomContainer paints the row without writing its position back, so
+    -- that dimen sat at 0,0 and every footer focus move refreshed a band
+    -- across the TOP of the screen. On e-ink the focus ring never showed
+    -- (GitHub issue 361). Full width: the row is centred inside it. Taller
+    -- by the buttons' hit extension: centring the grown buttons lifts the
+    -- focus ring a few px above the row (4 px on a PW5), and a ring edge
+    -- left unrefreshed reads as a stray line.
     local old = self._overlap_group[d.footer_overlap_idx]
     local old_row = old and old[1]
-    local footer_band = old_row and old_row.dimen and old_row.dimen:copy() or nil
+    local footer_band
+    if old_row and old_row.getSize then
+        local row_h = old_row:getSize().h
+        local over  = Screen:scaleBySize(12)
+        local x0 = self.dimen and self.dimen.x or 0
+        local y0 = self.dimen and self.dimen.y or 0
+        local bottom = y0 + self.height - d.FOOTER_BOTTOM_MARGIN
+        local top = math.max(y0, bottom - row_h - over)
+        footer_band = Geom:new{ x = x0, y = top, w = self.width, h = bottom - top }
+    end
     local new_row    = self:_buildFooterRow(d.content_w, total, d.FOOTER_H)
     local new_anchor = BottomContainer:new{
         dimen = Geom:new{ w = self.width, h = self.height - d.FOOTER_BOTTOM_MARGIN },
