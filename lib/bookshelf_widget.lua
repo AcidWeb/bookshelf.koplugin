@@ -762,7 +762,7 @@ function BookshelfWidget:_serializeDrillPath()
                 or e.kind == "genre" or e.kind == "tag"
                 or e.kind == "format" or e.kind == "rating"
                 or e.kind == "language" then
-            out[#out + 1] = { kind = e.kind, label = e.label }
+            out[#out + 1] = { kind = e.kind, label = e.label, whole = e.whole or nil }
         elseif e.kind == "opds_nav" then
             -- A drilled subcatalog, by identity: the pair that addresses its
             -- window, so the restore can ask whether it has anything cached
@@ -891,7 +891,7 @@ function BookshelfWidget:_restoreDrillPath(saved)
             local g = Repo.findGroup(e.kind, e.label)
             if g then
                 self._drilldown_path[#self._drilldown_path + 1] = {
-                    kind = e.kind, label = e.label, payload = g,
+                    kind = e.kind, label = e.label, payload = g, whole = e.whole,
                 }
             end
         elseif e.kind == "opds_nav" and e.server_key and e.feed_url then
@@ -929,7 +929,7 @@ function BookshelfWidget:_restoreDrillPath(saved)
                 end
                 if #books > 0 then
                     self._drilldown_path[#self._drilldown_path + 1] = {
-                        kind = "tag", label = e.label,
+                        kind = "tag", label = e.label, whole = e.whole,
                         payload = { kind = "tag", series_name = e.label, books = books },
                     }
                 end
@@ -3546,7 +3546,10 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         -- On a copy: the payload stays the group, the filter only what shows.
         local chip_tab = require("lib/bookshelf_tab_model").getById(self.chip)
         local books = tip.payload.books or {}
-        if chip_tab and chip_tab.filter and Repo.applyFilter then
+        -- Not for a group opened from book details (`whole`): that asks for
+        -- the whole series, tag or collection, whichever shelf is underneath
+        -- (GitHub issue 480).
+        if chip_tab and chip_tab.filter and Repo.applyFilter and not tip.whole then
             books = Repo.applyFilter(books, chip_tab.filter)
         end
         local total = #books
@@ -7795,7 +7798,9 @@ function BookshelfWidget:_jumpScanList()
         -- Filtered as _fetchChipItems filters what shows (issue 479), so the
         -- jump list names only books that are on the shelf.
         local books = tip.payload.books
-        if tab and tab.filter and Repo.applyFilter then books = Repo.applyFilter(books, tab.filter) end
+        if tab and tab.filter and Repo.applyFilter and not tip.whole then
+            books = Repo.applyFilter(books, tab.filter)
+        end
         return books, within_key or chip_key, "drilldown-payload"
     end
 
@@ -19377,7 +19382,9 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                                       books = { book }, latest = 0 }
                         end
                         _navResetAndClose()
-                        bw:_expandAuthor(group)
+                        -- `whole`: the pill asks for all of it, not the
+                        -- shelf's filtered slice (GitHub issue 480).
+                        bw:_expandAuthor(group, true)
                     end),
                 }
             end
@@ -19404,7 +19411,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                               books = { book }, latest = 0 }
                 end
                 _navResetAndClose()
-                bw:_expandSeries(group)
+                bw:_expandSeries(group, true)
             end),
         }
     end
@@ -19440,7 +19447,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                 end
                 _navResetAndClose()
                 bw:_expandTag({ kind = "tag", series_name = coll_name,
-                                books = books, latest = 0 })
+                                books = books, latest = 0 }, true)
             end),
         }
     end
@@ -19476,7 +19483,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                                       books = { book }, latest = 0 }
                         end
                         _navResetAndClose()
-                        bw:_expandGenre(group)
+                        bw:_expandGenre(group, true)
                     end),
                 }
             end
@@ -22239,7 +22246,7 @@ function BookshelfWidget:_showBookDetail(book, opts)
                                             or { kind = "genre", series_name = gname,
                                                  books = { book }, latest = 0 }
                                         self._drilldown_path = {}
-                                        self:_expandGenre(group)
+                                        self:_expandGenre(group, true)
                                     end,
                                     on_hold = function() holdMenu(gname) end,
                                 }
@@ -23873,41 +23880,45 @@ end
 -- field (they predate it), which is what the fallback is for -- and any kind
 -- added later that falls through the same way is recorded correctly by
 -- default rather than silently becoming a series.
-function BookshelfWidget:_expandSeries(series)
+function BookshelfWidget:_expandSeries(series, whole)
     if not series or not series.series_name then return end
     self:_applyWithinGroupSort(series)
     self:_drillInto{
         kind    = series.kind or "series",
+        whole   = whole or nil,
         label   = series.series_name,
         payload = series,
     }
 end
 
-function BookshelfWidget:_expandAuthor(group)
+function BookshelfWidget:_expandAuthor(group, whole)
     if not group or not group.series_name then return end
     self:_applyWithinGroupSort(group)
     self:_drillInto{
         kind    = "author",
+        whole   = whole or nil,
         label   = group.series_name,
         payload = group,
     }
 end
 
-function BookshelfWidget:_expandGenre(group)
+function BookshelfWidget:_expandGenre(group, whole)
     if not group or not group.series_name then return end
     self:_applyWithinGroupSort(group)
     self:_drillInto{
         kind    = "genre",
+        whole   = whole or nil,
         label   = group.series_name,
         payload = group,
     }
 end
 
-function BookshelfWidget:_expandTag(group)
+function BookshelfWidget:_expandTag(group, whole)
     if not group or not group.series_name then return end
     self:_applyWithinGroupSort(group)
     self:_drillInto{
         kind    = "tag",
+        whole   = whole or nil,
         label   = group.series_name,
         payload = group,
     }

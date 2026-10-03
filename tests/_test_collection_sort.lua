@@ -205,5 +205,25 @@ test("a collection opened again after a book closes keeps the shelf's filter (is
     TEST_TAB.filter = nil
 end)
 
+test("a group opened from book details shows all of it, whatever the shelf's filter (issue 480)", function()
+    -- Tapping a series, tag or collection pill in book details asks for that
+    -- whole group, from whichever shelf is underneath. Since the 479 fix it
+    -- was cut down to the shelf's filter: on a Finished shelf, a series pill
+    -- showed only the finished books. Drills opened there carry `whole`.
+    TEST_TAB.sort_priority = nil
+    TEST_TAB.filter = { status = "unread" }
+    STATUS["/lib/B.epub"] = "finished"
+    local w = widget()
+    w._drilldown_path = { { kind = "tag", whole = true, payload = { kind = "tag", series_name = "C1", books = {
+        { filepath = "/lib/A.epub" }, { filepath = "/lib/B.epub" }, { filepath = "/lib/C.epub" } } } } }
+    w._cursor = 1
+    w._viewSize = function() return 10 end
+    w._isSpineMode = function() return false end
+    local books, total = w:_fetchChipItems(10)
+    assert(total == 3, "the whole group counts: total " .. tostring(total))
+    assert(titles(books) == "A,B,C", "the whole group shows: " .. titles(books))
+    TEST_TAB.filter = nil
+end)
+
 print(string.format("%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)

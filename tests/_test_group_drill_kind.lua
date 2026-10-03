@@ -35,7 +35,7 @@ local function compile(code, env, name)
     return assert(load(code, name, "t", env))
 end
 
-local EXPAND_BODY = bodyOf("_expandSeries%(series%)", "_expandSeries")
+local EXPAND_BODY = bodyOf("_expandSeries%(series, whole%)", "_expandSeries")
 
 -- Runs the real body and returns the entry it tried to drill into.
 local function drilledEntry(group)
