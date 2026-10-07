@@ -85,4 +85,20 @@ t.test("isPluginFormat reads the live DocumentRegistry", function()
     PF._reset()
 end)
 
+t.test("fingerprint: sorted, comma-joined, empty without plugin formats", function()
+    package.loaded["document/documentregistry"] = nil
+    PF._reset()
+    eq(PF.fingerprint(), "", "no registry")
+    package.loaded["document/documentregistry"] = registry{
+        { "epub", cre }, { "zzz", other }, { "meguru", meguru }, { "cbz", meguru } }
+    PF._reset()
+    eq(PF.fingerprint(), "cbz,meguru,zzz", "stable order whatever the registration order")
+    local reg = package.loaded["document/documentregistry"]
+    reg.providers[#reg.providers + 1] = { extension = "abc", provider = other }
+    eq(PF.fingerprint(), "abc,cbz,meguru,zzz", "follows a later registration")
+    package.loaded["document/documentregistry"] = nil
+    PF._reset()
+    eq(PF.fingerprint(), "")
+end)
+
 t.done()

@@ -31,6 +31,7 @@ local IMAGE_EXT = {
 
 local _registry
 local _set, _seen_n = {}, -1
+local _fingerprint = ""
 
 local function registry()
     if _registry == nil then
@@ -45,7 +46,10 @@ end
 function M.extensions(reg)
     reg = reg or registry()
     local providers = reg and reg.providers
-    if type(providers) ~= "table" then return {} end
+    if type(providers) ~= "table" then
+        _set, _seen_n, _fingerprint = {}, -1, ""
+        return _set
+    end
     if #providers == _seen_n then return _set end
     local images = type(reg.image_ext) == "table" and reg.image_ext or {}
     local set = {}
@@ -59,8 +63,18 @@ function M.extensions(reg)
             set[ext] = key
         end
     end
-    _set, _seen_n = set, #providers
+    local exts = {}
+    for ext in pairs(set) do exts[#exts + 1] = ext end
+    table.sort(exts)
+    _set, _seen_n, _fingerprint = set, #providers, table.concat(exts, ",")
     return set
+end
+
+-- fingerprint() -> the plugin format set as one comparable string: the
+-- extensions, sorted and comma-joined ("meguru"), "" when there are none.
+function M.fingerprint()
+    M.extensions()
+    return _fingerprint
 end
 
 -- isPluginFormat(ext) -> true when a plugin registered a document provider
@@ -71,7 +85,7 @@ end
 
 -- Test hook: forget the cached registry and set.
 function M._reset()
-    _registry, _set, _seen_n = nil, {}, -1
+    _registry, _set, _seen_n, _fingerprint = nil, {}, -1, ""
 end
 
 return M

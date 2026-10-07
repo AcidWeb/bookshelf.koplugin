@@ -494,12 +494,23 @@ local SUPPORTED_EXT = {
 -- Formats other plugins register document providers for
 -- See lib/bookshelf_plugin_formats for the rules.
 local _plugin_formats
-local function _isPluginFormat(ext)
+local function _pluginFormats()
     if _plugin_formats == nil then
         local ok, PF = pcall(require, "lib/bookshelf_plugin_formats")
         _plugin_formats = ok and PF or false
     end
-    return _plugin_formats and _plugin_formats.isPluginFormat(ext) or false
+    return _plugin_formats or nil
+end
+local function _isPluginFormat(ext)
+    local PF = _pluginFormats()
+    return PF and PF.isPluginFormat(ext) or false
+end
+
+-- The plugin format set as a string, for the walk cache's validity check (see
+-- cachedWalk). "" when no plugin adds a format, or the module is unavailable.
+local function _pluginFormatsFingerprint()
+    local PF = _pluginFormats()
+    return PF and PF.fingerprint() or ""
 end
 
 -- _supportedExt(name): the supported book extension for a filename (lowercased,
@@ -527,6 +538,7 @@ end
 function Repo.isBookFile(name)
     return _supportedExt(name) ~= nil
 end
+
 
 -- _formatLabel(fp): uppercase format label for display/grouping. Collapses a
 -- compound ".zip" book to its inner kind ("book.fb2.zip" -> "FB2") so zipped
@@ -2955,7 +2967,10 @@ local function _loadWalkSnapshot(key)
     return t
 end
 
-local function _saveWalkSnapshot(key, list, dirs, listings)
+-- `formats` is the plugin format set the walk was taken with (see cachedWalk).
+-- A snapshot written before it existed has none, which reads as "" -- no plugin
+-- formats -- exactly what that version walked with, so no version bump.
+local function _saveWalkSnapshot(key, list, dirs, listings, formats)
     local p = _walkPersist()
     if not p then return end
     pcall(p.save, p, {
@@ -2964,6 +2979,7 @@ local function _saveWalkSnapshot(key, list, dirs, listings)
         list     = list,
         dirs     = dirs,
         listings = listings,
+        formats  = formats,
     })
 end
 
@@ -2978,23 +2994,36 @@ end
 local function cachedWalk(home, depth)
     local key = (home or "/") .. ":" .. tostring(depth or 0)
     local now = os.time()
+    local formats = _pluginFormatsFingerprint()
+    local formats_changed = false
     local entry = _walk_cache[key]
+    if entry and (entry.formats or "") ~= formats then
+        Repo.invalidateWalkCache()
+        entry, formats_changed = nil, true
+    end
     local from_snapshot = false
     if not entry then
         -- Nothing in memory: try the previous launch's walk. It is adopted
         -- only as a CANDIDATE -- _dirsChanged below is what accepts or
         -- rejects it, exactly as it does for an in-session entry.
         local snap = _loadWalkSnapshot(key)
+        if snap and (snap.formats or "") ~= formats then
+            -- Walked with another plugin format set: not a candidate, and
+            -- anything else persisted from that library (the finished count)
+            -- goes with it.
+            Repo.invalidateWalkCache()
+            snap, formats_changed = nil, true
+        end
         if snap then
             entry = { list = snap.list, dirs = snap.dirs,
-                      listings = snap.listings,
+                      listings = snap.listings, formats = formats,
                       expires_at = now + WALK_CACHE_TTL }
             from_snapshot = true
         end
     end
     local stale_reason
     if not entry then
-        stale_reason = "miss"
+        stale_reason = formats_changed and "formats" or "miss"
     elseif _dirsChanged(entry.dirs) then
         stale_reason = from_snapshot and "snapshot-dir-mtime" or "dir-mtime"
     end
@@ -3040,9 +3069,9 @@ local function cachedWalk(home, depth)
             end
         end
         entry = { list = fresh, dirs = dirs, listings = listings,
-                  expires_at = now + WALK_CACHE_TTL }
+                  formats = formats, expires_at = now + WALK_CACHE_TTL }
         _walk_cache[key] = entry
-        _saveWalkSnapshot(key, fresh, dirs, listings)
+        _saveWalkSnapshot(key, fresh, dirs, listings, formats)
         if files_changed and stale_reason ~= "miss" then
             -- Downstream caches were built against the previous book set
             -- and won't include newly-added (or still-include removed)
