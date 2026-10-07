@@ -539,6 +539,16 @@ function Repo.isBookFile(name)
     return _supportedExt(name) ~= nil
 end
 
+-- Repo.isPluginFormatFile(path): true when the file is a book only because a
+-- plugin registered its format -- not one of SUPPORTED_EXT's, even if a plugin
+-- also provides for that (Meguru registers .cbz as well as .meguru; a .cbz
+-- stays an ordinary book). Such a book's cover can be anything the plugin
+-- decides to do -- Meguru's is an HTTP request -- so the shelf never asks for
+-- one on its own (see the extraction kickoff in bookshelf_widget).
+function Repo.isPluginFormatFile(path)
+    local ext = _supportedExt(path)
+    return ext ~= nil and not SUPPORTED_EXT[ext]
+end
 
 -- _formatLabel(fp): uppercase format label for display/grouping. Collapses a
 -- compound ".zip" book to its inner kind ("book.fb2.zip" -> "FB2") so zipped

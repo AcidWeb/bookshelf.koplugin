@@ -6379,6 +6379,16 @@ test("isBookFile: a plugin-registered extension is a book, core rules unchanged"
     assert(not Repo.isBookFile("/books/cover.png"), "images stay excluded")
     assert(not Repo.isBookFile("/books/notes.xml"), "core-only formats stay curated")
     assert(Repo.isBookFile("/books/a.epub"))
+    -- Plugin-format files are the ones the shelf never fetches a cover for.
+    assert(Repo.isPluginFormatFile("/books/Vol 1.meguru"), ".meguru is a plugin format")
+    assert(Repo.isPluginFormatFile("/books/x.foo.zip"), "so is a plugin's compound form")
+    assert(not Repo.isPluginFormatFile("/books/a.epub"), "a core format is not")
+    assert(not Repo.isPluginFormatFile("/books/notes.xml"), "nor is a file that is not a book")
+    package.loaded["document/documentregistry"].providers[6] =
+        { extension = "cbz", provider = { provider = "meguru" } }
+    PF._reset()
+    assert(not Repo.isPluginFormatFile("/books/c.cbz"),
+        "a core format a plugin ALSO provides keeps its covers")
     package.loaded["document/documentregistry"] = saved
     PF._reset()
     assert(not Repo.isBookFile("/books/Vol 1.meguru"), "gone once no plugin provides it")
