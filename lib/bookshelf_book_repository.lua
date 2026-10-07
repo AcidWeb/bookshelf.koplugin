@@ -491,10 +491,22 @@ local SUPPORTED_EXT = {
     cbz=true, cbr=true, cbt=true,
 }
 
+-- Formats other plugins register document providers for
+-- See lib/bookshelf_plugin_formats for the rules.
+local _plugin_formats
+local function _isPluginFormat(ext)
+    if _plugin_formats == nil then
+        local ok, PF = pcall(require, "lib/bookshelf_plugin_formats")
+        _plugin_formats = ok and PF or false
+    end
+    return _plugin_formats and _plugin_formats.isPluginFormat(ext) or false
+end
+
 -- _supportedExt(name): the supported book extension for a filename (lowercased,
 -- e.g. "epub" or the compound "fb2.zip"), or nil if not a book. Handles the
 -- ".zip" book forms KOReader registers (fb2.zip, html.zip, ...) without
--- treating a bare/unknown ".zip" archive as a book.
+-- treating a bare/unknown ".zip" archive as a book. Formats a plugin registers
+-- a document provider for count too.
 local function _supportedExt(name)
     if not name then return nil end
     local last = name:match("%.([^.]+)$")
@@ -503,9 +515,10 @@ local function _supportedExt(name)
     if last == "zip" then
         local compound = name:match("%.([^.]+%.[Zz][Ii][Pp])$")
         compound = compound and compound:lower()
-        return (compound and SUPPORTED_EXT[compound]) and compound or nil
+        if not compound then return nil end
+        return (SUPPORTED_EXT[compound] or _isPluginFormat(compound)) and compound or nil
     end
-    return SUPPORTED_EXT[last] and last or nil
+    return (SUPPORTED_EXT[last] or _isPluginFormat(last)) and last or nil
 end
 
 -- Public wrapper so other modules (file-ops' unbounded folder walk) can ask
